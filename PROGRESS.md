@@ -26,6 +26,12 @@ This file tracks our progress through the implementation plan for the Twig proje
 - [x] Store worktree metadata in repo-local state
 - [x] Add command aliases (wt, new, ls)
 
+### ✅ Iteration 3: Batch Operations
+- [x] Create command execution engine with tokio
+- [x] Add progress reporting for batch operations
+- [x] Implement error handling and summary reporting
+- [x] Add stale branch detection with alias
+
 ## Lessons Learned
 
 ### Project Setup
@@ -63,3 +69,22 @@ This file tracks our progress through the implementation plan for the Twig proje
 - Rather than removing potentially useful code, find ways to use it in the codebase
 - Methods like `repo_state_dir` and `repo_state_path` were integrated into existing functionality
 - Keep utility methods that might be useful for future iterations, but ensure they're used
+
+### Parallel Execution
+- Using tokio for parallel execution significantly improves performance for batch operations
+- Small delays between task spawns (100ms) prevents overwhelming the system
+- Collecting results and providing summary statistics gives users clear feedback
+- Error handling in async contexts requires careful consideration
+- Unused variables in match patterns should be prefixed with underscore
+
+### Stale Branch Detection
+- Git's branch API provides access to commit timestamps for detecting staleness
+- Using chrono for date/time formatting improves readability of timestamps
+- Configurable thresholds (--days parameter) provide flexibility for different workflows
+- Parallel processing of multiple repositories makes stale branch detection efficient
+
+### Command Execution
+- Using std::process::Command allows executing arbitrary commands in repositories
+- Capturing and displaying command output provides transparency to users
+- Success/failure reporting with colored output improves user experience
+- Summary statistics help users understand the results of batch operations

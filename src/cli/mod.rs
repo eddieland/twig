@@ -45,6 +45,57 @@ pub fn build_cli() -> Command {
                 .help("Path to a specific repository")
                 .value_name("PATH"),
             ),
+        )
+        .subcommand(
+          Command::new("exec")
+            .about("Execute a git command in repositories")
+            .arg(
+              Arg::new("all")
+                .long("all")
+                .short('a')
+                .help("Execute in all repositories in the registry")
+                .action(ArgAction::SetTrue),
+            )
+            .arg(
+              Arg::new("repo")
+                .long("repo")
+                .short('r')
+                .help("Path to a specific repository")
+                .value_name("PATH"),
+            )
+            .arg(
+              Arg::new("command")
+                .help("Command to execute")
+                .required(true)
+                .index(1),
+            ),
+        )
+        .subcommand(
+          Command::new("stale-branches")
+            .about("List stale branches in repositories")
+            .alias("stale")
+            .arg(
+              Arg::new("days")
+                .long("days")
+                .short('d')
+                .help("Number of days to consider a branch stale")
+                .value_name("DAYS")
+                .default_value("30"),
+            )
+            .arg(
+              Arg::new("all")
+                .long("all")
+                .short('a')
+                .help("Check all repositories in the registry")
+                .action(ArgAction::SetTrue),
+            )
+            .arg(
+              Arg::new("repo")
+                .long("repo")
+                .short('r')
+                .help("Path to a specific repository")
+                .value_name("PATH"),
+            ),
         ),
     )
     .subcommand(
@@ -109,6 +160,32 @@ pub fn handle_commands(matches: &clap::ArgMatches) -> Result<()> {
           let repo_arg = fetch_matches.get_one::<String>("repo").map(|s| s.as_str());
           let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
           crate::git::fetch_repository(repo_path, true)
+        }
+      }
+      Some(("exec", exec_matches)) => {
+        let command = exec_matches.get_one::<String>("command").unwrap();
+        
+        if exec_matches.get_flag("all") {
+          crate::git::execute_all_repositories(command)
+        } else {
+          let repo_arg = exec_matches.get_one::<String>("repo").map(|s| s.as_str());
+          let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
+          crate::git::execute_repository(repo_path, command)
+        }
+      }
+      Some(("stale-branches", stale_matches)) => {
+        let days = stale_matches
+          .get_one::<String>("days")
+          .unwrap()
+          .parse::<u32>()
+          .map_err(|e| anyhow::anyhow!("Days must be a positive number: {}", e))?;
+        
+        if stale_matches.get_flag("all") {
+          crate::git::find_stale_branches_all(days)
+        } else {
+          let repo_arg = stale_matches.get_one::<String>("repo").map(|s| s.as_str());
+          let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
+          crate::git::find_stale_branches(repo_path, days)
         }
       }
       _ => {
