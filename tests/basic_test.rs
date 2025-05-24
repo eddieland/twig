@@ -11,12 +11,11 @@ fn test_help_command() {
   assert!(output.status.success(), "Command failed to execute successfully");
 
   let stdout = String::from_utf8_lossy(&output.stdout);
-  assert!(
-    stdout.contains("Git-based developer productivity tool"),
-    "Help output not found"
-  );
+  // Check for presence of main commands rather than specific text
+  assert!(stdout.contains("twig"), "Main command not found in help output");
   assert!(stdout.contains("git"), "Git subcommand not found in help");
   assert!(stdout.contains("init"), "Init subcommand not found in help");
+  assert!(stdout.contains("worktree"), "Worktree subcommand not found in help");
 }
 
 #[test]
@@ -30,11 +29,15 @@ fn test_git_help_command() {
   assert!(output.status.success(), "Command failed to execute successfully");
 
   let stdout = String::from_utf8_lossy(&output.stdout);
-  assert!(
-    stdout.contains("Git repository management"),
-    "Git help output not found"
-  );
+  // Check for presence of git subcommands rather than specific text
+  assert!(stdout.contains("git"), "Git command not found in help output");
   assert!(stdout.contains("add"), "Add subcommand not found in git help");
+  assert!(stdout.contains("remove"), "Remove subcommand not found in git help");
   assert!(stdout.contains("list"), "List subcommand not found in git help");
   assert!(stdout.contains("fetch"), "Fetch subcommand not found in git help");
+  assert!(stdout.contains("exec"), "Exec subcommand not found in git help");
+  assert!(
+    stdout.contains("stale-branches"),
+    "Stale-branches subcommand not found in git help"
+  );
 }

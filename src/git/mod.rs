@@ -117,7 +117,10 @@ pub fn fetch_all_repositories() -> Result<()> {
   let repos = registry.list();
   if repos.is_empty() {
     print_warning("No repositories in registry.");
-    print_info(&format!("Add one with {}", crate::utils::output::format_command("twig git add <path>")));
+    print_info(&format!(
+      "Add one with {}",
+      crate::utils::output::format_command("twig git add <path>")
+    ));
     return Ok(());
   }
 
@@ -125,36 +128,36 @@ pub fn fetch_all_repositories() -> Result<()> {
 
   // Create a tokio runtime for parallel execution
   let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
-  
+
   rt.block_on(async {
     let mut handles = Vec::new();
-    
+
     // Launch tasks for each repository
     for repo in repos {
       let repo_path = repo.path.clone();
       let repo_name = repo.name.clone();
-      
+
       let handle = task::spawn(async move {
         print_info(&format!(
           "Fetching repository: {} ({})",
           format_repo_name(&repo_name),
           format_repo_path(&repo_path)
         ));
-        
+
         let result = fetch_repository(&repo_path, true);
         (repo_name, repo_path, result)
       });
-      
+
       handles.push(handle);
-      
+
       // Small delay to avoid overwhelming the system
       time::sleep(Duration::from_millis(100)).await;
     }
-    
+
     // Wait for all tasks to complete
     let mut success_count = 0;
     let mut failure_count = 0;
-    
+
     for handle in handles {
       match handle.await {
         Ok((_name, _path, Ok(()))) => {
@@ -175,16 +178,16 @@ pub fn fetch_all_repositories() -> Result<()> {
         }
       }
     }
-    
+
     // Print summary
-    print_info(&format!("Fetch operation complete"));
+    print_info("Fetch operation complete");
     print_info(&format!("Successful: {}", success_count));
-    
+
     if failure_count > 0 {
       print_warning(&format!("Failed: {}", failure_count));
     }
   });
-  
+
   Ok(())
 }
 
@@ -213,7 +216,7 @@ pub fn detect_current_repository() -> Result<PathBuf> {
 /// Execute a command in a repository
 pub fn execute_repository<P: AsRef<Path>>(path: P, command: &str) -> Result<()> {
   let path = path.as_ref();
-  
+
   print_info(&format!(
     "Executing in repository: {}",
     format_repo_path(&path.display().to_string())
@@ -264,38 +267,45 @@ pub fn execute_all_repositories(command: &str) -> Result<()> {
   let repos = registry.list();
   if repos.is_empty() {
     print_warning("No repositories in registry.");
-    print_info(&format!("Add one with {}", crate::utils::output::format_command("twig git add <path>")));
+    print_info(&format!(
+      "Add one with {}",
+      crate::utils::output::format_command("twig git add <path>")
+    ));
     return Ok(());
   }
 
-  print_info(&format!("Executing command in {} repositories: {}", repos.len(), command));
+  print_info(&format!(
+    "Executing command in {} repositories: {}",
+    repos.len(),
+    command
+  ));
 
   // Create a tokio runtime for parallel execution
   let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
-  
+
   rt.block_on(async {
     let mut handles = Vec::new();
-    
+
     // Launch tasks for each repository
     for repo in repos {
       let repo_path = repo.path.clone();
       let cmd = command.to_string();
-      
+
       let handle = task::spawn(async move {
         let result = execute_repository(&repo_path, &cmd);
         (repo_path, result)
       });
-      
+
       handles.push(handle);
-      
+
       // Small delay to avoid overwhelming the system
       time::sleep(Duration::from_millis(100)).await;
     }
-    
+
     // Wait for all tasks to complete and collect results
     let mut success_count = 0;
     let mut failure_count = 0;
-    
+
     for handle in handles {
       match handle.await {
         Ok((_path, Ok(()))) => {
@@ -310,16 +320,16 @@ pub fn execute_all_repositories(command: &str) -> Result<()> {
         }
       }
     }
-    
+
     // Print summary
-    print_info(&format!("Command execution complete"));
+    print_info("Command execution complete");
     print_info(&format!("Successful: {}", success_count));
-    
+
     if failure_count > 0 {
       print_warning(&format!("Failed: {}", failure_count));
     }
   });
-  
+
   Ok(())
 }
 
@@ -327,59 +337,70 @@ pub fn execute_all_repositories(command: &str) -> Result<()> {
 pub fn find_stale_branches<P: AsRef<Path>>(path: P, days: u32) -> Result<()> {
   let path = path.as_ref();
   let repo = Git2Repository::open(path).context(format!("Failed to open git repository at {}", path.display()))?;
-  
+
   print_info(&format!(
     "Finding branches not updated in the last {} days in {}",
     days,
     format_repo_path(&path.display().to_string())
   ));
-  
+
   // Calculate the cutoff time
   let now = SystemTime::now();
   let cutoff = now - Duration::from_secs(days as u64 * 24 * 60 * 60);
   let cutoff_secs = cutoff.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
-  
+
   // Get all branches
-  let branches = repo.branches(Some(BranchType::Local))
+  let branches = repo
+    .branches(Some(BranchType::Local))
     .context("Failed to get branches")?;
-  
+
   let mut stale_branches = Vec::new();
-  
+
   for branch_result in branches {
     let (branch, _) = branch_result.context("Failed to get branch")?;
-    let branch_name = branch.name().context("Failed to get branch name")?
-      .unwrap_or("unknown").to_string();
-    
+    let branch_name = branch
+      .name()
+      .context("Failed to get branch name")?
+      .unwrap_or("unknown")
+      .to_string();
+
     // Get the commit that the branch points to
     let commit = branch.get().peel_to_commit().context("Failed to get commit")?;
     let commit_time = commit.time().seconds();
-    
+
     // Check if the branch is stale
     if commit_time < cutoff_secs {
       let time_str = chrono::DateTime::<chrono::Utc>::from_timestamp(commit_time, 0)
         .unwrap()
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
-      
+
       stale_branches.push((branch_name, time_str));
     }
   }
-  
+
   // Print results
   if stale_branches.is_empty() {
-    print_info(&format!("No stale branches found in {}", format_repo_path(&path.display().to_string())));
+    print_info(&format!(
+      "No stale branches found in {}",
+      format_repo_path(&path.display().to_string())
+    ));
   } else {
     print_warning(&format!(
       "Found {} stale branches in {}:",
       stale_branches.len(),
       format_repo_path(&path.display().to_string())
     ));
-    
+
     for (name, time) in stale_branches {
-      println!("  {} (last commit: {})", name, crate::utils::output::format_timestamp(&time));
+      println!(
+        "  {} (last commit: {})",
+        name,
+        crate::utils::output::format_timestamp(&time)
+      );
     }
   }
-  
+
   Ok(())
 }
 
@@ -387,43 +408,46 @@ pub fn find_stale_branches<P: AsRef<Path>>(path: P, days: u32) -> Result<()> {
 pub fn find_stale_branches_all(days: u32) -> Result<()> {
   let config_dirs = crate::config::ConfigDirs::new()?;
   let registry = Registry::load(&config_dirs)?;
-  
+
   let repos = registry.list();
   if repos.is_empty() {
     print_warning("No repositories in registry.");
-    print_info(&format!("Add one with {}", crate::utils::output::format_command("twig git add <path>")));
+    print_info(&format!(
+      "Add one with {}",
+      crate::utils::output::format_command("twig git add <path>")
+    ));
     return Ok(());
   }
-  
+
   print_info(&format!("Finding stale branches in {} repositories", repos.len()));
-  
+
   // Create a tokio runtime for parallel execution
   let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
-  
+
   rt.block_on(async {
     let mut handles = Vec::new();
-    
+
     // Launch tasks for each repository
     for repo in repos {
       let repo_path = repo.path.clone();
       let repo_name = repo.name.clone();
       let days_value = days;
-      
+
       let handle = task::spawn(async move {
         let result = find_stale_branches(&repo_path, days_value);
         (repo_name, repo_path, result)
       });
-      
+
       handles.push(handle);
-      
+
       // Small delay to avoid overwhelming the system
       time::sleep(Duration::from_millis(100)).await;
     }
-    
+
     // Wait for all tasks to complete
     let mut success_count = 0;
     let mut failure_count = 0;
-    
+
     for handle in handles {
       match handle.await {
         Ok((_name, _path, Ok(()))) => {
@@ -444,15 +468,15 @@ pub fn find_stale_branches_all(days: u32) -> Result<()> {
         }
       }
     }
-    
+
     // Print summary
-    print_info(&format!("Stale branch check complete"));
+    print_info("Stale branch check complete");
     print_info(&format!("Successful: {}", success_count));
-    
+
     if failure_count > 0 {
       print_warning(&format!("Failed: {}", failure_count));
     }
   });
-  
+
   Ok(())
 }
