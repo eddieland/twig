@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-ubuntu:
+    name: Build Ubuntu
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build release
+        run: cargo build --release
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: twig-ubuntu
+          path: target/release/twig
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build release
+        run: cargo build --release
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: twig-macos
+          path: target/release/twig
+
+  create-release:
+    name: Create Release
+    needs: [build-ubuntu, build-macos]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download Ubuntu artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: twig-ubuntu
+          path: ./twig-ubuntu
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: twig-macos
+          path: ./twig-macos
+      - name: Prepare artifacts
+        run: |
+          chmod +x ./twig-ubuntu/twig
+          chmod +x ./twig-macos/twig
+          mv ./twig-ubuntu/twig ./twig-ubuntu-x86_64
+          mv ./twig-macos/twig ./twig-macos-x86_64
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ./twig-ubuntu-x86_64
+            ./twig-macos-x86_64
+          draft: false
+          prerelease: false
+          generate_release_notes: true
