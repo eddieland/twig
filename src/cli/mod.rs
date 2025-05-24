@@ -47,7 +47,6 @@ pub fn build_cli() -> Command {
             ),
         ),
     )
-    .subcommand(Command::new("version").about("Display version information"))
 }
 
 /// Handle the CLI commands
