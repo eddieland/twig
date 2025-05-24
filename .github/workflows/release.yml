@@ -17,11 +17,19 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Build release
         run: cargo build --release
+      - name: Strip binary
+        run: strip target/release/twig
+      - name: Compress binary
+        run: |
+          tar -czf twig-ubuntu-x86_64.tar.gz -C target/release twig
+          shasum -a 256 twig-ubuntu-x86_64.tar.gz > twig-ubuntu-x86_64.tar.gz.sha256
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: twig-ubuntu
-          path: target/release/twig
+          path: |
+            twig-ubuntu-x86_64.tar.gz
+            twig-ubuntu-x86_64.tar.gz.sha256
 
   build-macos:
     name: Build macOS
@@ -34,11 +42,19 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Build release
         run: cargo build --release
+      - name: Strip binary
+        run: strip target/release/twig
+      - name: Compress binary
+        run: |
+          tar -czf twig-macos-x86_64.tar.gz -C target/release twig
+          shasum -a 256 twig-macos-x86_64.tar.gz > twig-macos-x86_64.tar.gz.sha256
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: twig-macos
-          path: target/release/twig
+          path: |
+            twig-macos-x86_64.tar.gz
+            twig-macos-x86_64.tar.gz.sha256
 
   create-release:
     name: Create Release
@@ -49,24 +65,20 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: twig-ubuntu
-          path: ./twig-ubuntu
+          path: ./
       - name: Download macOS artifact
         uses: actions/download-artifact@v4
         with:
           name: twig-macos
-          path: ./twig-macos
-      - name: Prepare artifacts
-        run: |
-          chmod +x ./twig-ubuntu/twig
-          chmod +x ./twig-macos/twig
-          mv ./twig-ubuntu/twig ./twig-ubuntu-x86_64
-          mv ./twig-macos/twig ./twig-macos-x86_64
+          path: ./
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ./twig-ubuntu-x86_64
-            ./twig-macos-x86_64
+            ./twig-ubuntu-x86_64.tar.gz
+            ./twig-ubuntu-x86_64.tar.gz.sha256
+            ./twig-macos-x86_64.tar.gz
+            ./twig-macos-x86_64.tar.gz.sha256
           draft: false
           prerelease: false
           generate_release_notes: true
