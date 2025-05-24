@@ -1,23 +1,36 @@
 use colored::Colorize;
+use emojis;
+
+// Helper function to safely get an emoji or fallback to a default character
+fn get_emoji_or_default(name: &str, default: &str) -> String {
+  match emojis::get(name) {
+    Some(emoji) => emoji.to_string(),
+    None => default.to_string(),
+  }
+}
 
 /// Print a success message
 pub fn print_success(message: &str) {
-  println!("{} {}", "✓".green().bold(), message);
+  let check = get_emoji_or_default("check mark", "✓");
+  println!("{} {}", check.green().bold(), message);
 }
 
 /// Print an error message
 pub fn print_error(message: &str) {
-  eprintln!("{} {}", "✗".red().bold(), message);
+  let cross = get_emoji_or_default("cross mark", "✗");
+  eprintln!("{} {}", cross.red().bold(), message);
 }
 
 /// Print a warning message
 pub fn print_warning(message: &str) {
-  println!("{} {}", "!".yellow().bold(), message);
+  let warning = get_emoji_or_default("warning", "⚠");
+  println!("{} {}", warning.yellow().bold(), message);
 }
 
 /// Print an info message
 pub fn print_info(message: &str) {
-  println!("{} {}", "ℹ".blue().bold(), message);
+  let info = get_emoji_or_default("information", "ℹ");
+  println!("{} {}", info.blue().bold(), message);
 }
 
 /// Print a section header

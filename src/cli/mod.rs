@@ -77,15 +77,13 @@ pub fn build_cli() -> Command {
             ),
         )
         .subcommand(
-          Command::new("clean")
-            .about("Clean up stale worktrees")
-            .arg(
-              Arg::new("repo")
-                .long("repo")
-                .short('r')
-                .help("Path to a specific repository")
-                .value_name("PATH"),
-            ),
+          Command::new("clean").about("Clean up stale worktrees").arg(
+            Arg::new("repo")
+              .long("repo")
+              .short('r')
+              .help("Path to a specific repository")
+              .value_name("PATH"),
+          ),
         ),
     )
 }

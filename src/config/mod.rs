@@ -38,12 +38,12 @@ impl ConfigDirs {
   pub fn registry_path(&self) -> PathBuf {
     self.data_dir.join("registry.json")
   }
-  
+
   /// Get the path to the repository-local state directory
   pub fn repo_state_dir<P: AsRef<Path>>(&self, repo_path: P) -> PathBuf {
     repo_path.as_ref().join(".twig")
   }
-  
+
   /// Get the path to the repository-local state file
   pub fn repo_state_path<P: AsRef<Path>>(&self, repo_path: P) -> PathBuf {
     self.repo_state_dir(repo_path).join("state.json")
@@ -52,10 +52,20 @@ impl ConfigDirs {
 
 /// Initialize the configuration directories
 pub fn init() -> Result<()> {
+  use crate::utils::output::{format_repo_path, print_success};
+
   let config_dirs = ConfigDirs::new()?;
   config_dirs.init()?;
-  println!("Initialized twig configuration directories:");
-  println!("  Config: {}", config_dirs.config_dir.display());
-  println!("  Data: {}", config_dirs.data_dir.display());
+
+  print_success("Initialized twig configuration directories:");
+  println!(
+    "  Config: {}",
+    format_repo_path(&config_dirs.config_dir.display().to_string())
+  );
+  println!(
+    "  Data: {}",
+    format_repo_path(&config_dirs.data_dir.display().to_string())
+  );
+
   Ok(())
 }
