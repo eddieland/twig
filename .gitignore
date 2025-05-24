@@ -18,3 +18,7 @@ target/
 
 # Ignore ref directory
 ref/
+
+# Twig-specific ignores
+.twig/
+**/twig-worktrees/
