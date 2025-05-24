@@ -26,12 +26,12 @@ jobs:
           components: rustfmt, clippy
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
-        
+
       # Conditional steps based on the check type
       - name: Check formatting
         if: matrix.check == 'format'
         run: cargo fmt --all -- --check
-        
+
       - name: Run clippy
         if: matrix.check == 'clippy'
         run: cargo clippy -- -D warnings

@@ -21,6 +21,19 @@ Twig streamlines common developer workflows across multiple repositories, provid
 - **MSRV**: 1.87.0
 - **Target Platforms**: Ubuntu 24.04 (primary), macOS (secondary)
 
+## Binary Size Optimization
+
+Twig is optimized for minimal binary size through the following techniques:
+
+- **Balanced optimization**: Uses `opt-level = 2` for good performance while keeping size reasonable
+- **Link Time Optimization**: Enables LTO for cross-module optimizations
+- **Reduced code generation units**: Uses single codegen unit for better optimization
+- **Panic handling optimization**: Uses `panic = "abort"` to remove backtrace code
+- **Symbol stripping**: Removes debug symbols from release builds
+- **Dependency trimming**: Minimizes feature flags for dependencies like tokio
+
+These optimizations ensure Twig remains lightweight (~a few MB in release mode) while maintaining full functionality.
+
 ## Installation
 
 *Coming soon*
@@ -89,6 +102,20 @@ twig
 └── version                # Version information
 ```
 
+## Makefile
+
+The project includes a Makefile to simplify common development tasks. The Makefile is self-documenting and provides a helpful overview of available commands:
+
+```bash
+make help
+```
+
+Key Makefile targets include:
+
+- **Development**: `fmt`, `lint`, `test`, `check`, `doc`
+- **Build**: `build`, `release`, `clean`, `run`
+- **Installation**: `install`, `install-dev-tools`, `pre-commit-setup`
+
 ## Contributing
 
 Contributions are welcome! Here's how you can contribute to the project:
@@ -97,8 +124,10 @@ Contributions are welcome! Here's how you can contribute to the project:
 
 1. Ensure you have Rust 1.87.0 or later installed
 2. Clone the repository
-3. Run `cargo build` to build the project
-4. Run `cargo test` to ensure everything is working correctly
+3. Run `make install-dev-tools` to install development tools
+4. Run `make pre-commit-setup` to set up pre-commit hooks
+5. Run `cargo build` to build the project
+6. Run `cargo test` to ensure everything is working correctly
 
 ### Code Quality
 
@@ -106,6 +135,8 @@ All contributions should pass the following checks:
 - `cargo fmt` for code formatting
 - `cargo clippy` for linting
 - `cargo test` for unit and integration tests
+
+These checks are automatically enforced by pre-commit hooks before each commit.
 
 ### Workflow
 

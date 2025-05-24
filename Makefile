@@ -42,7 +42,7 @@ watch-test: ## Run tests in watch mode (requires cargo-watch)
 	cargo watch -x "nextest run"
 
 .PHONY: all
-all: fmt lint test docker-build ## Run verify-config, fmt, lint, and test
+all: fmt lint test ## Run fmt, lint, and test
 
 ### Build
 
@@ -53,6 +53,12 @@ build: ## Build the project
 .PHONY: release
 release: ## Build release version
 	cargo build --release
+
+.PHONY: release-size
+release-size: ## Build size-optimized release version
+	cargo build --release
+	@echo "\nBinary size before compression:"
+	@du -h target/release/twig
 
 .PHONY: clean
 clean: ## Clean build artifacts
@@ -75,3 +81,12 @@ install-dev-tools: ## Install development tools
 	cargo install cargo-watch
 	cargo install cargo-outdated
 	cargo install cargo-nextest
+	uv tool install pre-commit
+
+.PHONY: pre-commit-setup
+pre-commit-setup: ## Set up pre-commit hooks
+	pre-commit install
+
+.PHONY: pre-commit-run
+pre-commit-run: ## Run pre-commit hooks manually
+	pre-commit run --all-files
