@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Represents the configuration directories for the twig application
 pub struct ConfigDirs {
@@ -37,6 +37,16 @@ impl ConfigDirs {
   /// Get the path to the registry file
   pub fn registry_path(&self) -> PathBuf {
     self.data_dir.join("registry.json")
+  }
+  
+  /// Get the path to the repository-local state directory
+  pub fn repo_state_dir<P: AsRef<Path>>(&self, repo_path: P) -> PathBuf {
+    repo_path.as_ref().join(".twig")
+  }
+  
+  /// Get the path to the repository-local state file
+  pub fn repo_state_path<P: AsRef<Path>>(&self, repo_path: P) -> PathBuf {
+    self.repo_state_dir(repo_path).join("state.json")
   }
 }
 

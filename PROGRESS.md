@@ -19,6 +19,13 @@ This file tracks our progress through the implementation plan for the Twig proje
 - [x] Add command aliases (g, ls, rm)
 - [x] Create consistent formatting utilities
 
+### ✅ Iteration 2: Worktree Support
+- [x] Add worktree creation with sensible defaults
+- [x] Implement worktree listing and cleanup
+- [x] Add `.twig/` directory creation and .gitignore management
+- [x] Store worktree metadata in repo-local state
+- [x] Add command aliases (wt, new, ls)
+
 ## Lessons Learned
 
 ### Project Setup
@@ -35,14 +42,24 @@ This file tracks our progress through the implementation plan for the Twig proje
 - The directories crate simplifies finding the right locations for config and data files
 - Using serde for serialization/deserialization makes state management straightforward
 - The git2 crate provides a comprehensive API for git operations
+- Repository-local state in `.twig/state.json` allows for portable metadata that travels with the repo
+- Hybrid approach (global registry + local state) provides flexibility and clean separation of concerns
 
 ### Challenges Overcome
 - Handling repository paths consistently required careful canonicalization
 - Detecting the current git repository required traversing parent directories
 - Managing the repository registry required careful error handling
+- Working with Git worktrees required understanding the StringArray API for proper iteration
+- Ensuring `.twig/` is added to `.gitignore` required careful file handling
 
 ### Output Formatting
 - Using the `colored` crate provides a simple way to add color to terminal output
 - Centralizing formatting logic in utility functions ensures consistency
 - Color-coding different types of messages (success, error, warning, info) improves readability
 - Consistent formatting makes the CLI tool feel more professional and user-friendly
+
+### Code Quality Management
+- Addressing dead code warnings is important for CI/CD pipeline success
+- Rather than removing potentially useful code, find ways to use it in the codebase
+- Methods like `repo_state_dir` and `repo_state_path` were integrated into existing functionality
+- Keep utility methods that might be useful for future iterations, but ensure they're used

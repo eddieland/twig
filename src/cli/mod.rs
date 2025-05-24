@@ -47,6 +47,47 @@ pub fn build_cli() -> Command {
             ),
         ),
     )
+    .subcommand(
+      Command::new("worktree")
+        .about("Worktree management")
+        .alias("wt")
+        .subcommand(
+          Command::new("create")
+            .about("Create a new worktree for a branch")
+            .alias("new")
+            .arg(Arg::new("branch").help("Branch name").required(true))
+            .arg(
+              Arg::new("repo")
+                .long("repo")
+                .short('r')
+                .help("Path to a specific repository")
+                .value_name("PATH"),
+            ),
+        )
+        .subcommand(
+          Command::new("list")
+            .about("List all worktrees for a repository")
+            .alias("ls")
+            .arg(
+              Arg::new("repo")
+                .long("repo")
+                .short('r')
+                .help("Path to a specific repository")
+                .value_name("PATH"),
+            ),
+        )
+        .subcommand(
+          Command::new("clean")
+            .about("Clean up stale worktrees")
+            .arg(
+              Arg::new("repo")
+                .long("repo")
+                .short('r')
+                .help("Path to a specific repository")
+                .value_name("PATH"),
+            ),
+        ),
+    )
 }
 
 /// Handle the CLI commands
@@ -75,6 +116,31 @@ pub fn handle_commands(matches: &clap::ArgMatches) -> Result<()> {
       _ => {
         use crate::utils::output::{format_command, print_warning};
         print_warning("Unknown git command.");
+        println!("Use {} for usage information.", format_command("--help"));
+        Ok(())
+      }
+    },
+    Some(("worktree", worktree_matches)) => match worktree_matches.subcommand() {
+      Some(("create", create_matches)) => {
+        let branch = create_matches.get_one::<String>("branch").unwrap();
+        let repo_arg = create_matches.get_one::<String>("repo").map(|s| s.as_str());
+        let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
+        crate::worktree::create_worktree(repo_path, branch)?;
+        Ok(())
+      }
+      Some(("list", list_matches)) => {
+        let repo_arg = list_matches.get_one::<String>("repo").map(|s| s.as_str());
+        let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
+        crate::worktree::list_worktrees(repo_path)
+      }
+      Some(("clean", clean_matches)) => {
+        let repo_arg = clean_matches.get_one::<String>("repo").map(|s| s.as_str());
+        let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
+        crate::worktree::clean_worktrees(repo_path)
+      }
+      _ => {
+        use crate::utils::output::{format_command, print_warning};
+        print_warning("Unknown worktree command.");
         println!("Use {} for usage information.", format_command("--help"));
         Ok(())
       }
