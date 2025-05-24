@@ -1,2 +1,51 @@
-// Configuration management module
-// This will be expanded in future iterations
+use anyhow::{Context, Result};
+use directories::ProjectDirs;
+use std::fs;
+use std::path::PathBuf;
+
+/// Represents the configuration directories for the twig application
+pub struct ConfigDirs {
+  pub config_dir: PathBuf,
+  pub data_dir: PathBuf,
+}
+
+impl ConfigDirs {
+  /// Create a new ConfigDirs instance
+  pub fn new() -> Result<Self> {
+    let proj_dirs = ProjectDirs::from("ai", "lat", "twig").context("Failed to determine project directories")?;
+
+    let config_dir = proj_dirs.config_dir().to_path_buf();
+    let data_dir = proj_dirs.data_dir().to_path_buf();
+
+    Ok(Self { config_dir, data_dir })
+  }
+
+  /// Initialize the configuration directories
+  pub fn init(&self) -> Result<()> {
+    fs::create_dir_all(&self.config_dir).context("Failed to create config directory")?;
+    fs::create_dir_all(&self.data_dir).context("Failed to create data directory")?;
+
+    // Create an empty registry file if it doesn't exist
+    let registry_path = self.registry_path();
+    if !registry_path.exists() {
+      fs::write(&registry_path, "[]").context("Failed to create empty registry file")?;
+    }
+
+    Ok(())
+  }
+
+  /// Get the path to the registry file
+  pub fn registry_path(&self) -> PathBuf {
+    self.data_dir.join("registry.json")
+  }
+}
+
+/// Initialize the configuration directories
+pub fn init() -> Result<()> {
+  let config_dirs = ConfigDirs::new()?;
+  config_dirs.init()?;
+  println!("Initialized twig configuration directories:");
+  println!("  Config: {}", config_dirs.config_dir.display());
+  println!("  Data: {}", config_dirs.data_dir.display());
+  Ok(())
+}
