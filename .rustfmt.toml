@@ -1,0 +1,15 @@
+# Rustfmt configuration
+# See all options at: https://rust-lang.github.io/rustfmt/
+
+# Basic formatting
+max_width = 120
+tab_spaces = 2
+edition = "2024"
+newline_style = "Unix"
+
+# Imports formatting
+reorder_imports = true
+reorder_modules = true
+
+# Control flow
+match_block_trailing_comma = false
