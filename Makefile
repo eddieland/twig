@@ -44,6 +44,12 @@ watch-test: ## Run tests in watch mode (requires cargo-watch)
 .PHONY: all
 all: fmt lint test ## Run fmt, lint, and test
 
+### Analysis
+
+.PHONY: cloc
+cloc: ## Count lines of code using Docker
+	docker run --rm -v "$(PWD):/tmp" aldanial/cloc /tmp --exclude-dir=target --fullpath --not-match-d='ref/external'
+
 ### Coverage
 
 .PHONY: coverage
