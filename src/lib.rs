@@ -1,8 +1,10 @@
 // Re-export the public API
 pub mod api;
 pub mod cli;
+pub mod completion;
 pub mod config;
 pub mod creds;
+pub mod diagnostics;
 pub mod git;
 pub mod state;
 pub mod utils;

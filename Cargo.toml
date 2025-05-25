@@ -22,6 +22,7 @@ test = false
 anyhow = "1.0"
 chrono = "0.4"
 clap = { version = "4.4", features = ["derive"] }
+clap_complete = "4.4"
 colored = "3.0"
 directories = "6.0"
 dotenv = "0.15"

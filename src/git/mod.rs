@@ -34,7 +34,7 @@ pub fn remove_repository<P: AsRef<Path>>(path: P) -> Result<()> {
 /// List all repositories in the registry
 pub fn list_repositories() -> Result<()> {
   use crate::utils::output::{
-    format_command, format_repo_name, format_repo_path, format_timestamp, print_header, print_info, print_warning,
+    format_command, format_repo_name, format_repo_path, print_header, print_info, print_warning,
   };
 
   let config_dirs = crate::config::ConfigDirs::new()?;
@@ -49,9 +49,7 @@ pub fn list_repositories() -> Result<()> {
 
   print_header("Tracked Repositories");
   for repo in repos {
-    let last_fetch = repo.last_fetch.as_deref().unwrap_or("never");
     println!("  {} ({})", format_repo_name(&repo.name), format_repo_path(&repo.path));
-    println!("    Last fetch: {}", format_timestamp(last_fetch));
   }
 
   Ok(())

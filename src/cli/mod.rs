@@ -2,7 +2,9 @@ use anyhow::Result;
 use clap::Command;
 
 mod commands;
+mod completion;
 mod creds;
+mod diagnostics;
 mod git;
 mod github;
 mod jira;
@@ -25,6 +27,8 @@ pub fn build_cli() -> Command {
     .subcommand(github::build_command())
     .subcommand(jira::build_command())
     .subcommand(worktree::build_command())
+    .subcommand(diagnostics::build_diagnostics_command())
+    .subcommand(completion::build_completion_command())
 }
 
 /// Handle the CLI commands
@@ -36,6 +40,8 @@ pub fn handle_commands(matches: &clap::ArgMatches) -> Result<()> {
     Some(("github", github_matches)) => github::handle_commands(github_matches),
     Some(("jira", jira_matches)) => jira::handle_commands(jira_matches),
     Some(("worktree", worktree_matches)) => worktree::handle_commands(worktree_matches),
+    Some(("diagnose", _)) => diagnostics::handle_diagnostics_command(),
+    Some(("completion", completion_matches)) => completion::handle_completion_command(completion_matches),
     _ => commands::handle_unknown_command(),
   }
 }

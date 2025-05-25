@@ -2,8 +2,10 @@ use anyhow::Result;
 
 mod api;
 mod cli;
+mod completion;
 mod config;
 mod creds;
+mod diagnostics;
 mod git;
 mod state;
 mod utils;

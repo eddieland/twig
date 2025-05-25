@@ -8,6 +8,7 @@ use directories::ProjectDirs;
 pub struct ConfigDirs {
   pub config_dir: PathBuf,
   pub data_dir: PathBuf,
+  pub cache_dir: Option<PathBuf>,
 }
 
 impl ConfigDirs {
@@ -17,8 +18,28 @@ impl ConfigDirs {
 
     let config_dir = proj_dirs.config_dir().to_path_buf();
     let data_dir = proj_dirs.data_dir().to_path_buf();
+    let cache_dir = Some(proj_dirs.cache_dir().to_path_buf());
 
-    Ok(Self { config_dir, data_dir })
+    Ok(Self {
+      config_dir,
+      data_dir,
+      cache_dir,
+    })
+  }
+
+  /// Get the config directory
+  pub fn config_dir(&self) -> &PathBuf {
+    &self.config_dir
+  }
+
+  /// Get the data directory
+  pub fn data_dir(&self) -> &PathBuf {
+    &self.data_dir
+  }
+
+  /// Get the cache directory
+  pub fn cache_dir(&self) -> Option<&PathBuf> {
+    self.cache_dir.as_ref()
   }
 
   /// Initialize the configuration directories
@@ -69,4 +90,9 @@ pub fn init() -> Result<()> {
   );
 
   Ok(())
+}
+
+/// Get the configuration directories
+pub fn get_config_dirs() -> Result<ConfigDirs> {
+  ConfigDirs::new()
 }
