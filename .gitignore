@@ -27,3 +27,6 @@ ref/
 # Added by cargo
 
 /target
+
+# Per-user secrets
+/.env

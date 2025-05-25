@@ -1,7 +1,9 @@
 use anyhow::Result;
 
+mod api;
 mod cli;
 mod config;
+mod creds;
 mod git;
 mod state;
 mod utils;
