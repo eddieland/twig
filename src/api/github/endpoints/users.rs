@@ -5,23 +5,6 @@ use crate::api::github::client::GitHubClient;
 use crate::api::github::models::GitHubUser;
 
 impl GitHubClient {
-  /// Test the GitHub connection by fetching the current user
-  pub async fn test_connection(&self) -> Result<bool> {
-    let url = format!("{}/user", self.base_url);
-
-    let response = self
-      .client
-      .get(&url)
-      .header("Accept", "application/vnd.github.v3+json")
-      .header("User-Agent", "twig-cli")
-      .basic_auth(&self.auth.username, Some(&self.auth.token))
-      .send()
-      .await
-      .context("Failed to connect to GitHub")?;
-
-    Ok(response.status().is_success())
-  }
-
   /// Get the current authenticated user
   pub async fn get_current_user(&self) -> Result<GitHubUser> {
     let url = format!("{}/user", self.base_url);

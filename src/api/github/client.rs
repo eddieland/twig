@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use reqwest::Client;
 
 use crate::api::github::models::GitHubAuth;
@@ -19,6 +19,23 @@ impl GitHubClient {
       base_url: "https://api.github.com".to_string(),
       auth,
     }
+  }
+
+  /// Test the GitHub connection by fetching the current user
+  pub async fn test_connection(&self) -> Result<bool> {
+    let url = format!("{}/user", self.base_url);
+
+    let response = self
+      .client
+      .get(&url)
+      .header("Accept", "application/vnd.github.v3+json")
+      .header("User-Agent", "twig-cli")
+      .basic_auth(&self.auth.username, Some(&self.auth.token))
+      .send()
+      .await
+      .context("Failed to connect to GitHub")?;
+
+    Ok(response.status().is_success())
   }
 }
 

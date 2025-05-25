@@ -5,22 +5,6 @@ use crate::api::jira::client::JiraClient;
 use crate::api::jira::models::JiraIssue;
 
 impl JiraClient {
-  /// Test the Jira connection by fetching the current user
-  #[allow(dead_code)]
-  pub async fn test_connection(&self) -> Result<bool> {
-    let url = format!("{}/rest/api/2/myself", self.base_url);
-
-    let response = self
-      .client
-      .get(&url)
-      .basic_auth(&self.auth.username, Some(&self.auth.api_token))
-      .send()
-      .await
-      .context("Failed to connect to Jira")?;
-
-    Ok(response.status().is_success())
-  }
-
   /// Get a Jira issue by key
   pub async fn get_issue(&self, issue_key: &str) -> Result<JiraIssue> {
     let url = format!("{}/rest/api/2/issue/{}", self.base_url, issue_key);
