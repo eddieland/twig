@@ -36,8 +36,7 @@ pub fn build_command() -> Command {
                     This command guides you through the process of setting up credentials\n\
                     for the services that twig integrates with. It will create or update\n\
                     your .netrc file with the provided credentials.",
-        )
-        .hide(true), // Hide this command until it's implemented
+        ),
     )
 }
 
@@ -121,10 +120,198 @@ fn handle_check_command() -> Result<()> {
   Ok(())
 }
 
-/// Handle the setup command (placeholder for future implementation)
+/// Handle the setup command
 fn handle_setup_command() -> Result<()> {
-  print_info("Interactive credential setup will be implemented in a future version.");
-  print_info("For now, please manually edit your .netrc file.");
+  use std::io::{self, Write};
+
+  use tokio::runtime::Runtime;
+
+  use crate::api::github::create_github_client;
+  use crate::api::jira::create_jira_client;
+  use crate::creds::{get_netrc_path, write_netrc_entry};
+
+  print_info("Welcome to the twig credential setup wizard!");
+  println!("This wizard will help you configure credentials for Jira and GitHub.");
+  println!();
+
+  println!("• Ccredentials will be stored in ~/.netrc");
+  println!("• File permissions will be automatically set to 600 for security");
+  println!();
+
+  let rt = Runtime::new()?;
+  let netrc_path = get_netrc_path();
+
+  // Check if .netrc exists and warn about overwriting
+  if netrc_path.exists() {
+    print_warning("A .netrc file already exists.");
+    print!("Do you want to add/update credentials? (y/n): ");
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+
+    if !input.trim().to_lowercase().starts_with('y') {
+      print_info("Setup cancelled.");
+      return Ok(());
+    }
+  }
+
+  println!();
+  print_info("Setting up Jira credentials:");
+  println!("You'll need your Atlassian domain and API token.");
+  println!("To create an API token, visit: https://id.atlassian.com/manage-profile/security/api-tokens");
+  println!();
+
+  // Get Jira credentials
+  print!("Enter your Jira/Atlassian email: ");
+  io::stdout().flush()?;
+  let mut jira_email = String::new();
+  io::stdin().read_line(&mut jira_email)?;
+  let jira_email = jira_email.trim().to_string();
+
+  if jira_email.is_empty() {
+    print_warning("Email cannot be empty. Skipping Jira setup.");
+    println!("You can run 'twig creds setup' again to configure Jira later.");
+    println!();
+  } else {
+    print!("Enter your Jira API token: ");
+    io::stdout().flush()?;
+    let mut jira_token = String::new();
+    io::stdin().read_line(&mut jira_token)?;
+    let jira_token = jira_token.trim().to_string();
+
+    if jira_token.is_empty() {
+      print_warning("API token cannot be empty. Skipping Jira setup.");
+      println!("You can run 'twig creds setup' again to configure Jira later.");
+      println!();
+    } else {
+      print!("Enter your Jira domain (e.g., mycompany.atlassian.net): ");
+      io::stdout().flush()?;
+      let mut jira_domain = String::new();
+      io::stdin().read_line(&mut jira_domain)?;
+      let jira_domain = jira_domain.trim().to_string();
+
+      if jira_domain.is_empty() {
+        print_warning("Domain cannot be empty. Skipping Jira setup.");
+        println!("You can run 'twig creds setup' again to configure Jira later.");
+        println!();
+      } else {
+        // Validate Jira credentials
+        print_info("Validating Jira credentials...");
+        let jira_url = if jira_domain.starts_with("http") {
+          jira_domain.clone()
+        } else {
+          format!("https://{jira_domain}")
+        };
+
+        match create_jira_client(&jira_url, &jira_email, &jira_token) {
+          Ok(client) => match rt.block_on(client.test_connection()) {
+            Ok(true) => {
+              print_success("Jira credentials validated successfully!");
+              write_netrc_entry("atlassian.com", &jira_email, &jira_token)?;
+            }
+            Ok(false) => {
+              print_error("Failed to validate Jira credentials. Please check your credentials and domain.");
+              print_info("Common issues:");
+              println!("  • Make sure your email is correct");
+              println!("  • Verify your API token is valid and not expired");
+              println!("  • Check that the domain is correct (e.g., mycompany.atlassian.net)");
+              print_info("You can manually add credentials to your .netrc file later.");
+            }
+            Err(e) => {
+              print_error(&format!("Error validating Jira credentials: {e}"));
+              print_info("This might be a network issue or the Jira instance might be unreachable.");
+              print_info("You can manually add credentials to your .netrc file later.");
+            }
+          },
+          Err(e) => {
+            print_error(&format!("Error creating Jira client: {e}"));
+            print_info("You can manually add credentials to your .netrc file later.");
+          }
+        }
+      }
+    }
+  }
+
+  println!();
+  print_info("Setting up GitHub credentials:");
+  println!("You'll need your GitHub username and a Personal Access Token.");
+  println!("To create a PAT, visit: https://github.com/settings/tokens");
+  println!("Required scopes: repo, read:user");
+  println!();
+
+  // Get GitHub credentials
+  print!("Enter your GitHub username: ");
+  io::stdout().flush()?;
+  let mut github_username = String::new();
+  io::stdin().read_line(&mut github_username)?;
+  let github_username = github_username.trim().to_string();
+
+  if github_username.is_empty() {
+    print_warning("Username cannot be empty. Skipping GitHub setup.");
+    println!("You can run 'twig creds setup' again to configure GitHub later.");
+    println!();
+  } else {
+    print!("Enter your GitHub Personal Access Token: ");
+    io::stdout().flush()?;
+    let mut github_token = String::new();
+    io::stdin().read_line(&mut github_token)?;
+    let github_token = github_token.trim().to_string();
+
+    if github_token.is_empty() {
+      print_warning("Personal Access Token cannot be empty. Skipping GitHub setup.");
+      println!("You can run 'twig creds setup' again to configure GitHub later.");
+      println!();
+    } else {
+      // Validate GitHub credentials
+      print_info("Validating GitHub credentials...");
+      match create_github_client(&github_username, &github_token) {
+        Ok(client) => match rt.block_on(client.test_connection()) {
+          Ok(true) => {
+            print_success("GitHub credentials validated successfully!");
+            write_netrc_entry("github.com", &github_username, &github_token)?;
+          }
+          Ok(false) => {
+            print_error("Failed to validate GitHub credentials. Please check your username and token.");
+            print_info("Common issues:");
+            println!("  • Make sure your username is correct");
+            println!("  • Verify your Personal Access Token is valid and not expired");
+            println!("  • Check that the token has required scopes: repo, read:user");
+            print_info("You can manually add credentials to your .netrc file later.");
+          }
+          Err(e) => {
+            print_error(&format!("Error validating GitHub credentials: {e}",));
+            print_info("This might be a network issue or GitHub might be unreachable.");
+            print_info("You can manually add credentials to your .netrc file later.");
+          }
+        },
+        Err(e) => {
+          print_error(&format!("Error creating GitHub client: {e}",));
+          print_info("You can manually add credentials to your .netrc file later.");
+        }
+      }
+    }
+  }
+
+  // Set secure permissions on .netrc
+  if netrc_path.exists() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut perms = fs::metadata(&netrc_path)?.permissions();
+    perms.set_mode(0o600);
+    fs::set_permissions(&netrc_path, perms)?;
+
+    print_success("Set secure permissions on .netrc file (600).");
+  }
+
+  println!();
+  print_success("Credential setup complete!");
+  print_info("You can now use twig with Jira and GitHub integration.");
+  print_info(&format!(
+    "Run {} to verify your credentials.",
+    format_command("twig creds check")
+  ));
 
   Ok(())
 }

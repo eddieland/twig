@@ -59,6 +59,13 @@ This file tracks our progress through the implementation plan for the Twig proje
 - [x] Handle multiple PRs per branch
 - [x] Support both PR URLs and PR IDs for linking
 
+### ✅ Iteration 8: Enhanced Credential Management
+- [x] Create interactive credential setup wizard
+- [x] Validate credentials during setup
+- [x] Add .netrc permission checking
+- [x] Improve error handling with helpful troubleshooting tips
+- [x] Support skipping individual service configuration
+
 ## Lessons Learned
 
 ### Project Setup
@@ -147,3 +154,13 @@ This file tracks our progress through the implementation plan for the Twig proje
 - Limit the size of large error payloads to avoid overwhelming users while still providing useful context
 - Use `anyhow::Context` to add high-level context to low-level errors
 - Consistent error formatting improves user experience and makes debugging easier
+
+### Enhanced Credential Management
+- Interactive setup wizards provide a much better user experience than manual file editing
+- Input validation should happen at multiple stages: empty checks, format validation, and API validation
+- Graceful handling of partial setup allows users to configure only the services they need
+- Credential validation during setup prevents invalid credentials from being stored
+- Clear error messages with troubleshooting tips reduce support burden and improve user success rates
+- Secure file permissions (0o600) for .netrc files are critical for credential security
+- The .netrc format's simplicity makes it easy to parse and update programmatically
+- Supporting both create and update operations for .netrc entries provides flexibility for existing users

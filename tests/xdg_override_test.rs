@@ -1,7 +1,6 @@
-mod test_helpers;
-
 use std::path::Path;
 
+mod test_helpers;
 use test_helpers::{TestConfigDirs, TestEnv, setup_test_env_with_registry};
 
 #[test]
