@@ -84,7 +84,7 @@ twig
 ├── jira (j)               # Jira integration
 │   ├── issue (i)
 │   │   ├── view (show)
-│   │   └── transition (trans)
+│   │   └── transition
 │   └── branch (br)
 │       ├── create (new)
 │       └── link

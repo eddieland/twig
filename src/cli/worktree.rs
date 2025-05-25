@@ -12,6 +12,7 @@ pub fn build_command() -> Command {
             different features or fixes concurrently without stashing or committing\n\
             incomplete work.",
     )
+    .arg_required_else_help(true)
     .alias("wt")
     .subcommand(
       Command::new("create")
@@ -91,9 +92,12 @@ pub fn handle_commands(worktree_matches: &clap::ArgMatches) -> Result<()> {
       crate::worktree::clean_worktrees(repo_path)
     }
     _ => {
-      use crate::utils::output::{format_command, print_warning};
+      use crate::utils::output::print_warning;
       print_warning("Unknown worktree command.");
-      println!("Use {} for usage information.", format_command("--help"));
+      // Print the help text directly instead of telling the user to use --help
+      let mut cmd = build_command();
+      cmd.print_help().expect("Failed to print help text");
+      println!();
       Ok(())
     }
   }

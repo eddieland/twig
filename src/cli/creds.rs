@@ -17,6 +17,7 @@ pub fn build_command() -> Command {
             external services that twig integrates with. Credentials are stored\n\
             in your .netrc file for security and compatibility with other tools.",
     )
+    .arg_required_else_help(true)
     .subcommand(
       Command::new("check")
         .about("Check if credentials are properly configured")
@@ -47,7 +48,10 @@ pub fn handle_commands(creds_matches: &clap::ArgMatches) -> Result<()> {
     Some(("setup", _)) => handle_setup_command(),
     _ => {
       print_warning("Unknown credentials command.");
-      println!("Use {} for usage information.", format_command("--help"));
+      // Print the help text directly instead of telling the user to use --help
+      let mut cmd = build_command();
+      cmd.print_help().expect("Failed to print help text");
+      println!();
       Ok(())
     }
   }

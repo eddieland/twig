@@ -37,13 +37,20 @@ This file tracks our progress through the implementation plan for the Twig proje
 - [x] Create Jira API client with authentication
 - [x] Implement credential validation
 - [x] Add helpful error messages for auth failures
-- [x] Add jira command aliases (j, i, show, trans, br, new)
+- [x] Add jira command aliases (j, i, show, br, new)
 
 ### ✅ Iteration 5: Jira Integration - Workflow
 - [x] Add branch creation from Jira issues
 - [x] Implement branch naming convention
 - [x] Store issue-branch associations in .twig/state.json
 - [x] Add issue state transitions
+
+### ✅ Iteration 6: GitHub Integration - Authentication
+- [x] Parse .netrc for GitHub credentials
+- [x] Create GitHub API client
+- [x] Add repository detection from git remotes
+- [x] Implement basic API validation
+- [x] Add github command aliases (gh, st)
 
 ## Lessons Learned
 
@@ -109,3 +116,9 @@ This file tracks our progress through the implementation plan for the Twig proje
 - Branch naming conventions based on issue keys and summaries create clear associations
 - Storing branch-issue associations in repository-local state allows for portable metadata
 - Transition IDs can be looked up by name for a more user-friendly experience
+
+### GitHub Integration
+- Using the same .netrc credential system for GitHub provides consistency with Jira
+- The GitHub API requires specific headers like User-Agent and Accept for proper operation
+- Basic authentication with GitHub API uses the same pattern as Jira, simplifying implementation
+- Displaying user information provides immediate feedback on successful authentication

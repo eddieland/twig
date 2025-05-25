@@ -4,6 +4,7 @@ use clap::Command;
 mod commands;
 mod creds;
 mod git;
+mod github;
 mod jira;
 mod worktree;
 
@@ -21,6 +22,7 @@ pub fn build_cli() -> Command {
     .subcommand(commands::build_init_command())
     .subcommand(creds::build_command())
     .subcommand(git::build_command())
+    .subcommand(github::build_command())
     .subcommand(jira::build_command())
     .subcommand(worktree::build_command())
 }
@@ -31,6 +33,7 @@ pub fn handle_commands(matches: &clap::ArgMatches) -> Result<()> {
     Some(("init", _)) => commands::handle_init_command(),
     Some(("creds", creds_matches)) => creds::handle_commands(creds_matches),
     Some(("git", git_matches)) => git::handle_commands(git_matches),
+    Some(("github", github_matches)) => github::handle_commands(github_matches),
     Some(("jira", jira_matches)) => jira::handle_commands(jira_matches),
     Some(("worktree", worktree_matches)) => worktree::handle_commands(worktree_matches),
     _ => commands::handle_unknown_command(),

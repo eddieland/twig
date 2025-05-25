@@ -11,6 +11,7 @@ pub fn build_command() -> Command {
             across multiple repositories. Repositories added to twig can be referenced\n\
             in other commands and batch operations.",
     )
+    .arg_required_else_help(true)
     .alias("g")
     .subcommand(
       Command::new("add")
@@ -177,9 +178,12 @@ pub fn handle_commands(git_matches: &clap::ArgMatches) -> Result<()> {
       }
     }
     _ => {
-      use crate::utils::output::{format_command, print_warning};
+      use crate::utils::output::print_warning;
       print_warning("Unknown git command.");
-      println!("Use {} for usage information.", format_command("--help"));
+      // Print the help text directly instead of telling the user to use --help
+      let mut cmd = build_command();
+      cmd.print_help().expect("Failed to print help text");
+      println!();
       Ok(())
     }
   }

@@ -3,7 +3,7 @@ use emojis;
 
 // Helper function to safely get an emoji or fallback to a default character
 fn get_emoji_or_default(name: &str, default: &str) -> String {
-  match emojis::get(name) {
+  match emojis::get_by_shortcode(name) {
     Some(emoji) => emoji.to_string(),
     None => default.to_string(),
   }
@@ -11,13 +11,13 @@ fn get_emoji_or_default(name: &str, default: &str) -> String {
 
 /// Print a success message
 pub fn print_success(message: &str) {
-  let check = get_emoji_or_default("check mark", "✓");
+  let check = get_emoji_or_default("check_mark", "✓");
   println!("{} {}", check.green().bold(), message);
 }
 
 /// Print an error message
 pub fn print_error(message: &str) {
-  let cross = get_emoji_or_default("cross mark", "✗");
+  let cross = get_emoji_or_default("cross_mark", "✗");
   eprintln!("{} {}", cross.red().bold(), message);
 }
 

@@ -5,7 +5,7 @@ use tokio::runtime::Runtime;
 
 use crate::api::jira::create_jira_client;
 use crate::creds::get_jira_credentials;
-use crate::utils::output::{format_command, print_error, print_info, print_warning};
+use crate::utils::output::{print_error, print_info, print_warning};
 
 /// Build the jira subcommand
 pub fn build_command() -> Command {
@@ -17,6 +17,7 @@ pub fn build_command() -> Command {
             issues, and transition issues through your workflow. It requires proper\n\
             Jira credentials to be configured in your .netrc file.",
     )
+    .arg_required_else_help(true)
     .alias("j")
     .subcommand(
       Command::new("issue")
@@ -138,7 +139,6 @@ pub fn handle_commands(jira_matches: &clap::ArgMatches) -> Result<()> {
     Some(("branch", branch_matches)) => handle_branch_commands(branch_matches),
     _ => {
       print_warning("Unknown jira command.");
-      println!("Use {} for usage information.", format_command("--help"));
       Ok(())
     }
   }
@@ -159,7 +159,6 @@ fn handle_branch_commands(branch_matches: &clap::ArgMatches) -> Result<()> {
     }
     _ => {
       print_warning("Unknown branch command.");
-      println!("Use {} for usage information.", format_command("--help"));
       Ok(())
     }
   }
@@ -179,7 +178,6 @@ fn handle_issue_commands(issue_matches: &clap::ArgMatches) -> Result<()> {
     }
     _ => {
       print_warning("Unknown issue command.");
-      println!("Use {} for usage information.", format_command("--help"));
       Ok(())
     }
   }
@@ -438,8 +436,6 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
     };
 
     // Print the branch name
-    print_info(&format!("Creating branch: {branch_name}"));
-
     print_info(&format!("Creating branch: {branch_name}"));
 
     // Open the repository

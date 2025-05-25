@@ -18,8 +18,11 @@ pub fn handle_init_command() -> Result<()> {
 
 /// Handle unknown or missing commands
 pub fn handle_unknown_command() -> Result<()> {
-  use crate::utils::output::{format_command, print_info};
+  use crate::utils::output::print_info;
   print_info("No command specified.");
-  println!("Use {} for usage information.", format_command("--help"));
+  // Print the help text directly instead of telling the user to use --help
+  let mut cmd = crate::cli::build_cli();
+  cmd.print_help().expect("Failed to print help text");
+  println!();
   Ok(())
 }

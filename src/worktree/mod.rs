@@ -147,7 +147,7 @@ impl RepoState {
 
 /// Create a new worktree
 pub fn create_worktree<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Result<PathBuf> {
-  use crate::utils::output::{format_repo_path, print_info, print_success};
+  use crate::utils::output::{format_repo_path, print_info, print_success, print_warning};
 
   let repo_path = repo_path.as_ref();
   let repo =
@@ -181,12 +181,65 @@ pub fn create_worktree<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Resul
   // Check if branch exists
   let branch_exists = repo.find_branch(branch_name, git2::BranchType::Local).is_ok();
 
+  // Also check if a branch with the sanitized name exists (could happen with
+  // previous attempts)
+  let sanitized_branch_exists = repo.find_branch(&safe_branch_name, git2::BranchType::Local).is_ok();
+
   if branch_exists {
     // Use existing branch
     print_info(&format!("Using existing branch: {branch_name}"));
-    repo
-      .worktree(safe_branch_name.as_str(), worktree_path.as_path(), None)
-      .context(format!("Failed to create worktree for branch '{branch_name}'"))?;
+    // Check if the worktree directory already exists
+    if worktree_path.exists() {
+      print_warning(&format!(
+        "Worktree directory already exists at {}",
+        format_repo_path(&worktree_path.display().to_string())
+      ));
+      return Err(anyhow::anyhow!(
+        "Worktree directory already exists at {}. Please remove it or use a different branch name.",
+        worktree_path.display()
+      ));
+    }
+
+    // Check if a worktree with this name already exists
+    if repo.find_worktree(&safe_branch_name).is_ok() {
+      print_warning(&format!("A worktree named '{safe_branch_name}' already exists",));
+      return Err(anyhow::anyhow!(
+        "A worktree named '{}' already exists. This could be due to a previous attempt to create this worktree.",
+        safe_branch_name
+      ));
+    }
+
+    // Check if a branch with the sanitized name exists (would conflict with
+    // worktree creation)
+    if sanitized_branch_exists {
+      print_warning(&format!(
+        "A branch named '{safe_branch_name}' already exists, which conflicts with the worktree name",
+      ));
+      return Err(anyhow::anyhow!(
+        "A branch named '{}' already exists, which conflicts with the worktree name. Please delete this branch first or use a different branch name.",
+        safe_branch_name
+      ));
+    }
+
+    // Try to create the worktree
+    match repo.worktree(safe_branch_name.as_str(), worktree_path.as_path(), None) {
+      Ok(worktree) => worktree,
+      Err(err) => {
+        // Get the raw error message from git2
+        let git_error = err.message();
+
+        return Err(anyhow::anyhow!(
+          "Failed to create worktree for branch '{}': {}. This could be due to:
+  - The worktree directory already exists but is not registered with Git
+  - The branch is already checked out in another worktree
+  - There are uncommitted changes that conflict with the branch
+  - You don't have permission to create directories at {}",
+          branch_name,
+          git_error,
+          worktree_path.parent().unwrap_or(Path::new(".")).display()
+        ));
+      }
+    };
   } else {
     // Create a new branch
     print_info(&format!("Creating new branch: {branch_name}"));
@@ -204,9 +257,56 @@ pub fn create_worktree<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Resul
       .context(format!("Failed to create branch '{branch_name}'"))?;
 
     // Create the worktree
-    repo
-      .worktree(safe_branch_name.as_str(), worktree_path.as_path(), None)
-      .context(format!("Failed to create worktree for branch '{branch_name}'"))?;
+    // Check if the worktree directory already exists
+    if worktree_path.exists() {
+      print_warning(&format!(
+        "Worktree directory already exists at {}",
+        format_repo_path(&worktree_path.display().to_string())
+      ));
+      return Err(anyhow::anyhow!(
+        "Worktree directory already exists at {}. Please remove it or use a different branch name.",
+        worktree_path.display()
+      ));
+    }
+
+    // Check if a worktree with this name already exists
+    if repo.find_worktree(&safe_branch_name).is_ok() {
+      print_warning(&format!("A worktree named '{safe_branch_name}' already exists",));
+      return Err(anyhow::anyhow!(
+        "A worktree named '{safe_branch_name}' already exists. This could be due to a previous attempt to create this worktree.",
+      ));
+    }
+
+    // Check if a branch with the sanitized name exists (would conflict with
+    // worktree creation)
+    if repo.find_branch(&safe_branch_name, git2::BranchType::Local).is_ok() {
+      print_warning(&format!(
+        "A branch named '{safe_branch_name}' already exists, which conflicts with the worktree name",
+      ));
+      return Err(anyhow::anyhow!(
+        "A branch named '{safe_branch_name}' already exists, which conflicts with the worktree name. Please delete this branch first or use a different branch name.",
+      ));
+    }
+
+    // Try to create the worktree
+    match repo.worktree(safe_branch_name.as_str(), worktree_path.as_path(), None) {
+      Ok(worktree) => worktree,
+      Err(err) => {
+        // Get the raw error message from git2
+        let git_error = err.message();
+
+        return Err(anyhow::anyhow!(
+          "Failed to create worktree for branch '{}': {}. This could be due to:
+  - The worktree directory already exists but is not registered with Git
+  - The branch is already checked out in another worktree
+  - There are uncommitted changes that conflict with the branch
+  - You don't have permission to create directories at {}",
+          branch_name,
+          git_error,
+          worktree_path.parent().unwrap_or(Path::new(".")).display()
+        ));
+      }
+    };
   }
 
   // Update the repository state
