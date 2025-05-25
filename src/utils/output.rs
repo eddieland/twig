@@ -57,3 +57,37 @@ pub fn format_timestamp(timestamp: &str) -> String {
 pub fn format_command(cmd: &str) -> String {
   cmd.purple().to_string()
 }
+
+/// Format a GitHub PR review status
+pub fn format_pr_review_status(state: &str) -> String {
+  match state {
+    "APPROVED" => state.green().to_string(),
+    "CHANGES_REQUESTED" => state.red().to_string(),
+    "COMMENTED" => state.yellow().to_string(),
+    _ => state.to_string(),
+  }
+}
+
+/// Format a GitHub check run status
+pub fn format_check_status(status: &str, conclusion: Option<&str>) -> String {
+  match status {
+    "completed" => {
+      if let Some(conclusion) = conclusion {
+        match conclusion {
+          "success" => "Success".green().to_string(),
+          "failure" => "Failure".red().to_string(),
+          "neutral" => "Neutral".yellow().to_string(),
+          "cancelled" => "Cancelled".yellow().to_string(),
+          "timed_out" => "Timed Out".red().to_string(),
+          "action_required" => "Action Required".yellow().to_string(),
+          _ => conclusion.to_string(),
+        }
+      } else {
+        "Completed".to_string()
+      }
+    }
+    "in_progress" => "In Progress".yellow().to_string(),
+    "queued" => "Queued".cyan().to_string(),
+    _ => status.to_string(),
+  }
+}

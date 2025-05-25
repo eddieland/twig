@@ -6,7 +6,9 @@ use tokio::runtime::Runtime;
 use crate::api::github::{GitHubPRStatus, create_github_client};
 use crate::creds::get_github_credentials;
 use crate::git::detect_current_repository;
-use crate::utils::output::{format_command, print_error, print_info, print_success, print_warning};
+use crate::utils::output::{
+  format_check_status, format_command, format_pr_review_status, print_error, print_info, print_success, print_warning,
+};
 use crate::worktree::RepoState;
 
 /// Build the GitHub command
@@ -474,16 +476,11 @@ fn display_pr_status(status: &GitHubPRStatus) {
     }
 
     for (_, review) in latest_reviews {
-      let state_color = match review.state.as_str() {
-        "APPROVED" => "\x1b[32m",          // Green
-        "CHANGES_REQUESTED" => "\x1b[31m", // Red
-        "COMMENTED" => "\x1b[33m",         // Yellow
-        _ => "\x1b[0m",                    // Reset
-      };
+      let formatted_state = format_pr_review_status(&review.state);
 
       println!(
-        "  {} by {}: {}{}\x1b[0m",
-        review.submitted_at, review.user.login, state_color, review.state,
+        "  {} by {}: {}",
+        review.submitted_at, review.user.login, formatted_state,
       );
     }
   }
@@ -494,26 +491,7 @@ fn display_pr_status(status: &GitHubPRStatus) {
     print_info("Checks:");
 
     for check in &status.check_runs {
-      let status_str = match check.status.as_str() {
-        "completed" => {
-          if let Some(conclusion) = &check.conclusion {
-            match conclusion.as_str() {
-              "success" => "\x1b[32mSuccess\x1b[0m",                 // Green
-              "failure" => "\x1b[31mFailure\x1b[0m",                 // Red
-              "neutral" => "\x1b[33mNeutral\x1b[0m",                 // Yellow
-              "cancelled" => "\x1b[33mCancelled\x1b[0m",             // Yellow
-              "timed_out" => "\x1b[31mTimed Out\x1b[0m",             // Red
-              "action_required" => "\x1b[33mAction Required\x1b[0m", // Yellow
-              _ => conclusion,
-            }
-          } else {
-            "Completed"
-          }
-        }
-        "in_progress" => "\x1b[33mIn Progress\x1b[0m", // Yellow
-        "queued" => "\x1b[36mQueued\x1b[0m",           // Cyan
-        _ => &check.status,
-      };
+      let status_str = format_check_status(&check.status, check.conclusion.as_deref());
 
       println!("  {}: {}", check.name, status_str);
     }
