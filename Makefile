@@ -44,6 +44,24 @@ watch-test: ## Run tests in watch mode (requires cargo-watch)
 .PHONY: all
 all: fmt lint test ## Run fmt, lint, and test
 
+### Coverage
+
+.PHONY: coverage
+coverage: ## Run code coverage
+	cargo llvm-cov --workspace
+
+.PHONY: coverage-html
+coverage-html: ## Generate HTML coverage report
+	cargo llvm-cov --workspace --html
+
+.PHONY: coverage-open
+coverage-open: ## Generate HTML coverage report and open it in browser
+	cargo llvm-cov --workspace --html --open
+
+.PHONY: coverage-report
+coverage-report: ## Generate LCOV report
+	cargo llvm-cov --workspace --lcov --output-path lcov.info
+
 ### Build
 
 .PHONY: build
@@ -81,6 +99,7 @@ install-dev-tools: ## Install development tools
 	cargo install cargo-watch
 	cargo install cargo-outdated
 	cargo install cargo-nextest
+	cargo install cargo-llvm-cov
 	uv tool install pre-commit
 
 .PHONY: pre-commit-setup
