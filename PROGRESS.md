@@ -52,6 +52,13 @@ This file tracks our progress through the implementation plan for the Twig proje
 - [x] Implement basic API validation
 - [x] Add github command aliases (gh, st)
 
+### ✅ Iteration 7: GitHub Integration - PR Management
+- [x] Query PR status for current branch
+- [x] Add PR-branch association storage
+- [x] Display review status and check results
+- [x] Handle multiple PRs per branch
+- [x] Support both PR URLs and PR IDs for linking
+
 ## Lessons Learned
 
 ### Project Setup
@@ -122,3 +129,21 @@ This file tracks our progress through the implementation plan for the Twig proje
 - The GitHub API requires specific headers like User-Agent and Accept for proper operation
 - Basic authentication with GitHub API uses the same pattern as Jira, simplifying implementation
 - Displaying user information provides immediate feedback on successful authentication
+
+### GitHub PR Integration
+- The GitHub API provides comprehensive endpoints for PR management
+- Storing PR-branch associations in repository-local state allows for easy status checking
+- Grouping reviews by user and showing the latest review status provides a clear overview
+- Color-coding check statuses and review states improves readability
+- Regular expressions are useful for extracting information from GitHub URLs
+- The BranchIssue structure can be reused for both Jira issues and GitHub PRs
+- Supporting both PR URLs and PR IDs provides flexibility for users
+
+### Error Handling Best Practices
+- Always include the underlying error message when reporting errors to users
+- Extract specific error messages from API responses rather than showing generic parsing errors
+- When parsing fails, try to extract meaningful information from the response before falling back to generic errors
+- For user input validation errors, include the specific input that failed validation in the error message
+- Limit the size of large error payloads to avoid overwhelming users while still providing useful context
+- Use `anyhow::Context` to add high-level context to low-level errors
+- Consistent error formatting improves user experience and makes debugging easier
