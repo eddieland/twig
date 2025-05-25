@@ -48,19 +48,19 @@ all: fmt lint test ## Run fmt, lint, and test
 
 .PHONY: coverage
 coverage: ## Run code coverage
-	cargo llvm-cov --workspace
+	cargo llvm-cov nextest --workspace
 
 .PHONY: coverage-html
 coverage-html: ## Generate HTML coverage report
-	cargo llvm-cov --workspace --html
+	cargo llvm-cov nextest --workspace --html
 
 .PHONY: coverage-open
 coverage-open: ## Generate HTML coverage report and open it in browser
-	cargo llvm-cov --workspace --html --open
+	cargo llvm-cov nextest --workspace --html --open
 
 .PHONY: coverage-report
 coverage-report: ## Generate LCOV report
-	cargo llvm-cov --workspace --lcov --output-path lcov.info
+	cargo llvm-cov nextest --workspace --lcov --output-path lcov.info
 
 ### Build
 
