@@ -14,11 +14,21 @@ pub struct Worktree {
   pub created_at: String,
 }
 
+/// Represents a branch-issue association
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BranchIssue {
+  pub branch: String,
+  pub jira_issue: String,
+  pub github_pr: Option<u32>,
+  pub created_at: String,
+}
+
 /// Represents the repository-local state
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct RepoState {
   pub version: u32,
   pub worktrees: Vec<Worktree>,
+  pub branch_issues: Vec<BranchIssue>,
   pub config_overrides: serde_json::Value,
 }
 
@@ -33,6 +43,7 @@ impl RepoState {
       return Ok(Self {
         version: 1,
         worktrees: Vec::new(),
+        branch_issues: Vec::new(),
         config_overrides: serde_json::Value::Object(serde_json::Map::new()),
       });
     }
@@ -107,6 +118,30 @@ impl RepoState {
   /// List all worktrees
   pub fn list_worktrees(&self) -> &[Worktree] {
     &self.worktrees
+  }
+
+  /// Add a branch-issue association
+  pub fn add_branch_issue(&mut self, branch_issue: BranchIssue) {
+    // Remove any existing association for the same branch
+    self.branch_issues.retain(|bi| bi.branch != branch_issue.branch);
+    self.branch_issues.push(branch_issue);
+  }
+
+  /// Get a branch-issue association by branch name
+  pub fn get_branch_issue_by_branch(&self, branch: &str) -> Option<&BranchIssue> {
+    self.branch_issues.iter().find(|bi| bi.branch == branch)
+  }
+
+  /// Get a branch-issue association by Jira issue key
+  #[allow(dead_code)]
+  pub fn get_branch_issue_by_jira(&self, jira_issue: &str) -> Option<&BranchIssue> {
+    self.branch_issues.iter().find(|bi| bi.jira_issue == jira_issue)
+  }
+
+  /// List all branch-issue associations
+  #[allow(dead_code)]
+  pub fn list_branch_issues(&self) -> &[BranchIssue] {
+    &self.branch_issues
   }
 }
 

@@ -44,6 +44,89 @@ pub fn build_command() -> Command {
                 .required(true)
                 .index(1),
             ),
+        )
+        .subcommand(
+          Command::new("transition")
+            .about("Transition a Jira issue to a new status")
+            .long_about(
+              "Transition a Jira issue to a new status in the workflow.\n\n\
+                            This command allows you to move an issue through your workflow\n\
+                            by transitioning it to a new status. You can specify the transition\n\
+                            by name or ID. If no transition is specified, available transitions\n\
+                            will be displayed.",
+            )
+            .alias("trans")
+            .arg(
+              Arg::new("issue_key")
+                .help("The Jira issue key (e.g., PROJ-123)")
+                .required(true)
+                .index(1),
+            )
+            .arg(
+              Arg::new("transition")
+                .help("The transition name or ID (e.g., 'In Progress')")
+                .index(2),
+            ),
+        ),
+    )
+    .subcommand(
+      Command::new("branch")
+        .about("Jira branch commands")
+        .long_about(
+          "Commands for working with Git branches linked to Jira issues.\n\n\
+                    These commands allow you to create branches based on Jira issues\n\
+                    and link existing branches to issues. This helps maintain the\n\
+                    connection between code and issues.",
+        )
+        .alias("br")
+        .subcommand(
+          Command::new("create")
+            .about("Create a branch for a Jira issue")
+            .long_about(
+              "Create a Git branch for a specific Jira issue.\n\n\
+                            This command creates a new branch with a name based on the Jira\n\
+                            issue key and summary. It also records the association between\n\
+                            the branch and the issue in the repository state.",
+            )
+            .alias("new")
+            .arg(
+              Arg::new("issue_key")
+                .help("The Jira issue key (e.g., PROJ-123)")
+                .required(true)
+                .index(1),
+            )
+            .arg(
+              Arg::new("worktree")
+                .help("Create a worktree for the branch")
+                .long_help(
+                  "Create a worktree for the branch in addition to creating the branch.\n\
+                                This allows you to work on the issue in a separate directory.",
+                )
+                .long("worktree")
+                .short('w')
+                .action(clap::ArgAction::SetTrue),
+            ),
+        )
+        .subcommand(
+          Command::new("link")
+            .about("Link a branch to a Jira issue")
+            .long_about(
+              "Link an existing Git branch to a Jira issue.\n\n\
+                            This command records the association between a branch and a\n\
+                            Jira issue in the repository state. This is useful for branches\n\
+                            that were created outside of twig.",
+            )
+            .arg(
+              Arg::new("issue_key")
+                .help("The Jira issue key (e.g., PROJ-123)")
+                .required(true)
+                .index(1),
+            )
+            .arg(
+              Arg::new("branch")
+                .help("The branch name (defaults to current branch)")
+                .index(2),
+            ),
         ),
     )
 }
@@ -52,8 +135,30 @@ pub fn build_command() -> Command {
 pub fn handle_commands(jira_matches: &clap::ArgMatches) -> Result<()> {
   match jira_matches.subcommand() {
     Some(("issue", issue_matches)) => handle_issue_commands(issue_matches),
+    Some(("branch", branch_matches)) => handle_branch_commands(branch_matches),
     _ => {
       print_warning("Unknown jira command.");
+      println!("Use {} for usage information.", format_command("--help"));
+      Ok(())
+    }
+  }
+}
+
+/// Handle branch subcommands
+fn handle_branch_commands(branch_matches: &clap::ArgMatches) -> Result<()> {
+  match branch_matches.subcommand() {
+    Some(("create", create_matches)) => {
+      let issue_key = create_matches.get_one::<String>("issue_key").unwrap();
+      let create_worktree = create_matches.get_flag("worktree");
+      handle_create_branch_command(issue_key, create_worktree)
+    }
+    Some(("link", link_matches)) => {
+      let issue_key = link_matches.get_one::<String>("issue_key").unwrap();
+      let branch = link_matches.get_one::<String>("branch");
+      handle_link_branch_command(issue_key, branch.map(|s| s.as_str()))
+    }
+    _ => {
+      print_warning("Unknown branch command.");
       println!("Use {} for usage information.", format_command("--help"));
       Ok(())
     }
@@ -66,6 +171,11 @@ fn handle_issue_commands(issue_matches: &clap::ArgMatches) -> Result<()> {
     Some(("view", view_matches)) => {
       let issue_key = view_matches.get_one::<String>("issue_key").unwrap();
       handle_view_issue_command(issue_key)
+    }
+    Some(("transition", transition_matches)) => {
+      let issue_key = transition_matches.get_one::<String>("issue_key").unwrap();
+      let transition = transition_matches.get_one::<String>("transition");
+      handle_transition_issue_command(issue_key, transition.map(|s| s.as_str()))
     }
     _ => {
       print_warning("Unknown issue command.");
@@ -161,5 +271,354 @@ fn handle_view_issue_command(issue_key: &str) -> Result<()> {
         Ok(())
       }
     }
+  })
+}
+
+/// Handle the transition issue command
+fn handle_transition_issue_command(issue_key: &str, transition: Option<&str>) -> Result<()> {
+  use crate::utils::output::{print_error, print_info, print_success};
+
+  // Create a tokio runtime for async operations
+  let rt = Runtime::new().context("Failed to create async runtime")?;
+
+  rt.block_on(async {
+    // Get Jira credentials
+    let creds = match get_jira_credentials() {
+      Ok(creds) => creds,
+      Err(e) => {
+        print_error(&format!("Failed to get Jira credentials: {e}"));
+        print_info("Use the 'twig creds check' command to verify your credentials.");
+        return Ok(());
+      }
+    };
+
+    // Load environment variables from .env file
+    dotenv::dotenv().ok();
+
+    // Get Jira host from environment or use default
+    let jira_host = std::env::var("JIRA_HOST").unwrap_or_else(|_| "https://eddieland.atlassian.net".to_string());
+
+    // Create Jira client
+    let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
+
+    // If no transition is specified, list available transitions
+    if transition.is_none() {
+      print_info(&format!("Available transitions for issue {issue_key}:"));
+
+      match jira_client.get_transitions(issue_key).await {
+        Ok(transitions) => {
+          if transitions.is_empty() {
+            print_info("No transitions available for this issue.");
+          } else {
+            for t in transitions {
+              println!("  • {} (ID: {})", t.name, t.id);
+            }
+          }
+        }
+        Err(e) => {
+          print_error(&format!("Failed to fetch transitions: {e}"));
+          return Ok(());
+        }
+      }
+
+      return Ok(());
+    }
+
+    // Get the transition ID from the name
+    let transition_name = transition.unwrap();
+    let transitions = match jira_client.get_transitions(issue_key).await {
+      Ok(t) => t,
+      Err(e) => {
+        print_error(&format!("Failed to fetch transitions: {e}"));
+        return Ok(());
+      }
+    };
+
+    // Find the transition ID by name (case-insensitive)
+    let transition_id = transitions
+      .iter()
+      .find(|t| t.name.to_lowercase() == transition_name.to_lowercase() || t.id == transition_name)
+      .map(|t| t.id.clone());
+
+    match transition_id {
+      Some(id) => {
+        // Perform the transition
+        match jira_client.transition_issue(issue_key, &id).await {
+          Ok(_) => {
+            print_success(&format!(
+              "Successfully transitioned issue {issue_key} to '{transition_name}'"
+            ));
+            Ok(())
+          }
+          Err(e) => {
+            print_error(&format!("Failed to transition issue: {e}"));
+            Ok(())
+          }
+        }
+      }
+      None => {
+        print_error(&format!(
+          "Transition '{transition_name}' not found for issue {issue_key}"
+        ));
+        print_info("Available transitions:");
+        for t in transitions {
+          println!("  • {} (ID: {})", t.name, t.id);
+        }
+        Ok(())
+      }
+    }
+  })
+}
+
+/// Handle the create branch command
+fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<()> {
+  use git2::Repository as Git2Repository;
+
+  use crate::utils::output::{print_error, print_info, print_success};
+  use crate::worktree::{BranchIssue, RepoState};
+
+  // Create a tokio runtime for async operations
+  let rt = Runtime::new().context("Failed to create async runtime")?;
+
+  rt.block_on(async {
+    // Get Jira credentials
+    let creds = match get_jira_credentials() {
+      Ok(creds) => creds,
+      Err(e) => {
+        print_error(&format!("Failed to get Jira credentials: {e}"));
+        print_info("Use the 'twig creds check' command to verify your credentials.");
+        return Ok(());
+      }
+    };
+
+    // Load environment variables from .env file
+    dotenv::dotenv().ok();
+
+    // Get Jira host from environment or use default
+    let jira_host = std::env::var("JIRA_HOST").unwrap_or_else(|_| "https://eddieland.atlassian.net".to_string());
+
+    // Create Jira client
+    let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
+
+    // Fetch the issue to get its summary
+    let issue = match jira_client.get_issue(issue_key).await {
+      Ok(issue) => issue,
+      Err(e) => {
+        print_error(&format!("Failed to fetch issue {issue_key}: {e}"));
+        return Ok(());
+      }
+    };
+
+    // Create a branch name from the issue key and summary
+    let summary = issue.fields.summary.to_lowercase();
+
+    // Sanitize the summary for use in a branch name
+    let sanitized_summary = summary
+      .chars()
+      .map(|c| match c {
+        ' ' | '-' | '_' => '-',
+        c if c.is_alphanumeric() => c,
+        _ => '-',
+      })
+      .collect::<String>()
+      .replace("--", "-")
+      .trim_matches('-') // This trims both leading and trailing hyphens
+      .to_string();
+
+    // Create the branch name in the format "PROJ-123/add-feature"
+    let branch_name = format!("{issue_key}/{sanitized_summary}");
+
+    // Get the current repository
+    let repo_path = match crate::git::detect_current_repository() {
+      Ok(path) => path,
+      Err(e) => {
+        print_error(&format!("Failed to find git repository: {e}"));
+        return Ok(());
+      }
+    };
+
+    // Print the branch name
+    print_info(&format!("Creating branch: {branch_name}"));
+
+    print_info(&format!("Creating branch: {branch_name}"));
+
+    // Open the repository
+    let repo = Git2Repository::open(&repo_path).context("Failed to open git repository")?;
+
+    // Get the current timestamp
+    let now = std::time::SystemTime::now()
+      .duration_since(std::time::UNIX_EPOCH)
+      .unwrap()
+      .as_secs();
+    let time_str = chrono::DateTime::<chrono::Utc>::from_timestamp(now as i64, 0)
+      .unwrap()
+      .to_rfc3339();
+
+    if with_worktree {
+      // Create a worktree for the branch
+      match crate::worktree::create_worktree(&repo_path, &branch_name) {
+        Ok(_) => {
+          print_success(&format!("Created worktree for branch '{branch_name}'"));
+        }
+        Err(e) => {
+          print_error(&format!("Failed to create worktree: {e}"));
+          return Ok(());
+        }
+      }
+    } else {
+      // Get the HEAD commit to branch from
+      let head = repo.head()?;
+      let target = head
+        .target()
+        .ok_or_else(|| anyhow::anyhow!("HEAD is not a direct reference"))?;
+      let commit = repo.find_commit(target)?;
+
+      // Create the branch
+      match repo.branch(&branch_name, &commit, false) {
+        Ok(_) => {
+          print_success(&format!("Created branch '{branch_name}'"));
+        }
+        Err(e) => {
+          print_error(&format!("Failed to create branch: {e}"));
+          return Ok(());
+        }
+      }
+    }
+
+    // Load the repository state
+    let mut state = RepoState::load(&repo_path)?;
+
+    // Add the branch-issue association
+    state.add_branch_issue(BranchIssue {
+      branch: branch_name.clone(),
+      jira_issue: issue_key.to_string(),
+      github_pr: None,
+      created_at: time_str,
+    });
+
+    // Save the state
+    state.save(&repo_path)?;
+
+    print_success(&format!(
+      "Associated branch '{branch_name}' with Jira issue {issue_key}"
+    ));
+
+    Ok(())
+  })
+}
+
+/// Handle the link branch command
+fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Result<()> {
+  use git2::Repository as Git2Repository;
+
+  use crate::utils::output::{print_error, print_info, print_success, print_warning};
+  use crate::worktree::{BranchIssue, RepoState};
+
+  // Create a tokio runtime for async operations
+  let rt = Runtime::new().context("Failed to create async runtime")?;
+
+  rt.block_on(async {
+    // Get Jira credentials
+    let creds = match get_jira_credentials() {
+      Ok(creds) => creds,
+      Err(e) => {
+        print_error(&format!("Failed to get Jira credentials: {e}"));
+        print_info("Use the 'twig creds check' command to verify your credentials.");
+        return Ok(());
+      }
+    };
+
+    // Load environment variables from .env file
+    dotenv::dotenv().ok();
+
+    // Get Jira host from environment or use default
+    let jira_host = std::env::var("JIRA_HOST").unwrap_or_else(|_| "https://eddieland.atlassian.net".to_string());
+
+    // Create Jira client
+    let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
+
+    // Verify the issue exists
+    match jira_client.get_issue(issue_key).await {
+      Ok(_) => {
+        // Issue exists, continue
+      }
+      Err(e) => {
+        print_error(&format!("Failed to fetch issue {issue_key}: {e}"));
+        return Ok(());
+      }
+    };
+
+    // Get the current repository
+    let repo_path = match crate::git::detect_current_repository() {
+      Ok(path) => path,
+      Err(e) => {
+        print_error(&format!("Failed to find git repository: {e}"));
+        return Ok(());
+      }
+    };
+
+    // Open the repository
+    let repo = Git2Repository::open(&repo_path).context("Failed to open git repository")?;
+
+    // Determine the branch name
+    let branch = if let Some(name) = branch_name {
+      // Verify the branch exists
+      if repo.find_branch(name, git2::BranchType::Local).is_err() {
+        print_error(&format!("Branch '{name}' not found"));
+        return Ok(());
+      }
+      name.to_string()
+    } else {
+      // Get the current branch
+      let head = repo.head()?;
+      if !head.is_branch() {
+        print_error("Not currently on a branch");
+        return Ok(());
+      }
+
+      head.shorthand().unwrap_or("HEAD").to_string()
+    };
+
+    // Get the current timestamp
+    let now = std::time::SystemTime::now()
+      .duration_since(std::time::UNIX_EPOCH)
+      .unwrap()
+      .as_secs();
+    let time_str = chrono::DateTime::<chrono::Utc>::from_timestamp(now as i64, 0)
+      .unwrap()
+      .to_rfc3339();
+
+    // Load the repository state
+    let mut state = RepoState::load(&repo_path)?;
+
+    // Check if the branch is already associated with an issue
+    if let Some(existing) = state.get_branch_issue_by_branch(&branch) {
+      if existing.jira_issue == issue_key {
+        print_info(&format!(
+          "Branch '{branch}' is already associated with issue {issue_key}"
+        ));
+        return Ok(());
+      } else {
+        print_warning(&format!(
+          "Branch '{branch}' is already associated with issue {}. Updating to {issue_key}.",
+          existing.jira_issue
+        ));
+      }
+    }
+
+    // Add the branch-issue association
+    state.add_branch_issue(BranchIssue {
+      branch: branch.clone(),
+      jira_issue: issue_key.to_string(),
+      github_pr: None,
+      created_at: time_str,
+    });
+
+    // Save the state
+    state.save(&repo_path)?;
+
+    print_success(&format!("Associated branch '{branch}' with Jira issue {issue_key}"));
+
+    Ok(())
   })
 }

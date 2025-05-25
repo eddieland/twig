@@ -32,6 +32,19 @@ This file tracks our progress through the implementation plan for the Twig proje
 - [x] Implement error handling and summary reporting
 - [x] Add stale branch detection with alias
 
+### ✅ Iteration 4: Jira Integration - Authentication
+- [x] Parse .netrc for Atlassian credentials
+- [x] Create Jira API client with authentication
+- [x] Implement credential validation
+- [x] Add helpful error messages for auth failures
+- [x] Add jira command aliases (j, i, show, trans, br, new)
+
+### ✅ Iteration 5: Jira Integration - Workflow
+- [x] Add branch creation from Jira issues
+- [x] Implement branch naming convention
+- [x] Store issue-branch associations in .twig/state.json
+- [x] Add issue state transitions
+
 ## Lessons Learned
 
 ### Project Setup
@@ -88,3 +101,11 @@ This file tracks our progress through the implementation plan for the Twig proje
 - Capturing and displaying command output provides transparency to users
 - Success/failure reporting with colored output improves user experience
 - Summary statistics help users understand the results of batch operations
+
+### Jira Integration
+- Using the reqwest crate provides a simple way to interact with the Jira API
+- Storing credentials in .netrc allows for secure authentication without hardcoding
+- The Jira API provides a comprehensive set of endpoints for issue management
+- Branch naming conventions based on issue keys and summaries create clear associations
+- Storing branch-issue associations in repository-local state allows for portable metadata
+- Transition IDs can be looked up by name for a more user-friendly experience
