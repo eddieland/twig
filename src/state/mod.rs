@@ -1,7 +1,8 @@
-use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 
 use crate::config::ConfigDirs;
 
@@ -89,9 +90,9 @@ impl Registry {
     self.repositories.retain(|r| r.path != path_str);
 
     if self.repositories.len() == initial_len {
-      println!("Repository not found in registry: {}", path_str);
+      println!("Repository not found in registry: {path_str}");
     } else {
-      println!("Removed repository from registry: {}", path_str);
+      println!("Removed repository from registry: {path_str}");
     }
 
     Ok(())

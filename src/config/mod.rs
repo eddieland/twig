@@ -1,7 +1,8 @@
-use anyhow::{Context, Result};
-use directories::ProjectDirs;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result};
+use directories::ProjectDirs;
 
 /// Represents the configuration directories for the twig application
 pub struct ConfigDirs {

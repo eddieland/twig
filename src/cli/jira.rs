@@ -85,7 +85,7 @@ fn handle_view_issue_command(issue_key: &str) -> Result<()> {
     let creds = match get_jira_credentials() {
       Ok(creds) => creds,
       Err(e) => {
-        print_error(&format!("Failed to get Jira credentials: {}", e));
+        print_error(&format!("Failed to get Jira credentials: {e}"));
         print_info("Use the 'twig creds check' command to verify your credentials.");
         return Ok(());
       }
@@ -95,7 +95,7 @@ fn handle_view_issue_command(issue_key: &str) -> Result<()> {
     dotenv::dotenv().ok();
 
     // Get Jira host from environment or use default
-    let jira_host = std::env::var("JIRA_HOST").unwrap_or_else(|_| "https://your-domain.atlassian.net".to_string());
+    let jira_host = std::env::var("JIRA_HOST").unwrap_or_else(|_| "https://eddieland.atlassian.net".to_string());
 
     // Create Jira client
     let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
@@ -104,7 +104,7 @@ fn handle_view_issue_command(issue_key: &str) -> Result<()> {
     match jira_client.get_issue(issue_key).await {
       Ok(issue) => {
         // Create a cleaner, more elegant output for the Jira issue
-        let title = format!(" JIRA ISSUE: {} ", issue.key);
+        let title = format!(" Jira Issue: {} ", issue.key);
         let title_len = title.len();
         let line_width = 78;
         let left_padding = (line_width - title_len) / 2;
@@ -148,7 +148,7 @@ fn handle_view_issue_command(issue_key: &str) -> Result<()> {
           // Indent the description for better readability
           println!();
           for line in description.lines() {
-            println!("  {}", line);
+            println!("  {line}");
           }
           println!();
         }
@@ -157,7 +157,7 @@ fn handle_view_issue_command(issue_key: &str) -> Result<()> {
         Ok(())
       }
       Err(e) => {
-        print_error(&format!("Failed to fetch issue {}: {}", issue_key, e));
+        print_error(&format!("Failed to fetch issue {issue_key}: {e}"));
         Ok(())
       }
     }

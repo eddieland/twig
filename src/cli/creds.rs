@@ -1,7 +1,8 @@
-use anyhow::Result;
-use clap::Command;
 use std::fs::metadata;
 use std::os::unix::fs::PermissionsExt;
+
+use anyhow::Result;
+use clap::Command;
 
 use crate::creds::{check_github_credentials, check_jira_credentials, get_netrc_path};
 use crate::utils::output::{format_command, format_repo_path, print_error, print_info, print_success, print_warning};
@@ -88,7 +89,7 @@ fn handle_check_command() -> Result<()> {
       print_warning("No Jira credentials found.");
       println!("Add credentials for machine 'atlassian.com' to your .netrc file.");
     }
-    Err(e) => print_error(&format!("Error checking Jira credentials: {}", e)),
+    Err(e) => print_error(&format!("Error checking Jira credentials: {e}")),
   }
 
   // Check GitHub credentials
@@ -98,7 +99,7 @@ fn handle_check_command() -> Result<()> {
       print_warning("No GitHub credentials found.");
       println!("Add credentials for machine 'github.com' to your .netrc file.");
     }
-    Err(e) => print_error(&format!("Error checking GitHub credentials: {}", e)),
+    Err(e) => print_error(&format!("Error checking GitHub credentials: {e}")),
   }
 
   // Print .netrc format example

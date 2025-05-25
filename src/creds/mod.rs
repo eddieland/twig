@@ -1,8 +1,9 @@
-use anyhow::{Context, Result};
-use directories::BaseDirs;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result};
+use directories::BaseDirs;
 
 /// Represents credentials for a service
 #[derive(Debug, Clone)]

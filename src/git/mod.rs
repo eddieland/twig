@@ -1,10 +1,10 @@
-use anyhow::{Context, Result};
-use git2::{BranchType, FetchOptions, Repository as Git2Repository};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::task;
-use tokio::time;
+
+use anyhow::{Context, Result};
+use git2::{BranchType, FetchOptions, Repository as Git2Repository};
+use tokio::{task, time};
 
 use crate::state::Registry;
 use crate::utils::output::{format_repo_name, format_repo_path, print_error, print_info, print_success, print_warning};
@@ -70,12 +70,12 @@ pub fn fetch_repository<P: AsRef<Path>>(path: P, all: bool) -> Result<()> {
     for i in 0..remotes.len() {
       let remote_name = remotes.get(i).unwrap();
       use crate::utils::output::print_info;
-      print_info(&format!("Fetching remote: {}", remote_name));
+      print_info(&format!("Fetching remote: {remote_name}"));
 
       let mut remote = repo.find_remote(remote_name)?;
       remote
         .fetch(&[] as &[&str], Some(&mut fetch_options), None)
-        .context(format!("Failed to fetch from remote '{}'", remote_name))?;
+        .context(format!("Failed to fetch from remote '{remote_name}'"))?;
     }
   } else {
     // Just fetch origin
@@ -173,7 +173,7 @@ pub fn fetch_all_repositories() -> Result<()> {
           failure_count += 1;
         }
         Err(e) => {
-          print_error(&format!("Task panicked: {}", e));
+          print_error(&format!("Task panicked: {e}"));
           failure_count += 1;
         }
       }
@@ -181,10 +181,10 @@ pub fn fetch_all_repositories() -> Result<()> {
 
     // Print summary
     print_info("Fetch operation complete");
-    print_info(&format!("Successful: {}", success_count));
+    print_info(&format!("Successful: {success_count}"));
 
     if failure_count > 0 {
-      print_warning(&format!("Failed: {}", failure_count));
+      print_warning(&format!("Failed: {failure_count}"));
     }
   });
 
@@ -232,7 +232,7 @@ pub fn execute_repository<P: AsRef<Path>>(path: P, command: &str) -> Result<()> 
     .args(&args)
     .current_dir(path)
     .output()
-    .context(format!("Failed to execute command: {}", command))?;
+    .context(format!("Failed to execute command: {command}"))?;
 
   // Print the output
   if !output.stdout.is_empty() {
@@ -315,7 +315,7 @@ pub fn execute_all_repositories(command: &str) -> Result<()> {
           failure_count += 1;
         }
         Err(e) => {
-          print_error(&format!("Task panicked: {}", e));
+          print_error(&format!("Task panicked: {e}"));
           failure_count += 1;
         }
       }
@@ -323,10 +323,10 @@ pub fn execute_all_repositories(command: &str) -> Result<()> {
 
     // Print summary
     print_info("Command execution complete");
-    print_info(&format!("Successful: {}", success_count));
+    print_info(&format!("Successful: {success_count}"));
 
     if failure_count > 0 {
-      print_warning(&format!("Failed: {}", failure_count));
+      print_warning(&format!("Failed: {failure_count}"));
     }
   });
 
@@ -463,7 +463,7 @@ pub fn find_stale_branches_all(days: u32) -> Result<()> {
           failure_count += 1;
         }
         Err(e) => {
-          print_error(&format!("Task panicked: {}", e));
+          print_error(&format!("Task panicked: {e}"));
           failure_count += 1;
         }
       }
@@ -471,10 +471,10 @@ pub fn find_stale_branches_all(days: u32) -> Result<()> {
 
     // Print summary
     print_info("Stale branch check complete");
-    print_info(&format!("Successful: {}", success_count));
+    print_info(&format!("Successful: {success_count}"));
 
     if failure_count > 0 {
-      print_warning(&format!("Failed: {}", failure_count));
+      print_warning(&format!("Failed: {failure_count}"));
     }
   });
 

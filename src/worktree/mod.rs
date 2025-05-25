@@ -1,8 +1,9 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+
 use anyhow::{Context, Result};
 use git2::Repository as Git2Repository;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::{Path, PathBuf};
 
 /// Represents a worktree in a repository
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -118,11 +119,12 @@ pub fn create_worktree<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Resul
     Git2Repository::open(repo_path).context(format!("Failed to open git repository at {}", repo_path.display()))?;
 
   // Determine the worktree path
-  // By default, create worktrees in a directory named after the repo with "-worktrees" suffix
+  // By default, create worktrees in a directory named after the repo with
+  // "-worktrees" suffix
   let repo_name = repo_path.file_name().and_then(|n| n.to_str()).unwrap_or("repo");
 
   let parent_dir = repo_path.parent().unwrap_or(Path::new("."));
-  let worktrees_dir = parent_dir.join(format!("{}-worktrees", repo_name));
+  let worktrees_dir = parent_dir.join(format!("{repo_name}-worktrees"));
 
   // Create the worktrees directory if it doesn't exist
   if !worktrees_dir.exists() {
@@ -146,13 +148,13 @@ pub fn create_worktree<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Resul
 
   if branch_exists {
     // Use existing branch
-    print_info(&format!("Using existing branch: {}", branch_name));
+    print_info(&format!("Using existing branch: {branch_name}"));
     repo
       .worktree(safe_branch_name.as_str(), worktree_path.as_path(), None)
-      .context(format!("Failed to create worktree for branch '{}'", branch_name))?;
+      .context(format!("Failed to create worktree for branch '{branch_name}'"))?;
   } else {
     // Create a new branch
-    print_info(&format!("Creating new branch: {}", branch_name));
+    print_info(&format!("Creating new branch: {branch_name}"));
 
     // Get the HEAD commit to branch from
     let head = repo.head()?;
@@ -164,12 +166,12 @@ pub fn create_worktree<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Resul
     // Create the branch
     repo
       .branch(branch_name, &commit, false)
-      .context(format!("Failed to create branch '{}'", branch_name))?;
+      .context(format!("Failed to create branch '{branch_name}'"))?;
 
     // Create the worktree
     repo
       .worktree(safe_branch_name.as_str(), worktree_path.as_path(), None)
-      .context(format!("Failed to create worktree for branch '{}'", branch_name))?;
+      .context(format!("Failed to create worktree for branch '{branch_name}'"))?;
   }
 
   // Update the repository state
@@ -242,13 +244,14 @@ pub fn list_worktrees<P: AsRef<Path>>(repo_path: P) -> Result<()> {
       // Try to get additional metadata from the state
       let state_worktree = state.get_worktree(name);
 
-      println!("  Branch: {}", name);
+      println!("  Branch: {name}",);
       println!("  Path: {}", format_repo_path(&path));
 
       if let Some(wt) = state_worktree {
         println!("  Created: {}", format_timestamp(&wt.created_at));
       } else {
-        // If we don't have metadata in the state, check if we have any worktrees in the state
+        // If we don't have metadata in the state, check if we have any worktrees in the
+        // state
         if !state_worktrees.is_empty() {
           println!("  Created: Unknown (no metadata available)");
         }
@@ -290,8 +293,7 @@ pub fn clean_worktrees<P: AsRef<Path>>(repo_path: P) -> Result<()> {
       // Check if the worktree directory still exists
       if !path.exists() {
         print_info(&format!(
-          "Cleaning up stale worktree reference: {} (path no longer exists)",
-          name
+          "Cleaning up stale worktree reference: {name} (path no longer exists)",
         ));
 
         // Prune the worktree reference
@@ -309,7 +311,7 @@ pub fn clean_worktrees<P: AsRef<Path>>(repo_path: P) -> Result<()> {
   state.save(repo_path)?;
 
   if cleaned_count > 0 {
-    print_success(&format!("Cleaned up {} stale worktree references", cleaned_count));
+    print_success(&format!("Cleaned up {cleaned_count} stale worktree references"));
   } else {
     print_info("No stale worktrees found to clean up");
   }
