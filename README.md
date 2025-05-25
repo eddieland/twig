@@ -36,7 +36,72 @@ These optimizations ensure Twig remains lightweight (~a few MB in release mode) 
 
 ## Installation
 
-*Coming soon*
+### For Users
+
+The easiest way to install Twig is to download a pre-built binary from the [GitHub Releases](https://github.com/omenien/twig/releases) page.
+
+1. Navigate to the [latest release](https://github.com/omenien/twig/releases/latest)
+2. Download the appropriate binary for your platform:
+   - `twig-x86_64-unknown-linux-gnu.tar.gz` for Linux
+   - `twig-x86_64-apple-darwin.tar.gz` for macOS
+3. Extract the archive and move the binary to a location in your PATH:
+
+```bash
+# Example for Linux/macOS
+tar -xzf twig-*.tar.gz
+chmod +x twig
+sudo mv twig /usr/local/bin/
+```
+
+### For Developers
+
+If you want to contribute to Twig or build it from source, you'll need to set up Rustup and the nightly toolchain.
+
+#### Installing Rustup
+
+[Rustup](https://rustup.rs/) is the official Rust toolchain installer that makes it easy to install Rust and switch between different versions.
+
+1. **Linux/macOS**:
+   ```bash
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   ```
+
+2. **Windows**:
+   Download and run [rustup-init.exe](https://win.rustup.rs/x86_64) from the official site.
+
+3. **Verify installation**:
+   ```bash
+   rustup --version
+   cargo --version
+   rustc --version
+   ```
+
+#### Setting Up the Right Toolchain
+
+Twig requires Rust 1.87.0 or later and uses the **nightly** toolchain for unstable rustfmt features. The project includes a `rust-toolchain.toml` file that specifies the exact requirements.
+
+```bash
+# Simply navigate to the project directory and Rustup will automatically detect the toolchain file
+cd twig
+rustup show
+```
+
+The `rust-toolchain.toml` file in the repository will ensure the correct toolchain is used when building the project.
+
+#### Building from Source
+
+Once you have Rustup installed:
+
+```bash
+# Clone the repository
+git clone https://github.com/omenien/twig.git
+cd twig
+
+# Build in release mode
+cargo build --release
+
+# The binary will be available at target/release/twig
+```
 
 ## Basic Usage
 
@@ -122,8 +187,23 @@ Contributions are welcome! Here's how you can contribute to the project:
 
 ### Development Setup
 
-1. Ensure you have Rust 1.87.0 or later installed
-2. Clone the repository
+1. Ensure you have Rustup installed with the nightly toolchain:
+   ```bash
+   # Install Rustup if you haven't already
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+   # When you navigate to the project directory, Rustup will automatically
+   # detect and use the toolchain specified in rust-toolchain.toml
+   cd twig
+   rustup show
+   ```
+
+2. Clone the repository:
+   ```bash
+   git clone https://github.com/eddieland/twig.git
+   cd twig
+   ```
+
 3. Run `make install-dev-tools` to install development tools
 4. Run `make pre-commit-setup` to set up pre-commit hooks
 5. Run `cargo build` to build the project
