@@ -9,6 +9,10 @@ readme = "README.md"
 repository = "https://github.com/eddieland/twig"
 exclude = ["/.github", "/ref"]
 
+[lib]
+name = "twig"
+path = "src/lib.rs"
+
 [[bin]]
 path = "src/main.rs"
 name = "twig"
@@ -35,8 +39,11 @@ tokio = { version = "1.35", features = ["rt", "rt-multi-thread", "time", "macros
 anyhow = "1.0"
 directories = "6.0"
 mockall = "0.13"
+reqwest = { version = "0.12", features = ["json"] }
 tempfile = "3.8"
 test-case = "3.3"
+tokio = { version = "1.35", features = ["full"] }
+wiremock = "0.6.3"
 
 [profile.release]
 opt-level = 2

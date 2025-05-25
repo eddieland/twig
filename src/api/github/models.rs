@@ -88,3 +88,113 @@ pub struct GitHubPRStatus {
   pub reviews: Vec<GitHubPRReview>,
   pub check_runs: Vec<GitHubCheckRun>,
 }
+
+#[cfg(test)]
+mod tests {
+  use serde_json::json;
+
+  use super::*;
+
+  #[test]
+  fn test_github_auth() {
+    let auth = GitHubAuth {
+      username: "test_user".to_string(),
+      token: "test_token".to_string(),
+    };
+
+    assert_eq!(auth.username, "test_user");
+    assert_eq!(auth.token, "test_token");
+  }
+
+  #[test]
+  fn test_github_user_deserialization() {
+    let json = json!({
+        "login": "octocat",
+        "id": 1,
+        "name": "The Octocat"
+    });
+
+    let user: GitHubUser = serde_json::from_value(json).unwrap();
+
+    assert_eq!(user.login, "octocat");
+    assert_eq!(user.id, 1);
+    assert_eq!(user.name, Some("The Octocat".to_string()));
+  }
+
+  #[test]
+  fn test_github_pull_request_deserialization() {
+    let json = json!({
+        "number": 1347,
+        "title": "Amazing new feature",
+        "html_url": "https://github.com/octocat/Hello-World/pull/1347",
+        "state": "open",
+        "user": {
+            "login": "octocat",
+            "id": 1,
+            "name": "The Octocat"
+        },
+        "created_at": "2011-01-26T19:01:12Z",
+        "updated_at": "2011-01-26T19:01:12Z",
+        "head": {
+            "label": "octocat:new-feature",
+            "ref_name": "new-feature",
+            "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
+        },
+        "base": {
+            "label": "octocat:master",
+            "ref_name": "master",
+            "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
+        },
+        "mergeable": true,
+        "mergeable_state": "clean",
+        "draft": false
+    });
+
+    let pr: GitHubPullRequest = serde_json::from_value(json).unwrap();
+
+    assert_eq!(pr.number, 1347);
+    assert_eq!(pr.title, "Amazing new feature");
+    assert_eq!(pr.state, "open");
+    assert_eq!(pr.mergeable, Some(true));
+    assert_eq!(pr.draft, Some(false));
+  }
+
+  #[test]
+  fn test_github_pr_review_deserialization() {
+    let json = json!({
+        "id": 80,
+        "user": {
+            "login": "octocat",
+            "id": 1,
+            "name": "The Octocat"
+        },
+        "state": "APPROVED",
+        "submitted_at": "2011-01-26T19:01:12Z"
+    });
+
+    let review: GitHubPRReview = serde_json::from_value(json).unwrap();
+
+    assert_eq!(review.id, 80);
+    assert_eq!(review.state, "APPROVED");
+    assert_eq!(review.user.login, "octocat");
+  }
+
+  #[test]
+  fn test_github_check_run_deserialization() {
+    let json = json!({
+        "id": 4,
+        "name": "test-suite",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2011-01-26T19:01:12Z",
+        "completed_at": "2011-01-26T19:01:12Z"
+    });
+
+    let check: GitHubCheckRun = serde_json::from_value(json).unwrap();
+
+    assert_eq!(check.id, 4);
+    assert_eq!(check.name, "test-suite");
+    assert_eq!(check.status, "completed");
+    assert_eq!(check.conclusion, Some("success".to_string()));
+  }
+}
