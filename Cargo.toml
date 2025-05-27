@@ -1,24 +1,20 @@
-[package]
-name = "twig"
+[workspace]
+members = [
+    "twig-cli",
+    "twig-gh",
+    "twig-jira"
+]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.87.0"
-description = "A Git-based developer productivity tool that enhances workflows by integrating git repository management with Jira issue tracking and GitHub pull request workflows"
 authors = ["Edward Jones <ejones@lat.ai>"]
 readme = "README.md"
 repository = "https://github.com/eddieland/twig"
-exclude = ["/.github", "/ref"]
 
-[lib]
-name = "twig"
-path = "src/lib.rs"
-
-[[bin]]
-path = "src/main.rs"
-name = "twig"
-test = false
-
-[dependencies]
+[workspace.dependencies]
 anyhow = "1.0"
 chrono = "0.4"
 clap = { version = "4.4", features = ["derive"] }
@@ -28,22 +24,16 @@ directories = "6.0"
 dotenv = "0.15"
 emojis = "0.6"
 git2 = "0.20"
+mockall = "0.13"
 regex = "1.10"
 reqwest = { version = "0.12", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tabled = "0.19"
-thiserror = "2.0"
-tokio = { version = "1.35", features = ["rt", "rt-multi-thread", "time", "macros"] }
-
-[dev-dependencies]
-anyhow = "1.0"
-directories = "6.0"
-mockall = "0.13"
-reqwest = { version = "0.12", features = ["json"] }
 tempfile = "3.8"
 test-case = "3.3"
-tokio = { version = "1.35", features = ["full"] }
+thiserror = "2.0"
+tokio = { version = "1.35", features = ["rt", "rt-multi-thread", "time", "macros"] }
 wiremock = "0.6.3"
 
 [profile.release]

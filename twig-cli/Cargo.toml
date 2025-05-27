@@ -1,0 +1,48 @@
+[package]
+name = "twig-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+description = "A Git-based developer productivity tool that enhances workflows by integrating git repository management with Jira issue tracking and GitHub pull request workflows"
+exclude = ["/.github", "/ref"]
+
+[lib]
+name = "twig_cli"
+path = "src/lib.rs"
+
+[[bin]]
+path = "src/main.rs"
+name = "twig"
+test = false
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+clap.workspace = true
+clap_complete.workspace = true
+colored.workspace = true
+directories.workspace = true
+dotenv.workspace = true
+emojis.workspace = true
+git2.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tabled.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+# Local crate dependencies
+twig-gh = { path = "../twig-gh" }
+twig-jira = { path = "../twig-jira" }
+
+[dev-dependencies]
+anyhow.workspace = true
+directories.workspace = true
+mockall.workspace = true
+reqwest.workspace = true
+tempfile.workspace = true
+test-case.workspace = true
+tokio = { workspace = true, features = ["full"] }
+wiremock.workspace = true
