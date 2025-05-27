@@ -1,11 +1,11 @@
 [package]
 name = "twig-cli"
+description = "A Git-based developer productivity tool that enhances workflows by integrating git repository management with Jira issue tracking and GitHub pull request workflows"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
-description = "A Git-based developer productivity tool that enhances workflows by integrating git repository management with Jira issue tracking and GitHub pull request workflows"
-exclude = ["/.github", "/ref"]
+repository.workspace = true
 
 [lib]
 name = "twig_cli"
@@ -34,6 +34,7 @@ thiserror.workspace = true
 tokio.workspace = true
 
 # Local crate dependencies
+no-worries = { path = "../no-worries" }
 twig-gh = { path = "../twig-gh" }
 twig-jira = { path = "../twig-jira" }
 

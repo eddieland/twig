@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::Command;
 
+use crate::utils::output::print_info;
+
 /// Build the init subcommand
 pub fn build_init_command() -> Command {
   Command::new("init").about("Initialize twig configuration").long_about(
@@ -18,11 +20,26 @@ pub fn handle_init_command() -> Result<()> {
 
 /// Handle unknown or missing commands
 pub fn handle_unknown_command() -> Result<()> {
-  use crate::utils::output::print_info;
   print_info("No command specified.");
   // Print the help text directly instead of telling the user to use --help
   let mut cmd = crate::cli::build_cli();
   cmd.print_help().expect("Failed to print help text");
   println!();
   Ok(())
+}
+
+/// Build the panic test subcommand
+pub fn build_panic_command() -> Command {
+  Command::new("panic")
+    .about("Test the panic handler")
+    .long_about(
+      "TEMPORARY COMMAND: Intentionally triggers a panic to test the no-worries panic handler.\n\n\
+            This command is for testing purposes only and will be removed in a future version.",
+    )
+    .hide(true)
+}
+
+/// Handle the panic test command - intentionally panics
+pub fn handle_panic_command() -> Result<()> {
+  panic!("This is an intentional test panic to verify no-worries integration");
 }

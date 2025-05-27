@@ -24,6 +24,7 @@ pub fn build_cli() -> Command {
     .version(env!("CARGO_PKG_VERSION"))
     .subcommand_required(false)
     .subcommand(commands::build_init_command())
+    .subcommand(commands::build_panic_command())
     .subcommand(creds::build_command())
     .subcommand(git::build_command())
     .subcommand(github::build_command())
@@ -39,6 +40,7 @@ pub fn build_cli() -> Command {
 pub fn handle_commands(matches: &clap::ArgMatches) -> Result<()> {
   match matches.subcommand() {
     Some(("init", _)) => commands::handle_init_command(),
+    Some(("panic", _)) => commands::handle_panic_command(),
     Some(("creds", creds_matches)) => creds::handle_commands(creds_matches),
     Some(("git", git_matches)) => git::handle_commands(git_matches),
     Some(("github", github_matches)) => github::handle_commands(github_matches),

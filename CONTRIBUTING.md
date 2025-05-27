@@ -1,6 +1,6 @@
 # Contributing to Twig
 
-Thank you for your interest in contributing to Twig! This document provides guidelines and instructions for contributing to the project.
+This document provides guidelines and instructions for contributing to the project.
 
 ## Development Setup
 
@@ -66,22 +66,6 @@ make pre-commit-run
 
 To temporarily bypass the hooks (not recommended), use the `--no-verify` flag with git commit.
 
-## Project Structure
-
-```
-src/
-├── main.rs           # CLI entry point
-├── cli/              # Command definitions
-│   ├── mod.rs
-│   ├── git.rs        # (to be implemented)
-│   ├── jira.rs       # (to be implemented)
-│   └── github.rs     # (to be implemented)
-├── config/           # Configuration management
-├── state/            # State management
-├── git/              # Git operations
-├── utils/            # Shared utilities
-```
-
 ## Workflow
 
 1. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -99,7 +83,3 @@ src/
 - Update documentation as needed
 - Consider binary size implications when adding new dependencies
 - Only include necessary features for dependencies (especially for tokio and reqwest)
-
-## Iterative Development
-
-The project follows an iterative development approach as outlined in the project plan. Each iteration builds on the previous one and provides immediate value.
