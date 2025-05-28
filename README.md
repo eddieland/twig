@@ -25,9 +25,9 @@ Twig streamlines common developer workflows across multiple repositories, provid
 
 ### For Users
 
-The easiest way to install Twig is to download a pre-built binary from the [GitHub Releases](https://github.com/omenien/twig/releases) page.
+The easiest way to install Twig is to download a pre-built binary from the [GitHub Releases](https://github.com/eddieland/twig/releases) page.
 
-1. Navigate to the [latest release](https://github.com/omenien/twig/releases/latest)
+1. Navigate to the [latest release](https://github.com/eddieland/twig/releases/latest)
 2. Download the appropriate binary for your platform:
    - `twig-x86_64-unknown-linux-gnu.tar.gz` for Linux
    - `twig-x86_64-apple-darwin.tar.gz` for macOS
@@ -80,7 +80,7 @@ Once you have Rustup installed:
 
 ```bash
 # Clone the repository
-git clone https://github.com/omenien/twig.git
+git clone https://github.com/eddieland/twig.git
 cd twig
 
 # Install development dependencies (including nextest for testing)
