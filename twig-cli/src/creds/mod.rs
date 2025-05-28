@@ -24,12 +24,6 @@ pub fn get_netrc_path() -> PathBuf {
   home.join(".netrc")
 }
 
-/// Check if the .netrc file exists
-#[allow(dead_code)]
-pub fn netrc_exists() -> bool {
-  get_netrc_path().exists()
-}
-
 /// Parse the .netrc file for credentials for a specific machine
 pub fn parse_netrc_for_machine(machine: &str) -> Result<Option<Credentials>> {
   let netrc_path = get_netrc_path();
