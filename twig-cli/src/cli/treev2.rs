@@ -187,9 +187,7 @@ pub fn handle_command(treev2_matches: &clap::ArgMatches) -> Result<()> {
 
   // Create the tree renderer
   let mut renderer = TreeRenderer::new(&branch_nodes, &roots, max_depth, no_color);
-  for root in &roots {
-    renderer.render_tree(&mut io::stdout(), root, 0, &Vec::new())?;
-  }
+  renderer.render(&mut io::stdout(), &roots)?;
 
   // Show summary if no branches were displayed
   if branch_nodes.is_empty() {

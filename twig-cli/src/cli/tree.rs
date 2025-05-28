@@ -187,7 +187,7 @@ pub fn handle_command(tree_matches: &clap::ArgMatches) -> Result<()> {
 
   // Render the tree starting from the specified root
   let mut stdout = io::stdout();
-  renderer.render_tree(&mut stdout, &root_branch, 0, &[])?;
+  renderer.render_tree(&mut stdout, &root_branch, 0, &[], false)?;
 
   // Show summary and help text
   display_summary(&branch_nodes);

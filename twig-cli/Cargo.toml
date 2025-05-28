@@ -34,6 +34,7 @@ serde_json.workspace = true
 tabled.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+uuid.workspace = true
 
 # Local crate dependencies
 no-worries = { path = "../no-worries" }

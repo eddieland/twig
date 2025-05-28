@@ -18,7 +18,7 @@ resolver = "2"
 
 [workspace.dependencies]
 anyhow = "1.0"
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 clap_complete = "4.5"
 colored = "3.0"
@@ -39,6 +39,7 @@ tempfile = "3.8"
 test-case = "3.3"
 thiserror = "2.0"
 tokio = { version = "1.35", features = ["rt", "rt-multi-thread", "time", "macros"] }
+uuid = { version = "1.6", features = ["v4", "serde"] }
 wiremock = "0.6.3"
 
 [profile.release]

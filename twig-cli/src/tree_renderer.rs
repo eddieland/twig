@@ -140,13 +140,13 @@ impl<'a> TreeRenderer<'a> {
     }
   }
 
-  /// Check if a branch is the last child of its parent
-  fn is_last_child(&self, branch_name: &str, parent_name: &str) -> bool {
-    if let Some(parent_node) = self.branch_nodes.get(parent_name) {
-      parent_node.children.last() == Some(&String::from(branch_name))
-    } else {
-      true
+  /// Helper method to render trees from root branches
+  pub fn render<W: Write>(&mut self, writer: &mut W, roots: &[String]) -> io::Result<()> {
+    for (i, root) in roots.iter().enumerate() {
+      let is_last_root = i == roots.len() - 1;
+      self.render_tree(writer, root, 0, &[], is_last_root)?;
     }
+    Ok(())
   }
 
   /// Render the tree starting from a given branch
@@ -156,6 +156,7 @@ impl<'a> TreeRenderer<'a> {
     branch_name: &str,
     depth: u32,
     prefix: &[String],
+    is_last_sibling: bool,
   ) -> io::Result<()> {
     // Check max depth
     if let Some(max_depth) = self.max_depth {
@@ -179,7 +180,7 @@ impl<'a> TreeRenderer<'a> {
     };
 
     // Print the branch with its prefix
-    self.print_branch(writer, node, depth, prefix)?;
+    self.print_branch(writer, node, depth, prefix, is_last_sibling)?;
 
     // Prepare children for rendering
     let children = node.children.clone();
@@ -189,9 +190,9 @@ impl<'a> TreeRenderer<'a> {
       let is_last = i == child_count - 1;
 
       // Create a new prefix for the child
-      let mut new_prefix = prefix.to_vec();
+      let mut new_prefix: Vec<String> = prefix.to_vec();
       if depth > 0 {
-        new_prefix.push(if is_last {
+        new_prefix.push(if is_last_sibling {
           "    ".to_string()
         } else {
           "│   ".to_string()
@@ -199,7 +200,7 @@ impl<'a> TreeRenderer<'a> {
       }
 
       // Render the child
-      self.render_tree(writer, child, depth + 1, &new_prefix)?;
+      self.render_tree(writer, child, depth + 1, &new_prefix, is_last)?;
     }
 
     Ok(())
@@ -211,6 +212,7 @@ impl<'a> TreeRenderer<'a> {
     node: &BranchNode,
     depth: u32,
     prefix: &[String],
+    is_last_sibling: bool,
   ) -> io::Result<()> {
     // Build the line prefix
     let mut line = String::new();
@@ -222,14 +224,7 @@ impl<'a> TreeRenderer<'a> {
 
     // Add the branch symbol
     if depth > 0 {
-      // Fix: Check if this branch is the last child of its parent
-      let is_last_child = if let Some(parent_name) = node.parents.first() {
-        self.is_last_child(&node.name, parent_name)
-      } else {
-        true
-      };
-
-      let tree_symbol = if is_last_child { "└── " } else { "├── " };
+      let tree_symbol = if is_last_sibling { "└── " } else { "├── " };
       line.push_str(tree_symbol);
     }
 
@@ -525,56 +520,6 @@ mod tests {
   }
 
   #[test]
-  fn test_is_last_child_true() {
-    let mut branches = HashMap::new();
-    branches.insert(
-      "parent".to_string(),
-      create_test_branch(
-        "parent",
-        false,
-        vec![],
-        vec!["child1".to_string(), "child2".to_string()],
-      ),
-    );
-    branches.insert(
-      "child1".to_string(),
-      create_test_branch("child1", false, vec!["parent".to_string()], vec![]),
-    );
-    branches.insert(
-      "child2".to_string(),
-      create_test_branch("child2", false, vec!["parent".to_string()], vec![]),
-    );
-
-    let renderer = TreeRenderer {
-      branch_nodes: &branches,
-      visited: HashSet::new(),
-      cross_refs: HashMap::new(),
-      max_depth: None,
-      no_color: true,
-      tree_width: 0,
-    };
-
-    assert!(!renderer.is_last_child("child1", "parent"));
-    assert!(renderer.is_last_child("child2", "parent"));
-  }
-
-  #[test]
-  fn test_is_last_child_no_parent() {
-    let branches = HashMap::new();
-    let renderer = TreeRenderer {
-      branch_nodes: &branches,
-      visited: HashSet::new(),
-      cross_refs: HashMap::new(),
-      max_depth: None,
-      no_color: true,
-      tree_width: 0,
-    };
-
-    // Should return true when parent doesn't exist
-    assert!(renderer.is_last_child("child", "nonexistent"));
-  }
-
-  #[test]
   fn test_render_tree_visits_branches() {
     let mut branches = HashMap::new();
     branches.insert(
@@ -597,7 +542,7 @@ mod tests {
 
     // Render the tree to a buffer
     let mut output = Vec::new();
-    renderer.render_tree(&mut output, "main", 0, &[]).unwrap();
+    renderer.render_tree(&mut output, "main", 0, &[], true).unwrap();
 
     assert!(renderer.visited.contains("main"));
     assert!(renderer.visited.contains("feature1"));
@@ -635,7 +580,7 @@ mod tests {
 
     // Render the tree to a buffer
     let mut output = Vec::new();
-    renderer.render_tree(&mut output, "main", 0, &[]).unwrap();
+    renderer.render_tree(&mut output, "main", 0, &[], true).unwrap();
 
     assert!(renderer.visited.contains("main"));
     assert!(renderer.visited.contains("feature1"));
@@ -669,7 +614,7 @@ mod tests {
 
     // Render the tree to a buffer
     let mut output = Vec::new();
-    renderer.render_tree(&mut output, "main", 0, &[]).unwrap();
+    renderer.render_tree(&mut output, "main", 0, &[], true).unwrap();
 
     // main should be visited, but feature1 was already visited so should not be
     // processed again
@@ -698,7 +643,7 @@ mod tests {
 
     // Render the tree to a buffer
     let mut output = Vec::new();
-    renderer.render_tree(&mut output, "main", 0, &[]).unwrap();
+    renderer.render_tree(&mut output, "main", 0, &[], true).unwrap();
 
     let output_str = String::from_utf8(output).unwrap();
     assert_snapshot!("basic_tree", output_str);
@@ -748,7 +693,7 @@ mod tests {
     let mut renderer = TreeRenderer::new(&nodes, &roots, None, true);
 
     let mut output = Vec::new();
-    renderer.render_tree(&mut output, "main", 0, &[]).unwrap();
+    renderer.render_tree(&mut output, "main", 0, &[], true).unwrap();
 
     let output_str = String::from_utf8(output).unwrap();
     assert!(output_str.contains("PROJ-123/feat-one"));
@@ -820,7 +765,7 @@ mod tests {
     let mut renderer = TreeRenderer::new(&nodes, &roots, None, true);
 
     let mut output = Vec::new();
-    renderer.render_tree(&mut output, "main", 0, &[]).unwrap();
+    renderer.render_tree(&mut output, "main", 0, &[], true).unwrap();
 
     let output_str = String::from_utf8(output).unwrap();
 
@@ -955,7 +900,7 @@ mod tests {
 
     // Test the print_branch method directly
     let node = &nodes["feature-branch"];
-    renderer.print_branch(&mut output, node, 0, &[]).unwrap();
+    renderer.print_branch(&mut output, node, 0, &[], true).unwrap();
 
     let output_str = String::from_utf8(output).unwrap();
 
@@ -999,7 +944,7 @@ mod tests {
 
     let mut output = Vec::new();
     let node = &nodes["PROJ-123/feature-branch"];
-    renderer.print_branch(&mut output, node, 0, &[]).unwrap();
+    renderer.print_branch(&mut output, node, 0, &[], true).unwrap();
 
     let output_str = String::from_utf8(output).unwrap();
 
@@ -1055,12 +1000,12 @@ mod tests {
     // Test both branches
     let mut output1 = Vec::new();
     let node1 = &nodes["ABC-456/long-branch-name"];
-    renderer.print_branch(&mut output1, node1, 0, &[]).unwrap();
+    renderer.print_branch(&mut output1, node1, 0, &[], true).unwrap();
     let output1_str = String::from_utf8(output1).unwrap();
 
     let mut output2 = Vec::new();
     let node2 = &nodes["short"];
-    renderer.print_branch(&mut output2, node2, 0, &[]).unwrap();
+    renderer.print_branch(&mut output2, node2, 0, &[], true).unwrap();
     let output2_str = String::from_utf8(output2).unwrap();
 
     // Both should contain their respective PRs
