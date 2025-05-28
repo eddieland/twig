@@ -1,0 +1,17 @@
+[package]
+name = "twig-test-utils"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+name = "twig_test_utils"
+
+[dependencies]
+# Core dependencies
+anyhow.workspace = true
+
+# Testing utilities
+tempfile.workspace = true

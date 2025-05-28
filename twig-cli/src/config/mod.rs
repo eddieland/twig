@@ -104,63 +104,15 @@ pub fn get_config_dirs() -> Result<ConfigDirs> {
 
 #[cfg(test)]
 mod tests {
-  use std::env;
-
   use tempfile::TempDir;
+  use twig_test_utils::TestEnv;
 
   use super::*;
 
-  /// Test environment helper that properly manages XDG environment variables
-  /// This ensures tests don't interfere with each other when running in
-  /// parallel
-  struct TestEnvGuard {
-    _temp_dir: TempDir,
-    original_config_home: Option<String>,
-    original_data_home: Option<String>,
-  }
-
-  impl TestEnvGuard {
-    fn new() -> Self {
-      let temp_dir = TempDir::new().unwrap();
-      let config_home = temp_dir.path().join("config");
-      let data_home = temp_dir.path().join("data");
-
-      // Save original values
-      let original_config_home = env::var("XDG_CONFIG_HOME").ok();
-      let original_data_home = env::var("XDG_DATA_HOME").ok();
-
-      // Set test values
-      unsafe {
-        env::set_var("XDG_CONFIG_HOME", &config_home);
-        env::set_var("XDG_DATA_HOME", &data_home);
-      }
-
-      Self {
-        _temp_dir: temp_dir,
-        original_config_home,
-        original_data_home,
-      }
-    }
-  }
-
-  impl Drop for TestEnvGuard {
-    fn drop(&mut self) {
-      // Restore original values
-      match &self.original_config_home {
-        Some(val) => unsafe { env::set_var("XDG_CONFIG_HOME", val) },
-        None => unsafe { env::remove_var("XDG_CONFIG_HOME") },
-      }
-      match &self.original_data_home {
-        Some(val) => unsafe { env::set_var("XDG_DATA_HOME", val) },
-        None => unsafe { env::remove_var("XDG_DATA_HOME") },
-      }
-    }
-  }
-
   #[test]
   fn test_config_dirs_creation() {
-    // Use RAII guard to properly manage environment variables
-    let _env_guard = TestEnvGuard::new();
+    // Use TestEnv from twig-test-utils to properly manage environment variables
+    let _test_env = TestEnv::new();
 
     let config_dirs = ConfigDirs::new().unwrap();
     let _ = config_dirs.init();
@@ -172,7 +124,7 @@ mod tests {
 
   #[test]
   fn test_registry_path() {
-    let _env_guard = TestEnvGuard::new();
+    let _test_env = TestEnv::new();
 
     let config_dirs = ConfigDirs::new().unwrap();
     let registry_path = config_dirs.registry_path();
@@ -183,7 +135,7 @@ mod tests {
 
   #[test]
   fn test_repo_state_paths() {
-    let _env_guard = TestEnvGuard::new();
+    let _test_env = TestEnv::new();
 
     let temp_dir = TempDir::new().unwrap();
     let repo_path = temp_dir.path();
@@ -198,7 +150,7 @@ mod tests {
 
   #[test]
   fn test_init_creates_directories() {
-    let _env_guard = TestEnvGuard::new();
+    let _test_env = TestEnv::new();
 
     let config_dirs = ConfigDirs::new().unwrap();
     config_dirs.init().unwrap();

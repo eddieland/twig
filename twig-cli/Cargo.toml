@@ -12,29 +12,34 @@ name = "twig_cli"
 path = "src/lib.rs"
 
 [[bin]]
-path = "src/main.rs"
 name = "twig"
+path = "src/main.rs"
 test = false
 
 [dependencies]
+# Core dependencies
 anyhow.workspace = true
 chrono.workspace = true
+directories.workspace = true
+dotenv.workspace = true
+git2.workspace = true
+once_cell.workspace = true
+regex.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+
+# CLI and UI dependencies
 clap.workspace = true
 clap_complete.workspace = true
 colored.workspace = true
 console.workspace = true
-directories.workspace = true
-dotenv.workspace = true
 emojis.workspace = true
-git2.workspace = true
-once_cell.workspace = true
-regex.workspace = true
+tabled.workspace = true
+
+# Serialization
 serde.workspace = true
 serde_json.workspace = true
-tabled.workspace = true
-thiserror.workspace = true
-tokio.workspace = true
-uuid.workspace = true
 
 # Local crate dependencies
 no-worries = { path = "../no-worries" }
@@ -42,12 +47,16 @@ twig-gh = { path = "../twig-gh" }
 twig-jira = { path = "../twig-jira" }
 
 [dev-dependencies]
+# Core dependencies
 anyhow.workspace = true
 directories.workspace = true
-insta.workspace = true
-mockall.workspace = true
 reqwest.workspace = true
 tempfile.workspace = true
+
+# Testing dependencies
+insta.workspace = true
+mockall.workspace = true
 test-case.workspace = true
 tokio = { workspace = true, features = ["full"] }
+twig-test-utils = { path = "../twig-test-utils" }
 wiremock.workspace = true

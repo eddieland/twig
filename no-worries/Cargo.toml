@@ -12,7 +12,10 @@ name = "no_worries"
 path = "src/lib.rs"
 
 [dependencies]
+# Core dependencies
 backtrace = "0.3.75"
 chrono = { workspace = true }
-colored = { workspace = true }
 is-terminal = "0.4.12"
+
+# UI dependencies
+colored = { workspace = true }

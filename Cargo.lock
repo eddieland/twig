@@ -2006,6 +2006,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
+name = "twig"
+version = "0.1.5"
+dependencies = [
+ "twig-cli",
+ "twig-test-utils",
+]
+
+[[package]]
 name = "twig-cli"
 version = "0.1.5"
 dependencies = [
@@ -2034,6 +2042,7 @@ dependencies = [
  "tokio",
  "twig-gh",
  "twig-jira",
+ "twig-test-utils",
  "uuid",
  "wiremock",
 ]
@@ -2061,6 +2070,14 @@ dependencies = [
  "serde_json",
  "tokio",
  "wiremock",
+]
+
+[[package]]
+name = "twig-test-utils"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "tempfile",
 ]
 
 [[package]]

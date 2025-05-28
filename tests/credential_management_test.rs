@@ -2,9 +2,7 @@ use std::fs;
 use std::io::Write;
 
 use twig_cli::creds::{get_netrc_path, parse_netrc_for_machine};
-
-mod test_helpers;
-use test_helpers::TestHomeEnv;
+use twig_test_utils::TestHomeEnv;
 
 /// Integration test for credential checking functionality
 #[test]

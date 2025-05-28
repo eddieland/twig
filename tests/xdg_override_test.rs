@@ -1,7 +1,6 @@
 use std::path::Path;
 
-mod test_helpers;
-use test_helpers::{TestConfigDirs, TestEnv, setup_test_env_with_registry};
+use twig_test_utils::{TestConfigDirs, TestEnv, setup_test_env_with_registry};
 
 #[test]
 fn test_xdg_override() {
@@ -54,7 +53,7 @@ fn test_xdg_override_custom_names() {
 fn test_xdg_override_basic_init() {
   // Set up the test environment with overridden XDG directories and basic
   // initialization
-  let (test_env, config_dirs) = test_helpers::setup_test_env_with_init().expect("Failed to set up test environment");
+  let (test_env, config_dirs) = twig_test_utils::setup_test_env_with_init().expect("Failed to set up test environment");
 
   // Verify that the config directories are in our temporary directory
   assert!(

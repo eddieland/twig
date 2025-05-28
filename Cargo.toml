@@ -1,3 +1,14 @@
+[workspace]
+members = [
+    "no-worries",
+    "twig-cli",
+    "twig-gh",
+    "twig-jira",
+    "twig-test-utils",
+]
+default-members = ["twig-cli"]
+resolver = "2"
+
 [workspace.package]
 version = "0.1.5"
 edition = "2024"
@@ -7,39 +18,53 @@ readme = "README.md"
 repository = "https://github.com/eddieland/twig"
 exclude = ["/.github", "/ref"]
 
-[workspace]
-members = [
-    "no-worries",
-    "twig-cli",
-    "twig-gh",
-    "twig-jira",
-]
-resolver = "2"
+[package]
+name = "twig"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+twig-cli = { path = "twig-cli" }
+
+[dev-dependencies]
+twig-test-utils = { path = "twig-test-utils" }
 
 [workspace.dependencies]
+# Core dependencies
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
+directories = "6.0"
+dotenv = "0.15"
+git2 = "0.20"
+once_cell = "1.19"
+regex = "1.10"
+thiserror = "2.0"
+
+# CLI and UI dependencies
 clap = { version = "4.5", features = ["derive"] }
 clap_complete = "4.5"
 colored = "3.0"
 console = "0.15.11"
-directories = "6.0"
-dotenv = "0.15"
 emojis = "0.6"
-git2 = "0.20"
-insta = "1.43"
-mockall = "0.13"
-once_cell = "1.19"
-regex = "1.10"
+tabled = "0.19"
+
+# Async and networking
 reqwest = { version = "0.12", features = ["json"] }
+tokio = { version = "1.35", features = ["rt", "rt-multi-thread", "time", "macros"] }
+
+# Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tabled = "0.19"
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Testing dependencies
+insta = "1.43"
+mockall = "0.13"
 tempfile = "3.8"
 test-case = "3.3"
-thiserror = "2.0"
-tokio = { version = "1.35", features = ["rt", "rt-multi-thread", "time", "macros"] }
-uuid = { version = "1.6", features = ["v4", "serde"] }
 wiremock = "0.6.3"
 
 [profile.release]
