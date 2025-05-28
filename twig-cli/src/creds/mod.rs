@@ -104,7 +104,6 @@ pub fn check_github_credentials() -> Result<bool> {
 }
 
 /// Get GitHub credentials
-#[allow(dead_code)]
 pub fn get_github_credentials() -> Result<Credentials> {
   match parse_netrc_for_machine("github.com")? {
     Some(creds) => Ok(creds),

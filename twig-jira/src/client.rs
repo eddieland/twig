@@ -22,7 +22,6 @@ impl JiraClient {
   }
 
   /// Test the Jira connection by fetching the current user
-  #[allow(dead_code)]
   pub async fn test_connection(&self) -> Result<bool> {
     let url = format!("{}/rest/api/2/myself", self.base_url);
 

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 
 /// Represents Jira authentication credentials
@@ -10,7 +12,6 @@ pub struct JiraAuth {
 /// Represents a Jira issue
 #[derive(Debug, Deserialize)]
 pub struct JiraIssue {
-  #[allow(dead_code)]
   pub id: String,
   pub key: String,
   pub fields: JiraIssueFields,
@@ -27,7 +28,6 @@ pub struct JiraIssueFields {
 /// Represents a Jira issue status
 #[derive(Debug, Deserialize)]
 pub struct JiraIssueStatus {
-  #[allow(dead_code)]
   pub id: Option<String>,
   pub name: String,
 }

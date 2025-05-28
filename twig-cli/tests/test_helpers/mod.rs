@@ -235,7 +235,6 @@ impl TestConfigDirs {
 }
 
 /// A helper function to set up a test environment with TestConfigDirs
-#[allow(dead_code)]
 pub fn setup_test_env() -> anyhow::Result<(TestEnv, TestConfigDirs)> {
   // Set up the test environment with overridden XDG directories
   let test_env = TestEnv::new();
