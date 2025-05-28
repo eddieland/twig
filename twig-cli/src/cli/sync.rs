@@ -3,7 +3,9 @@ use clap::{Arg, Command};
 use git2::{BranchType, Repository as Git2Repository};
 use once_cell::sync::Lazy;
 use regex::Regex;
+use tokio::runtime::Runtime;
 
+use crate::creds::get_github_credentials;
 use crate::repo_state::{BranchMetadata, RepoState};
 use crate::utils::output::{print_info, print_success, print_warning};
 
@@ -32,10 +34,14 @@ pub fn build_command() -> Command {
     .about("Automatically link branches to Jira issues and GitHub PRs")
     .long_about(
       "Scan local branches and automatically detect and link them to their corresponding\n\
-            Jira issues and GitHub PRs based on branch naming conventions.\n\n\
-            This command looks for patterns in branch names like:\n\
-            • Jira issues: PROJ-123/feature-name, feature/PROJ-123-description\n\
-            • GitHub PRs: pr-123-description, github-pr-123\n\n\
+            Jira issues and GitHub PRs.\n\n\
+            For GitHub PRs, this command:\n\
+            • First searches GitHub's API for pull requests matching the branch name\n\
+            • Falls back to detecting patterns in branch names if API is unavailable\n\n\
+            For Jira issues, it looks for patterns in branch names like:\n\
+            • PROJ-123/feature-name, feature/PROJ-123-description\n\n\
+            GitHub PR branch naming patterns (fallback detection):\n\
+            • pr-123-description, github-pr-123, pull-123, pr/123\n\n\
             It will automatically create associations for detected patterns and report\n\
             any branches that couldn't be linked.",
     )
@@ -115,6 +121,9 @@ fn sync_branches(
 
   println!("Scanning branches for Jira issues and GitHub PRs...");
 
+  // Create runtime for async operations
+  let rt = Runtime::new().context("Failed to create async runtime")?;
+
   for branch_result in branches {
     let (branch, _) = branch_result.context("Failed to get branch")?;
     let branch_name = match branch.name()? {
@@ -136,8 +145,17 @@ fn sync_branches(
     } else {
       None
     };
+
     let detected_pr = if !no_github {
-      detect_github_pr_from_branch(branch_name)
+      // First try GitHub API detection
+      let api_pr = rt.block_on(detect_github_pr_from_branch_async(branch_name, repo_path));
+
+      // Fall back to pattern detection if API fails
+      if api_pr.is_some() {
+        api_pr
+      } else {
+        detect_github_pr_from_branch_pattern(branch_name)
+      }
     } else {
       None
     };
@@ -220,8 +238,62 @@ fn detect_jira_issue_from_branch(branch_name: &str) -> Option<String> {
   None
 }
 
-/// Detect GitHub PR number from branch name
-fn detect_github_pr_from_branch(branch_name: &str) -> Option<u32> {
+/// Detect GitHub PR number from branch using GitHub API
+async fn detect_github_pr_from_branch_async(branch_name: &str, repo_path: &std::path::Path) -> Option<u32> {
+  // Get GitHub credentials
+  let credentials = match get_github_credentials() {
+    Ok(creds) => creds,
+    Err(_) => return None, // Silently fall back if no credentials
+  };
+
+  // Create GitHub client
+  let github_client = match twig_gh::create_github_client(&credentials.username, &credentials.password) {
+    Ok(client) => client,
+    Err(_) => return None, // Silently fall back if client creation fails
+  };
+
+  // Open the git repository to get remote info
+  let repo = match Git2Repository::open(repo_path) {
+    Ok(repo) => repo,
+    Err(_) => return None,
+  };
+
+  let remote = match repo.find_remote("origin") {
+    Ok(remote) => remote,
+    Err(_) => return None,
+  };
+
+  let remote_url = match remote.url() {
+    Some(url) => url,
+    None => return None,
+  };
+
+  // Extract owner and repo from remote URL
+  let (owner, repo_name) = match github_client.extract_repo_info_from_url(remote_url) {
+    Ok((owner, repo)) => (owner, repo),
+    Err(_) => return None,
+  };
+
+  // Search for PRs with this branch as head
+  match github_client
+    .find_pull_requests_by_head_branch(&owner, &repo_name, branch_name)
+    .await
+  {
+    Ok(prs) => {
+      // Return the first open PR, or the most recent PR if none are open
+      let open_pr = prs.iter().find(|pr| pr.state == "open");
+      if let Some(pr) = open_pr {
+        Some(pr.number)
+      } else {
+        prs.first().map(|pr| pr.number)
+      }
+    }
+    Err(_) => None, // Silently fall back if API call fails
+  }
+}
+
+/// Detect GitHub PR number from branch name (fallback to pattern matching)
+fn detect_github_pr_from_branch_pattern(branch_name: &str) -> Option<u32> {
   // Patterns to match:
   // 1. pr-123-description
   // 2. github-pr-123
@@ -403,17 +475,17 @@ mod tests {
   }
 
   #[test]
-  fn test_detect_github_pr_from_branch() {
+  fn test_detect_github_pr_from_branch_pattern() {
     // Test various patterns
-    assert_eq!(detect_github_pr_from_branch("pr-123-description"), Some(123));
-    assert_eq!(detect_github_pr_from_branch("github-pr-456"), Some(456));
-    assert_eq!(detect_github_pr_from_branch("pull-789"), Some(789));
-    assert_eq!(detect_github_pr_from_branch("pr/123"), Some(123));
+    assert_eq!(detect_github_pr_from_branch_pattern("pr-123-description"), Some(123));
+    assert_eq!(detect_github_pr_from_branch_pattern("github-pr-456"), Some(456));
+    assert_eq!(detect_github_pr_from_branch_pattern("pull-789"), Some(789));
+    assert_eq!(detect_github_pr_from_branch_pattern("pr/123"), Some(123));
 
     // Test non-matching patterns
-    assert_eq!(detect_github_pr_from_branch("feature-branch"), None);
-    assert_eq!(detect_github_pr_from_branch("main"), None);
-    assert_eq!(detect_github_pr_from_branch("pr-abc"), None); // non-numeric
-    assert_eq!(detect_github_pr_from_branch("something-pr-123"), None); // not at start
+    assert_eq!(detect_github_pr_from_branch_pattern("feature-branch"), None);
+    assert_eq!(detect_github_pr_from_branch_pattern("main"), None);
+    assert_eq!(detect_github_pr_from_branch_pattern("pr-abc"), None); // non-numeric
+    assert_eq!(detect_github_pr_from_branch_pattern("something-pr-123"), None); // not at start
   }
 }

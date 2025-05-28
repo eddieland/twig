@@ -164,6 +164,66 @@ impl GitHubClient {
     }
   }
 
+  /// Find pull requests for a specific head branch
+  pub async fn find_pull_requests_by_head_branch(
+    &self,
+    owner: &str,
+    repo: &str,
+    head_branch: &str,
+  ) -> Result<Vec<GitHubPullRequest>> {
+    // GitHub API supports filtering PRs by head branch using the format
+    // "owner:branch" For local branches, we need to format it as
+    // "owner:branch_name"
+    let head_param = format!("{owner}:{head_branch}",);
+    let url = format!("{}/repos/{owner}/{repo}/pulls", self.base_url);
+
+    let response = self
+      .client
+      .get(&url)
+      .query(&[("head", head_param.as_str()), ("state", "all")])
+      .header("Accept", "application/vnd.github.v3+json")
+      .header("User-Agent", "twig-cli")
+      .basic_auth(&self.auth.username, Some(&self.auth.token))
+      .send()
+      .await
+      .context("Failed to fetch pull requests by head branch")?;
+
+    match response.status() {
+      StatusCode::OK => {
+        // First get the response body as text
+        let body = response.text().await.context("Failed to read response body")?;
+
+        // Then try to parse it as JSON
+        let prs = match serde_json::from_str::<Vec<GitHubPullRequest>>(&body) {
+          Ok(prs) => prs,
+          Err(e) => {
+            // Try to extract the error message from the response
+            if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&body) {
+              if let Some(message) = error_json.get("message").and_then(|m| m.as_str()) {
+                return Err(anyhow::anyhow!(
+                  "Failed to parse pull requests: GitHub API error: {}",
+                  message
+                ));
+              }
+            }
+            // Fall back to the original error if we can't extract a message
+            return Err(anyhow::anyhow!("Failed to parse pull requests: {}", e));
+          }
+        };
+
+        Ok(prs)
+      }
+      StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => Err(anyhow::anyhow!(
+        "Authentication failed. Please check your GitHub credentials."
+      )),
+      _ => Err(anyhow::anyhow!(
+        "Unexpected error: HTTP {} - {}",
+        response.status(),
+        response.text().await.unwrap_or_default()
+      )),
+    }
+  }
+
   /// Get full PR status (PR details, reviews, and check runs)
   pub async fn get_pr_status(&self, owner: &str, repo: &str, pr_number: u32) -> Result<GitHubPRStatus> {
     // Get the PR details
