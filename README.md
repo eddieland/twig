@@ -29,8 +29,8 @@ The easiest way to install Twig is to download a pre-built binary from the [GitH
 
 1. Navigate to the [latest release](https://github.com/eddieland/twig/releases/latest)
 2. Download the appropriate binary for your platform:
-   - `twig-x86_64-unknown-linux-gnu.tar.gz` for Linux
-   - `twig-x86_64-apple-darwin.tar.gz` for macOS
+   - `twig-linux-x86_64.tar.gz` for Linux
+   - `twig-macos-x86_64.tar.gz` for macOS
 3. Extract the archive and move the binary to a location in your PATH:
 
 ```bash
