@@ -487,7 +487,7 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
     // Add the branch-issue association
     state.add_branch_issue(BranchIssue {
       branch: branch_name.clone(),
-      jira_issue: issue_key.to_string(),
+      jira_issue: Some(issue_key.to_string()),
       github_pr: None,
       created_at: time_str,
     });
@@ -589,7 +589,7 @@ fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Res
 
     // Check if the branch is already associated with an issue
     if let Some(existing) = state.get_branch_issue_by_branch(&branch) {
-      if existing.jira_issue == issue_key {
+      if existing.jira_issue.as_deref() == Some(issue_key) {
         print_info(&format!(
           "Branch '{branch}' is already associated with issue {issue_key}"
         ));
@@ -597,7 +597,7 @@ fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Res
       } else {
         print_warning(&format!(
           "Branch '{branch}' is already associated with issue {}. Updating to {issue_key}.",
-          existing.jira_issue
+          existing.jira_issue.as_ref().unwrap_or(&"None".to_string())
         ));
       }
     }
@@ -605,7 +605,7 @@ fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Res
     // Add the branch-issue association
     state.add_branch_issue(BranchIssue {
       branch: branch.clone(),
-      jira_issue: issue_key.to_string(),
+      jira_issue: Some(issue_key.to_string()),
       github_pr: None,
       created_at: time_str,
     });

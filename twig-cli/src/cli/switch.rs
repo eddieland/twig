@@ -414,7 +414,7 @@ fn store_jira_association(repo_path: &std::path::Path, branch_name: &str, issue_
 
   repo_state.add_branch_issue(crate::worktree::BranchIssue {
     branch: branch_name.to_string(),
-    jira_issue: issue_key.to_string(),
+    jira_issue: Some(issue_key.to_string()),
     github_pr: None,
     created_at: time_str,
   });
@@ -431,7 +431,7 @@ fn store_github_pr_association(repo_path: &std::path::Path, branch_name: &str, p
 
   repo_state.add_branch_issue(crate::worktree::BranchIssue {
     branch: branch_name.to_string(),
-    jira_issue: String::new(), // No Jira issue associated
+    jira_issue: None, // No Jira issue associated
     github_pr: Some(pr_number),
     created_at: now,
   });

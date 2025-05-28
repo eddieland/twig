@@ -32,8 +32,12 @@ This document provides guidelines and instructions for contributing to the proje
 
 6. Run tests
    ```bash
-   cargo test
+   make test
+   # OR
+   cargo nextest run
    ```
+
+**Important**: This project uses [nextest](https://nexte.st/) for running tests instead of the standard `cargo test`. The test suite will only work correctly with nextest. Running `cargo test` directly will not execute tests properly.
 
 ## Code Quality Standards
 
@@ -41,7 +45,9 @@ All contributions should pass the following checks:
 
 - **Formatting**: Run `cargo fmt` to ensure your code follows the project's formatting standards
 - **Linting**: Run `cargo clippy` to check for common mistakes and improve code quality
-- **Testing**: Run `cargo test` to ensure all tests pass
+- **Testing**: Run `make test` or `cargo nextest run` to ensure all tests pass
+
+**Note**: This project requires [nextest](https://nexte.st/) for testing. The standard `cargo test` command will not work correctly.
 
 These checks are automatically enforced by pre-commit hooks and our CI pipeline.
 

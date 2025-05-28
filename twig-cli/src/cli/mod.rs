@@ -9,6 +9,7 @@ mod git;
 mod github;
 mod jira;
 mod switch;
+mod sync;
 mod tree;
 mod treev2;
 mod worktree;
@@ -31,6 +32,7 @@ pub fn build_cli() -> Command {
     .subcommand(github::build_command())
     .subcommand(jira::build_command())
     .subcommand(switch::build_command())
+    .subcommand(sync::build_command())
     .subcommand(tree::build_command())
     .subcommand(treev2::build_command())
     .subcommand(worktree::build_command())
@@ -48,6 +50,7 @@ pub fn handle_commands(matches: &clap::ArgMatches) -> Result<()> {
     Some(("github", github_matches)) => github::handle_commands(github_matches),
     Some(("jira", jira_matches)) => jira::handle_commands(jira_matches),
     Some(("switch", switch_matches)) => switch::handle_command(switch_matches),
+    Some(("sync", sync_matches)) => sync::handle_command(sync_matches),
     Some(("tree", tree_matches)) => tree::handle_command(tree_matches),
     Some(("treev2", treev2_matches)) => treev2::handle_command(treev2_matches),
     Some(("worktree", worktree_matches)) => worktree::handle_commands(worktree_matches),

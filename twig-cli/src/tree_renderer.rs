@@ -249,7 +249,12 @@ impl<'a> TreeRenderer<'a> {
     let current_width = self.display_width(&line);
 
     // Only add metadata if there's something to show
-    let has_jira = node.branch_issue.is_some();
+    let has_jira = node
+      .branch_issue
+      .as_ref()
+      .and_then(|issue| issue.jira_issue.as_ref())
+      .map(|jira| !jira.is_empty())
+      .unwrap_or(false);
     let has_pr = node.branch_issue.as_ref().and_then(|issue| issue.github_pr).is_some();
     let has_cross_refs = self
       .cross_refs
@@ -263,24 +268,29 @@ impl<'a> TreeRenderer<'a> {
       let pr_column_pos = jira_column_pos + 12; // Space for "[JIRA-123]"
       let cross_ref_column_pos = pr_column_pos + 12; // Space for "[PR#123]"
 
-      // Add Jira issue with alignment (only if it exists)
+      // Add issue/PR metadata with proper alignment
       if let Some(issue) = &node.branch_issue {
-        // Pad to align at jira_column_pos
-        let spaces_needed = jira_column_pos.saturating_sub(current_width);
-        line.push_str(&" ".repeat(spaces_needed));
+        let mut current_pos = current_width;
 
-        // Add Jira issue
-        let jira_display = if self.no_color {
-          format!("[{}]", issue.jira_issue)
-        } else {
-          format!("[{}]", issue.jira_issue.cyan())
-        };
-        line.push_str(&jira_display);
+        // Add Jira issue if it exists and is not empty
+        if has_jira {
+          let spaces_needed = jira_column_pos.saturating_sub(current_pos);
+          line.push_str(&" ".repeat(spaces_needed));
 
-        // Add GitHub PR if available with alignment
+          let jira_issue = issue.jira_issue.as_ref().unwrap();
+          let jira_display = if self.no_color {
+            format!("[{jira_issue}]",)
+          } else {
+            format!("[{}]", jira_issue.cyan())
+          };
+          line.push_str(&jira_display);
+          current_pos = self.display_width(&line);
+        }
+
+        // Add GitHub PR if available
         if let Some(pr_number) = issue.github_pr {
-          let current_width_after_jira = self.display_width(&line);
-          let spaces_needed = pr_column_pos.saturating_sub(current_width_after_jira);
+          let target_column = if has_jira { pr_column_pos } else { jira_column_pos };
+          let spaces_needed = target_column.saturating_sub(current_pos);
           line.push_str(&" ".repeat(spaces_needed));
 
           let pr_display = if self.no_color {
@@ -905,12 +915,161 @@ mod tests {
       is_current,
       branch_issue: Some(BranchIssue {
         branch: name.to_string(),
-        jira_issue: jira_issue.to_string(),
+        jira_issue: Some(jira_issue.to_string()),
         github_pr,
         created_at: "".to_string(),
       }),
       parents,
       children,
     }
+  }
+
+  #[test]
+  fn test_print_branch_github_pr_only_padding() {
+    // Test that when branch_issue exists but jira_issue is None,
+    // the GitHub PR is positioned correctly with proper padding
+    let mut nodes = HashMap::new();
+
+    // Create a branch with only GitHub PR (no JIRA issue)
+    nodes.insert(
+      "feature-branch".to_string(),
+      BranchNode {
+        name: "feature-branch".to_string(),
+        is_current: false,
+        branch_issue: Some(BranchIssue {
+          branch: "feature-branch".to_string(),
+          jira_issue: None,     // No JIRA issue
+          github_pr: Some(123), // Has GitHub PR
+          created_at: "2023-01-01T00:00:00Z".to_string(),
+        }),
+        parents: vec![],
+        children: vec![],
+      },
+    );
+
+    let roots = vec!["feature-branch".to_string()];
+    let renderer = TreeRenderer::new(&nodes, &roots, None, true);
+
+    // Create a mock output buffer
+    let mut output = Vec::new();
+
+    // Test the print_branch method directly
+    let node = &nodes["feature-branch"];
+    renderer.print_branch(&mut output, node, 0, &[]).unwrap();
+
+    let output_str = String::from_utf8(output).unwrap();
+
+    // The GitHub PR should be positioned at the correct column
+    // When there's no JIRA issue, the PR should be padded to the JIRA column
+    // position
+    assert!(output_str.contains("#123"));
+
+    // Should not contain any JIRA issue indicators
+    assert!(!output_str.contains("PROJ-"));
+    assert!(!output_str.contains("ABC-"));
+
+    // Verify the PR appears in the expected format
+    assert!(output_str.contains("[PR#123]"));
+  }
+
+  #[test]
+  fn test_print_branch_both_jira_and_github() {
+    // Test that when both JIRA issue and GitHub PR exist, they're positioned
+    // correctly
+    let mut nodes = HashMap::new();
+
+    nodes.insert(
+      "PROJ-123/feature-branch".to_string(),
+      BranchNode {
+        name: "PROJ-123/feature-branch".to_string(),
+        is_current: false,
+        branch_issue: Some(BranchIssue {
+          branch: "PROJ-123/feature-branch".to_string(),
+          jira_issue: Some("PROJ-123".to_string()),
+          github_pr: Some(456),
+          created_at: "2023-01-01T00:00:00Z".to_string(),
+        }),
+        parents: vec![],
+        children: vec![],
+      },
+    );
+
+    let roots = vec!["PROJ-123/feature-branch".to_string()];
+    let renderer = TreeRenderer::new(&nodes, &roots, None, true);
+
+    let mut output = Vec::new();
+    let node = &nodes["PROJ-123/feature-branch"];
+    renderer.print_branch(&mut output, node, 0, &[]).unwrap();
+
+    let output_str = String::from_utf8(output).unwrap();
+
+    // Should contain both JIRA issue and GitHub PR
+    assert!(output_str.contains("PROJ-123"));
+    assert!(output_str.contains("#456"));
+    assert!(output_str.contains("[PROJ-123]"));
+    assert!(output_str.contains("[PR#456]"));
+  }
+
+  #[test]
+  fn test_print_branch_padding_alignment() {
+    // Test that GitHub PR padding creates proper alignment between branches
+    let mut nodes = HashMap::new();
+
+    // Branch with JIRA issue and PR
+    nodes.insert(
+      "ABC-456/long-branch-name".to_string(),
+      BranchNode {
+        name: "ABC-456/long-branch-name".to_string(),
+        is_current: false,
+        branch_issue: Some(BranchIssue {
+          branch: "ABC-456/long-branch-name".to_string(),
+          jira_issue: Some("ABC-456".to_string()),
+          github_pr: Some(789),
+          created_at: "2023-01-01T00:00:00Z".to_string(),
+        }),
+        parents: vec![],
+        children: vec![],
+      },
+    );
+
+    // Branch with only PR (should be padded to same column as JIRA)
+    nodes.insert(
+      "short".to_string(),
+      BranchNode {
+        name: "short".to_string(),
+        is_current: false,
+        branch_issue: Some(BranchIssue {
+          branch: "short".to_string(),
+          jira_issue: None,
+          github_pr: Some(321),
+          created_at: "2023-01-01T00:00:00Z".to_string(),
+        }),
+        parents: vec![],
+        children: vec![],
+      },
+    );
+
+    let roots = vec!["ABC-456/long-branch-name".to_string(), "short".to_string()];
+    let renderer = TreeRenderer::new(&nodes, &roots, None, true);
+
+    // Test both branches
+    let mut output1 = Vec::new();
+    let node1 = &nodes["ABC-456/long-branch-name"];
+    renderer.print_branch(&mut output1, node1, 0, &[]).unwrap();
+    let output1_str = String::from_utf8(output1).unwrap();
+
+    let mut output2 = Vec::new();
+    let node2 = &nodes["short"];
+    renderer.print_branch(&mut output2, node2, 0, &[]).unwrap();
+    let output2_str = String::from_utf8(output2).unwrap();
+
+    // Both should contain their respective PRs
+    assert!(output1_str.contains("[PR#789]"));
+    assert!(output2_str.contains("[PR#321]"));
+
+    // The short branch's PR should be padded to align with the JIRA column
+    // This means there should be significant spacing before [PR#321]
+    let pr_position = output2_str.find("[PR#321]").unwrap();
+    assert!(pr_position > "short".len() + 5); // At least some padding
   }
 }

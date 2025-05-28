@@ -18,7 +18,7 @@ pub struct Worktree {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BranchIssue {
   pub branch: String,
-  pub jira_issue: String,
+  pub jira_issue: Option<String>,
   pub github_pr: Option<u32>,
   pub created_at: String,
 }
@@ -135,7 +135,10 @@ impl RepoState {
   /// Get a branch-issue association by Jira issue key
   #[allow(dead_code)]
   pub fn get_branch_issue_by_jira(&self, jira_issue: &str) -> Option<&BranchIssue> {
-    self.branch_issues.iter().find(|bi| bi.jira_issue == jira_issue)
+    self
+      .branch_issues
+      .iter()
+      .find(|bi| bi.jira_issue == Some(jira_issue.to_string()))
   }
 
   /// List all branch-issue associations

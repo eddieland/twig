@@ -409,7 +409,7 @@ fn handle_pr_link_command(pr_url_or_id: &str) -> Result<()> {
     // Create a new branch issue
     let branch_issue = crate::worktree::BranchIssue {
       branch: branch_name.to_string(),
-      jira_issue: String::new(), // No Jira issue associated
+      jira_issue: None, // No Jira issue associated
       github_pr: Some(pr_number),
       created_at: now,
     };

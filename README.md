@@ -49,14 +49,13 @@ If you want to contribute to Twig or build it from source, you'll need to set up
 [Rustup](https://rustup.rs/) is the official Rust toolchain installer that makes it easy to install Rust and switch between different versions.
 
 1. **Linux/macOS**:
+
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    ```
 
-2. **Windows**:
-   Download and run [rustup-init.exe](https://win.rustup.rs/x86_64) from the official site.
+2. **Verify installation**:
 
-3. **Verify installation**:
    ```bash
    rustup --version
    cargo --version
@@ -84,11 +83,16 @@ Once you have Rustup installed:
 git clone https://github.com/omenien/twig.git
 cd twig
 
+# Install development dependencies (including nextest for testing)
+make install-dev-tools
+
 # Build in release mode
 cargo build --release
 
 # The binary will be available at target/release/twig
 ```
+
+**Note**: This project uses [nextest](https://nexte.st/) for running tests. The standard `cargo test` command will not work correctly. Use `make test` or `cargo nextest run` to run the test suite.
 
 ## Basic Usage
 
@@ -167,7 +171,9 @@ Key Makefile targets include:
 - **Development**: `fmt`, `lint`, `test`, `check`, `doc`
 - **Build**: `build`, `release`, `clean`, `run`
 - **Installation**: `install`, `install-dev-tools`, `pre-commit-setup`
-- **Snapshot Testing**: `insta-review`, `insta-accept`, `insta-reject`, `test-update-snapshots`
+- **Snapshot Testing**: `insta-review`, `insta-accept`, `insta-reject`, `update-snapshots`
+
+**Important**: All test-related targets use [nextest](https://nexte.st/) instead of the standard `cargo test`. This provides better performance and additional features for test execution.
 
 ## Snapshot Testing
 
