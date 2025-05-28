@@ -462,7 +462,7 @@ impl RepoState {
 
 /// Create a new worktree
 pub fn create_worktree<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Result<PathBuf> {
-  use crate::utils::output::{format_repo_path, print_info, print_success, print_warning};
+  use crate::utils::output::{format_repo_path, print_success, print_warning};
 
   let repo_path = repo_path.as_ref();
   let repo =
@@ -488,10 +488,10 @@ pub fn create_worktree<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Resul
   let safe_branch_name = branch_name.replace('/', "-");
   let worktree_path = worktrees_dir.join(&safe_branch_name);
 
-  print_info(&format!(
+  println!(
     "Creating worktree at {}",
     format_repo_path(&worktree_path.display().to_string())
-  ));
+  );
 
   // Check if branch exists
   let branch_exists = repo.find_branch(branch_name, git2::BranchType::Local).is_ok();
@@ -502,7 +502,7 @@ pub fn create_worktree<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Resul
 
   if branch_exists {
     // Use existing branch
-    print_info(&format!("Using existing branch: {branch_name}"));
+    println!("Using existing branch: {branch_name}");
     // Check if the worktree directory already exists
     if worktree_path.exists() {
       print_warning(&format!(
@@ -557,7 +557,7 @@ pub fn create_worktree<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Resul
     };
   } else {
     // Create a new branch
-    print_info(&format!("Creating new branch: {branch_name}"));
+    println!("Creating new branch: {branch_name}");
 
     // Get the HEAD commit to branch from
     let head = repo.head()?;
@@ -657,9 +657,7 @@ pub fn create_worktree<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Resul
 
 /// List all worktrees for a repository
 pub fn list_worktrees<P: AsRef<Path>>(repo_path: P) -> Result<()> {
-  use crate::utils::output::{
-    format_command, format_repo_path, format_timestamp, print_header, print_info, print_warning,
-  };
+  use crate::utils::output::{format_command, format_repo_path, format_timestamp, print_header, print_warning};
 
   let repo_path = repo_path.as_ref();
   let repo =
@@ -670,10 +668,10 @@ pub fn list_worktrees<P: AsRef<Path>>(repo_path: P) -> Result<()> {
 
   if worktree_names.is_empty() {
     print_warning("No worktrees found for this repository.");
-    print_info(&format!(
+    println!(
       "Create one with {}",
       format_command("twig worktree create <branch-name>")
-    ));
+    );
     return Ok(());
   }
 
@@ -716,7 +714,7 @@ pub fn list_worktrees<P: AsRef<Path>>(repo_path: P) -> Result<()> {
 
 /// Clean up stale worktrees
 pub fn clean_worktrees<P: AsRef<Path>>(repo_path: P) -> Result<()> {
-  use crate::utils::output::{print_info, print_success, print_warning};
+  use crate::utils::output::{print_success, print_warning};
 
   let repo_path = repo_path.as_ref();
   let repo =
@@ -742,9 +740,7 @@ pub fn clean_worktrees<P: AsRef<Path>>(repo_path: P) -> Result<()> {
 
       // Check if the worktree directory still exists
       if !path.exists() {
-        print_info(&format!(
-          "Cleaning up stale worktree reference: {name} (path no longer exists)",
-        ));
+        println!("Cleaning up stale worktree reference: {name} (path no longer exists)",);
 
         // Prune the worktree reference
         worktree.prune(None)?;
@@ -763,7 +759,7 @@ pub fn clean_worktrees<P: AsRef<Path>>(repo_path: P) -> Result<()> {
   if cleaned_count > 0 {
     print_success(&format!("Cleaned up {cleaned_count} stale worktree references"));
   } else {
-    print_info("No stale worktrees found to clean up");
+    println!("No stale worktrees found to clean up");
   }
 
   Ok(())

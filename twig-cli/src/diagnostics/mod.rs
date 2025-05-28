@@ -89,10 +89,7 @@ fn check_config_directories() -> Result<()> {
   // Config directory
   let config_dir = config_dirs.config_dir();
   if config_dir.exists() {
-    print_success(&format!(
-      "  Config: {}",
-      format_repo_path(&config_dir.display().to_string())
-    ));
+    println!("  Config: {}", format_repo_path(&config_dir.display().to_string()));
   } else {
     println!(
       "  Config: {} (not created yet)",
@@ -103,15 +100,12 @@ fn check_config_directories() -> Result<()> {
   // Data directory
   let data_dir = config_dirs.data_dir();
   if data_dir.exists() {
-    print_success(&format!(
-      "  Data: {}",
-      format_repo_path(&data_dir.display().to_string())
-    ));
+    println!("  Data: {}", format_repo_path(&data_dir.display().to_string()));
 
     // Check registry file
     let registry_path = data_dir.join("registry.json");
     if registry_path.exists() {
-      print_success("  Registry: Found");
+      println!("  Registry: Found");
     } else {
       println!("  Registry: Not found");
     }
@@ -125,10 +119,7 @@ fn check_config_directories() -> Result<()> {
   // Cache directory
   if let Some(cache_dir) = config_dirs.cache_dir() {
     if cache_dir.exists() {
-      print_success(&format!(
-        "  Cache: {}",
-        format_repo_path(&cache_dir.display().to_string())
-      ));
+      println!("  Cache: {}", format_repo_path(&cache_dir.display().to_string()));
     } else {
       println!(
         "  Cache: {} (not created yet)",
@@ -148,10 +139,7 @@ fn check_credentials() -> Result<()> {
 
   let netrc_path = get_netrc_path();
   if netrc_path.exists() {
-    print_success(&format!(
-      "  .netrc file: {}",
-      format_repo_path(&netrc_path.display().to_string())
-    ));
+    println!("  .netrc file: {}", format_repo_path(&netrc_path.display().to_string()));
 
     // Check file permissions
     let metadata = fs::metadata(&netrc_path)?;
@@ -161,7 +149,7 @@ fn check_credentials() -> Result<()> {
       use std::os::unix::fs::PermissionsExt;
       let mode = permissions.mode();
       if mode & 0o077 == 0 {
-        print_success("  .netrc permissions: Secure (600)");
+        println!("  .netrc permissions: Secure (600)");
       } else {
         print_warning(&format!("  .netrc permissions: Insecure ({:o})", mode & 0o777));
       }
@@ -173,13 +161,13 @@ fn check_credentials() -> Result<()> {
 
     // Check specific credentials
     match check_jira_credentials() {
-      Ok(true) => print_success("  Jira credentials: Found"),
+      Ok(true) => println!("  Jira credentials: Found"),
       Ok(false) => println!("  Jira credentials: Not found"),
       Err(e) => print_error(&format!("  Jira credentials: Error - {e}",)),
     }
 
     match check_github_credentials() {
-      Ok(true) => print_success("  GitHub credentials: Found"),
+      Ok(true) => println!("  GitHub credentials: Found"),
       Ok(false) => println!("  GitHub credentials: Not found"),
       Err(e) => print_error(&format!("  GitHub credentials: Error - {e}")),
     }
@@ -202,7 +190,7 @@ fn check_git_configuration() -> Result<()> {
     Ok(output) => {
       if output.status.success() {
         let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        print_success(&format!("  Git version: {version}",));
+        println!("  Git version: {version}");
       } else {
         print_error("  Git: Command failed");
       }
@@ -219,7 +207,7 @@ fn check_git_configuration() -> Result<()> {
       let name = String::from_utf8_lossy(&output.stdout);
       let name = name.trim();
       if !name.is_empty() {
-        print_success(&format!("  User name: {name}",));
+        println!("  User name: {name}");
       } else {
         println!("  User name: Not configured");
       }
@@ -233,7 +221,7 @@ fn check_git_configuration() -> Result<()> {
       let email = String::from_utf8_lossy(&output.stdout);
       let email = email.trim();
       if !email.is_empty() {
-        print_success(&format!("  User email: {email}",));
+        println!("  User email: {email}");
       } else {
         println!("  User email: Not configured");
       }
@@ -258,7 +246,7 @@ fn check_tracked_repositories() -> Result<()> {
         if content.trim().is_empty() || content.trim() == "[]" {
           println!("  No repositories tracked");
         } else {
-          print_success("  Repositories found:");
+          println!("  Repositories found:");
           // Call list_repositories to show them
           if let Err(e) = list_repositories() {
             print_error(&format!("  Error listing repositories: {e}",));
@@ -287,7 +275,7 @@ fn check_dependencies() -> Result<()> {
           .next()
           .unwrap_or("curl")
           .to_string();
-        print_success(&format!("  curl: {version_line}",));
+        println!("  curl: {version_line}");
       } else {
         println!("  curl: Command failed");
       }
@@ -301,7 +289,7 @@ fn check_dependencies() -> Result<()> {
       if output.status.success() {
         let version = String::from_utf8_lossy(&output.stderr); // ssh -V outputs to stderr
         let version = version.trim();
-        print_success(&format!("  ssh: {version}",));
+        println!("  ssh: {version}");
       } else {
         println!("  ssh: Command failed");
       }
@@ -328,7 +316,7 @@ fn check_network_connectivity() -> Result<()> {
     match Command::new("ping").args(["-c", "1", "-W", "3", host]).output() {
       Ok(output) => {
         if output.status.success() {
-          print_success(&format!("  {name}: Reachable",));
+          println!("  {name}: Reachable");
         } else {
           println!("  {name}: Unreachable",);
         }

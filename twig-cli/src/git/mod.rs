@@ -12,7 +12,7 @@ use git2::{BranchType, FetchOptions, Repository as Git2Repository};
 use tokio::{task, time};
 
 use crate::state::Registry;
-use crate::utils::output::{format_repo_name, format_repo_path, print_error, print_info, print_success, print_warning};
+use crate::utils::output::{format_repo_name, format_repo_path, print_error, print_success, print_warning};
 
 /// Add a repository to the registry
 pub fn add_repository<P: AsRef<Path>>(path: P) -> Result<()> {
@@ -38,9 +38,7 @@ pub fn remove_repository<P: AsRef<Path>>(path: P) -> Result<()> {
 
 /// List all repositories in the registry
 pub fn list_repositories() -> Result<()> {
-  use crate::utils::output::{
-    format_command, format_repo_name, format_repo_path, print_header, print_info, print_warning,
-  };
+  use crate::utils::output::{format_command, format_repo_name, format_repo_path, print_header, print_warning};
 
   let config_dirs = crate::config::ConfigDirs::new()?;
   let registry = Registry::load(&config_dirs)?;
@@ -48,7 +46,7 @@ pub fn list_repositories() -> Result<()> {
   let repos = registry.list();
   if repos.is_empty() {
     print_warning("No repositories in registry.");
-    print_info(&format!("Add one with {}", format_command("twig git add <path>")));
+    println!("Add one with {}", format_command("twig git add <path>"));
     return Ok(());
   }
 
@@ -72,8 +70,7 @@ pub fn fetch_repository<P: AsRef<Path>>(path: P, all: bool) -> Result<()> {
     let remotes = repo.remotes()?;
     for i in 0..remotes.len() {
       let remote_name = remotes.get(i).unwrap();
-      use crate::utils::output::print_info;
-      print_info(&format!("Fetching remote: {remote_name}"));
+      println!("Fetching remote: {remote_name}");
 
       let mut remote = repo.find_remote(remote_name)?;
       remote
@@ -82,8 +79,7 @@ pub fn fetch_repository<P: AsRef<Path>>(path: P, all: bool) -> Result<()> {
     }
   } else {
     // Just fetch origin
-    use crate::utils::output::print_info;
-    print_info("Fetching remote: origin");
+    println!("Fetching remote: origin");
     let mut remote = repo.find_remote("origin")?;
     remote
       .fetch(&[] as &[&str], Some(&mut fetch_options), None)
@@ -120,14 +116,14 @@ pub fn fetch_all_repositories() -> Result<()> {
   let repos = registry.list();
   if repos.is_empty() {
     print_warning("No repositories in registry.");
-    print_info(&format!(
+    println!(
       "Add one with {}",
       crate::utils::output::format_command("twig git add <path>")
-    ));
+    );
     return Ok(());
   }
 
-  print_info(&format!("Fetching updates for {} repositories", repos.len()));
+  println!("Fetching updates for {} repositories", repos.len());
 
   // Create a tokio runtime for parallel execution
   let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
@@ -141,11 +137,11 @@ pub fn fetch_all_repositories() -> Result<()> {
       let repo_name = repo.name.clone();
 
       let handle = task::spawn(async move {
-        print_info(&format!(
+        println!(
           "Fetching repository: {} ({})",
           format_repo_name(&repo_name),
           format_repo_path(&repo_path)
-        ));
+        );
 
         let result = fetch_repository(&repo_path, true);
         (repo_name, repo_path, result)
@@ -183,8 +179,8 @@ pub fn fetch_all_repositories() -> Result<()> {
     }
 
     // Print summary
-    print_info("Fetch operation complete");
-    print_info(&format!("Successful: {success_count}"));
+    println!("Fetch operation complete");
+    println!("Successful: {success_count}");
 
     if failure_count > 0 {
       print_warning(&format!("Failed: {failure_count}"));
@@ -220,10 +216,10 @@ pub fn detect_current_repository() -> Result<PathBuf> {
 pub fn execute_repository<P: AsRef<Path>>(path: P, command: &str) -> Result<()> {
   let path = path.as_ref();
 
-  print_info(&format!(
+  println!(
     "Executing in repository: {}",
     format_repo_path(&path.display().to_string())
-  ));
+  );
 
   // Split the command into program and arguments
   let mut parts = command.split_whitespace();
@@ -270,18 +266,14 @@ pub fn execute_all_repositories(command: &str) -> Result<()> {
   let repos = registry.list();
   if repos.is_empty() {
     print_warning("No repositories in registry.");
-    print_info(&format!(
+    println!(
       "Add one with {}",
       crate::utils::output::format_command("twig git add <path>")
-    ));
+    );
     return Ok(());
   }
 
-  print_info(&format!(
-    "Executing command in {} repositories: {}",
-    repos.len(),
-    command
-  ));
+  println!("Executing command in {} repositories: {}", repos.len(), command);
 
   // Create a tokio runtime for parallel execution
   let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
@@ -325,8 +317,8 @@ pub fn execute_all_repositories(command: &str) -> Result<()> {
     }
 
     // Print summary
-    print_info("Command execution complete");
-    print_info(&format!("Successful: {success_count}"));
+    println!("Command execution complete");
+    println!("Successful: {success_count}");
 
     if failure_count > 0 {
       print_warning(&format!("Failed: {failure_count}"));
@@ -341,11 +333,11 @@ pub fn find_stale_branches<P: AsRef<Path>>(path: P, days: u32) -> Result<()> {
   let path = path.as_ref();
   let repo = Git2Repository::open(path).context(format!("Failed to open git repository at {}", path.display()))?;
 
-  print_info(&format!(
+  println!(
     "Finding branches not updated in the last {} days in {}",
     days,
     format_repo_path(&path.display().to_string())
-  ));
+  );
 
   // Calculate the cutoff time
   let now = SystemTime::now();
@@ -384,10 +376,10 @@ pub fn find_stale_branches<P: AsRef<Path>>(path: P, days: u32) -> Result<()> {
 
   // Print results
   if stale_branches.is_empty() {
-    print_info(&format!(
+    println!(
       "No stale branches found in {}",
       format_repo_path(&path.display().to_string())
-    ));
+    );
   } else {
     print_warning(&format!(
       "Found {} stale branches in {}:",
@@ -415,14 +407,14 @@ pub fn find_stale_branches_all(days: u32) -> Result<()> {
   let repos = registry.list();
   if repos.is_empty() {
     print_warning("No repositories in registry.");
-    print_info(&format!(
+    println!(
       "Add one with {}",
       crate::utils::output::format_command("twig git add <path>")
-    ));
+    );
     return Ok(());
   }
 
-  print_info(&format!("Finding stale branches in {} repositories", repos.len()));
+  println!("Finding stale branches in {} repositories", repos.len());
 
   // Create a tokio runtime for parallel execution
   let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
@@ -473,8 +465,8 @@ pub fn find_stale_branches_all(days: u32) -> Result<()> {
     }
 
     // Print summary
-    print_info("Stale branch check complete");
-    print_info(&format!("Successful: {success_count}"));
+    println!("Stale branch check complete");
+    println!("Successful: {success_count}");
 
     if failure_count > 0 {
       print_warning(&format!("Failed: {failure_count}"));
