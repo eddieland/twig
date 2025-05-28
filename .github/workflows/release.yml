@@ -6,9 +6,26 @@ on:
       - 'v*'
 
 jobs:
+  validate-version:
+    name: Validate Version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Check version format
+        run: |
+          if [[ ! ${{ steps.version.outputs.version }} =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+            echo "Invalid version format. Expected: X.Y.Z or X.Y.Z-suffix"
+            exit 1
+          fi
+
   build-ubuntu:
+    needs: validate-version
     name: Build Ubuntu
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust
@@ -19,21 +36,26 @@ jobs:
         run: cargo build --release
       - name: Strip binary
         run: strip target/release/twig
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - name: Compress binary
         run: |
-          tar -czf twig-ubuntu-x86_64.tar.gz -C target/release twig
-          shasum -a 256 twig-ubuntu-x86_64.tar.gz > twig-ubuntu-x86_64.tar.gz.sha256
+          tar -czf twig-ubuntu-x86_64-${{ steps.version.outputs.version }}.tar.gz -C target/release twig
+          shasum -a 256 twig-ubuntu-x86_64-${{ steps.version.outputs.version }}.tar.gz > twig-ubuntu-x86_64-${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: twig-ubuntu
           path: |
-            twig-ubuntu-x86_64.tar.gz
-            twig-ubuntu-x86_64.tar.gz.sha256
+            twig-ubuntu-x86_64-${{ steps.version.outputs.version }}.tar.gz
+            twig-ubuntu-x86_64-${{ steps.version.outputs.version }}.tar.gz.sha256
 
   build-macos:
+    needs: validate-version
     name: Build macOS
     runs-on: macos-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust
@@ -44,41 +66,68 @@ jobs:
         run: cargo build --release
       - name: Strip binary
         run: strip target/release/twig
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - name: Compress binary
         run: |
-          tar -czf twig-macos-x86_64.tar.gz -C target/release twig
-          shasum -a 256 twig-macos-x86_64.tar.gz > twig-macos-x86_64.tar.gz.sha256
+          tar -czf twig-macos-x86_64-${{ steps.version.outputs.version }}.tar.gz -C target/release twig
+          shasum -a 256 twig-macos-x86_64-${{ steps.version.outputs.version }}.tar.gz > twig-macos-x86_64-${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: twig-macos
           path: |
-            twig-macos-x86_64.tar.gz
-            twig-macos-x86_64.tar.gz.sha256
+            twig-macos-x86_64-${{ steps.version.outputs.version }}.tar.gz
+            twig-macos-x86_64-${{ steps.version.outputs.version }}.tar.gz.sha256
 
   create-release:
     name: Create Release
-    needs: [build-ubuntu, build-macos]
+    if: success()
+    needs: [validate-version, build-ubuntu, build-macos]
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history to get previous tags
+
+      - name: Get version and previous tag
+        id: version_info
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          echo "PREVIOUS_TAG=${PREVIOUS_TAG#v}" >>$GITHUB_ENV
+
       - name: Download Ubuntu artifact
         uses: actions/download-artifact@v4
         with:
           name: twig-ubuntu
           path: ./
+
       - name: Download macOS artifact
         uses: actions/download-artifact@v4
         with:
           name: twig-macos
           path: ./
+
+      - name: Install envsubst
+        run: sudo apt-get update && sudo apt-get install -y gettext-base
+
+      - name: Generate Release Notes
+        run: |
+          envsubst <.github/release-template.md >release_notes.md
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ./twig-ubuntu-x86_64.tar.gz
-            ./twig-ubuntu-x86_64.tar.gz.sha256
-            ./twig-macos-x86_64.tar.gz
-            ./twig-macos-x86_64.tar.gz.sha256
+            ./twig-ubuntu-x86_64-*.tar.gz
+            ./twig-ubuntu-x86_64-*.tar.gz.sha256
+            ./twig-macos-x86_64-*.tar.gz
+            ./twig-macos-x86_64-*.tar.gz.sha256
+          body_path: release_notes.md
           draft: false
           prerelease: false
-          generate_release_notes: true
+          generate_release_notes: false
