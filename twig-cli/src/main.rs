@@ -7,10 +7,10 @@ mod config;
 mod creds;
 mod diagnostics;
 mod git;
+mod repo_state;
 mod state;
 mod tree_renderer;
 mod utils;
-mod worktree;
 
 fn main() -> Result<()> {
   // Set up the no-worries panic handler with custom configuration

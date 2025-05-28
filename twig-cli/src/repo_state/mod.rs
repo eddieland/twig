@@ -16,7 +16,7 @@ pub struct Worktree {
 
 /// Represents a branch-issue association
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct BranchIssue {
+pub struct BranchMetadata {
   pub branch: String,
   pub jira_issue: Option<String>,
   pub github_pr: Option<u32>,
@@ -28,7 +28,7 @@ pub struct BranchIssue {
 pub struct RepoState {
   pub version: u32,
   pub worktrees: Vec<Worktree>,
-  pub branch_issues: Vec<BranchIssue>,
+  pub branches: Vec<BranchMetadata>,
   pub config_overrides: serde_json::Value,
 }
 
@@ -43,7 +43,7 @@ impl RepoState {
       return Ok(Self {
         version: 1,
         worktrees: Vec::new(),
-        branch_issues: Vec::new(),
+        branches: Vec::new(),
         config_overrides: serde_json::Value::Object(serde_json::Map::new()),
       });
     }
@@ -121,30 +121,30 @@ impl RepoState {
   }
 
   /// Add a branch-issue association
-  pub fn add_branch_issue(&mut self, branch_issue: BranchIssue) {
+  pub fn add_branch_issue(&mut self, branch_issue: BranchMetadata) {
     // Remove any existing association for the same branch
-    self.branch_issues.retain(|bi| bi.branch != branch_issue.branch);
-    self.branch_issues.push(branch_issue);
+    self.branches.retain(|bi| bi.branch != branch_issue.branch);
+    self.branches.push(branch_issue);
   }
 
   /// Get a branch-issue association by branch name
-  pub fn get_branch_issue_by_branch(&self, branch: &str) -> Option<&BranchIssue> {
-    self.branch_issues.iter().find(|bi| bi.branch == branch)
+  pub fn get_branch_issue_by_branch(&self, branch: &str) -> Option<&BranchMetadata> {
+    self.branches.iter().find(|bi| bi.branch == branch)
   }
 
   /// Get a branch-issue association by Jira issue key
   #[allow(dead_code)]
-  pub fn get_branch_issue_by_jira(&self, jira_issue: &str) -> Option<&BranchIssue> {
+  pub fn get_branch_issue_by_jira(&self, jira_issue: &str) -> Option<&BranchMetadata> {
     self
-      .branch_issues
+      .branches
       .iter()
       .find(|bi| bi.jira_issue == Some(jira_issue.to_string()))
   }
 
   /// List all branch-issue associations
   #[allow(dead_code)]
-  pub fn list_branch_issues(&self) -> &[BranchIssue] {
-    &self.branch_issues
+  pub fn list_branch_issues(&self) -> &[BranchMetadata] {
+    &self.branches
   }
 }
 

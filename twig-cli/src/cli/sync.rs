@@ -1,10 +1,30 @@
 use anyhow::{Context, Result};
 use clap::{Arg, Command};
 use git2::{BranchType, Repository as Git2Repository};
+use once_cell::sync::Lazy;
 use regex::Regex;
 
+use crate::repo_state::{BranchMetadata, RepoState};
 use crate::utils::output::{print_info, print_success, print_warning};
-use crate::worktree::{BranchIssue, RepoState};
+
+static JIRA_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+  vec![
+    Regex::new(r"^([A-Z]{2,}-\d+)(?:/|-)").unwrap(),
+    Regex::new(r"/([A-Z]{2,}-\d+)-").unwrap(),
+    Regex::new(r"-([A-Z]{2,}-\d+)-").unwrap(),
+    Regex::new(r"^([A-Z]{2,}-\d+)$").unwrap(),
+    Regex::new(r"/([A-Z]{2,}-\d+)$").unwrap(),
+  ]
+});
+
+static PR_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+  vec![
+    Regex::new(r"^pr-(\d+)-").unwrap(),
+    Regex::new(r"^github-pr-(\d+)").unwrap(),
+    Regex::new(r"^pull-(\d+)").unwrap(),
+    Regex::new(r"^pr/(\d+)").unwrap(),
+  ]
+});
 
 /// Build the sync subcommand
 pub fn build_command() -> Command {
@@ -93,7 +113,7 @@ fn sync_branches(
   let mut conflicting_associations = Vec::new();
   let mut unlinked_branches = Vec::new();
 
-  print_info("Scanning branches for Jira issues and GitHub PRs...");
+  println!("Scanning branches for Jira issues and GitHub PRs...");
 
   for branch_result in branches {
     let (branch, _) = branch_result.context("Failed to get branch")?;
@@ -133,7 +153,7 @@ fn sync_branches(
       // New association to create
       (jira, pr, None) => {
         if jira.is_some() || pr.is_some() {
-          let association = BranchIssue {
+          let association = BranchMetadata {
             branch: branch_name.to_string(),
             jira_issue: jira,
             github_pr: pr,
@@ -149,7 +169,7 @@ fn sync_branches(
 
         if needs_update {
           if force {
-            let updated_association = BranchIssue {
+            let updated_association = BranchMetadata {
               branch: branch_name.to_string(),
               jira_issue: jira.or_else(|| existing.jira_issue.clone()),
               github_pr: pr.or(existing.github_pr),
@@ -185,24 +205,14 @@ fn sync_branches(
 fn detect_jira_issue_from_branch(branch_name: &str) -> Option<String> {
   // Patterns to match:
   // 1. PROJ-123/feature-name (issue key at start)
-  // 2. feature/PROJ-123-description (issue key after slash)
-  // 3. feature-PROJ-123-description (issue key in middle)
-  // 4. PROJ-123 (just the issue key)
-
-  let patterns = [
-    r"^([A-Z]{2,}-\d+)/", // PROJ-123/feature
-    r"/([A-Z]{2,}-\d+)-", // feature/PROJ-123-desc
-    r"-([A-Z]{2,}-\d+)-", // feature-PROJ-123-desc
-    r"^([A-Z]{2,}-\d+)$", // just PROJ-123
-    r"/([A-Z]{2,}-\d+)$", // feature/PROJ-123
-  ];
-
-  for pattern in &patterns {
-    if let Ok(re) = Regex::new(pattern) {
-      if let Some(captures) = re.captures(branch_name) {
-        if let Some(issue_match) = captures.get(1) {
-          return Some(issue_match.as_str().to_string());
-        }
+  // 2. PROJ-123-feature-name (issue key at start)
+  // 3. feature/PROJ-123-description (issue key after slash)
+  // 4. feature-PROJ-123-description (issue key in middle)
+  // 5. PROJ-123 (just the issue key)
+  for pattern in JIRA_PATTERNS.iter() {
+    if let Some(captures) = pattern.captures(branch_name) {
+      if let Some(issue_match) = captures.get(1) {
+        return Some(issue_match.as_str().to_string());
       }
     }
   }
@@ -217,21 +227,11 @@ fn detect_github_pr_from_branch(branch_name: &str) -> Option<u32> {
   // 2. github-pr-123
   // 3. pull-123
   // 4. pr/123
-
-  let patterns = [
-    r"^pr-(\d+)-",       // pr-123-desc
-    r"^github-pr-(\d+)", // github-pr-123
-    r"^pull-(\d+)",      // pull-123
-    r"^pr/(\d+)",        // pr/123
-  ];
-
-  for pattern in &patterns {
-    if let Ok(re) = Regex::new(pattern) {
-      if let Some(captures) = re.captures(branch_name) {
-        if let Some(pr_match) = captures.get(1) {
-          if let Ok(pr_number) = pr_match.as_str().parse::<u32>() {
-            return Some(pr_number);
-          }
+  for pattern in PR_PATTERNS.iter() {
+    if let Some(captures) = pattern.captures(branch_name) {
+      if let Some(pr_match) = captures.get(1) {
+        if let Ok(pr_number) = pr_match.as_str().parse::<u32>() {
+          return Some(pr_number);
         }
       }
     }
@@ -242,9 +242,9 @@ fn detect_github_pr_from_branch(branch_name: &str) -> Option<u32> {
 
 /// Print summary of sync findings
 fn print_sync_summary(
-  detected: &[BranchIssue],
-  updated: &[(BranchIssue, BranchIssue)],
-  conflicts: &[(String, BranchIssue, Option<String>, Option<u32>)],
+  detected: &[BranchMetadata],
+  updated: &[(BranchMetadata, BranchMetadata)],
+  conflicts: &[(String, BranchMetadata, Option<String>, Option<u32>)],
   unlinked: &[String],
   dry_run: bool,
 ) {
@@ -323,9 +323,8 @@ fn print_sync_summary(
       println!("  {branch}",);
     }
     print_info("These branches can be linked manually with:");
-    print_info("  twig jira branch link <issue-key> <branch-name>");
-    print_info("  twig github pr link <pr-url>");
-    println!();
+    println!("  twig jira branch link <issue-key> <branch-name>");
+    println!("  twig github pr link <pr-url>\n");
   }
 
   if detected.is_empty() && updated.is_empty() && conflicts.is_empty() {
@@ -337,8 +336,8 @@ fn print_sync_summary(
 fn apply_sync_changes(
   repo_state: &mut RepoState,
   repo_path: &std::path::Path,
-  detected: Vec<BranchIssue>,
-  updated: Vec<(BranchIssue, BranchIssue)>,
+  detected: Vec<BranchMetadata>,
+  updated: Vec<(BranchMetadata, BranchMetadata)>,
 ) -> Result<()> {
   let mut changes_made = false;
 
@@ -385,6 +384,14 @@ mod tests {
     assert_eq!(detect_jira_issue_from_branch("PROJ-123"), Some("PROJ-123".to_string()));
     assert_eq!(
       detect_jira_issue_from_branch("feature/PROJ-123"),
+      Some("PROJ-123".to_string())
+    );
+    assert_eq!(
+      detect_jira_issue_from_branch("PROJ-123/foo"),
+      Some("PROJ-123".to_string())
+    );
+    assert_eq!(
+      detect_jira_issue_from_branch("PROJ-123-foo"),
       Some("PROJ-123".to_string())
     );
 

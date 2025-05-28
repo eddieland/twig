@@ -372,8 +372,8 @@ fn handle_transition_issue_command(issue_key: &str, transition: Option<&str>) ->
 fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<()> {
   use git2::Repository as Git2Repository;
 
+  use crate::repo_state::{BranchMetadata, RepoState};
   use crate::utils::output::{print_error, print_info, print_success};
-  use crate::worktree::{BranchIssue, RepoState};
 
   // Create a tokio runtime for async operations
   let rt = Runtime::new().context("Failed to create async runtime")?;
@@ -452,7 +452,7 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
 
     if with_worktree {
       // Create a worktree for the branch
-      match crate::worktree::create_worktree(&repo_path, &branch_name) {
+      match crate::repo_state::create_worktree(&repo_path, &branch_name) {
         Ok(_) => {
           print_success(&format!("Created worktree for branch '{branch_name}'"));
         }
@@ -485,7 +485,7 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
     let mut state = RepoState::load(&repo_path)?;
 
     // Add the branch-issue association
-    state.add_branch_issue(BranchIssue {
+    state.add_branch_issue(BranchMetadata {
       branch: branch_name.clone(),
       jira_issue: Some(issue_key.to_string()),
       github_pr: None,
@@ -507,8 +507,8 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
 fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Result<()> {
   use git2::Repository as Git2Repository;
 
+  use crate::repo_state::{BranchMetadata, RepoState};
   use crate::utils::output::{print_error, print_info, print_success, print_warning};
-  use crate::worktree::{BranchIssue, RepoState};
 
   // Create a tokio runtime for async operations
   let rt = Runtime::new().context("Failed to create async runtime")?;
@@ -603,7 +603,7 @@ fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Res
     }
 
     // Add the branch-issue association
-    state.add_branch_issue(BranchIssue {
+    state.add_branch_issue(BranchMetadata {
       branch: branch.clone(),
       jira_issue: Some(issue_key.to_string()),
       github_pr: None,

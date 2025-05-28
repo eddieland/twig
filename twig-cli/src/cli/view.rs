@@ -3,8 +3,8 @@ use clap::{Arg, Command};
 use git2::{BranchType, Repository as Git2Repository};
 
 use crate::git::detect_current_repository;
+use crate::repo_state::{BranchIssue, RepoState};
 use crate::utils::output::{format_command, format_repo_path, print_header, print_info, print_warning};
-use crate::worktree::{BranchIssue, RepoState};
 
 /// Build the view subcommand
 pub fn build_command() -> Command {

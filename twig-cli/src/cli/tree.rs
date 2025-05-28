@@ -6,9 +6,9 @@ use clap::{Arg, Command};
 use git2::{BranchType, Repository as Git2Repository};
 
 use crate::git::detect_current_repository;
+use crate::repo_state::RepoState;
 use crate::tree_renderer::{BranchNode, TreeRenderer};
 use crate::utils::output::{format_command, print_info, print_warning};
-use crate::worktree::RepoState;
 
 /// Build the tree subcommand
 pub fn build_command() -> Command {
@@ -105,7 +105,7 @@ pub fn handle_command(tree_matches: &clap::ArgMatches) -> Result<()> {
       let branch_node = BranchNode {
         name: name.to_string(),
         is_current,
-        branch_issue: branch_issue.cloned(),
+        metadata: branch_issue.cloned(),
         parents,
         children,
       };
@@ -196,13 +196,13 @@ pub fn handle_command(tree_matches: &clap::ArgMatches) -> Result<()> {
 }
 
 pub fn display_summary(branch_nodes: &HashMap<String, BranchNode>) {
-  let branches_with_issues = branch_nodes.values().filter(|node| node.branch_issue.is_some()).count();
+  let branches_with_issues = branch_nodes.values().filter(|node| node.metadata.is_some()).count();
 
   let branches_with_prs = branch_nodes
     .values()
     .filter(|node| {
       node
-        .branch_issue
+        .metadata
         .as_ref()
         .map(|issue| issue.github_pr.is_some())
         .unwrap_or(false)

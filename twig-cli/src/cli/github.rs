@@ -6,10 +6,10 @@ use twig_gh::{GitHubPRStatus, create_github_client};
 
 use crate::creds::get_github_credentials;
 use crate::git::detect_current_repository;
+use crate::repo_state::RepoState;
 use crate::utils::output::{
   format_check_status, format_command, format_pr_review_status, print_error, print_info, print_success, print_warning,
 };
-use crate::worktree::RepoState;
 
 /// Build the GitHub command
 pub fn build_command() -> Command {
@@ -407,7 +407,7 @@ fn handle_pr_link_command(pr_url_or_id: &str) -> Result<()> {
     repo_state.add_branch_issue(updated_branch_issue);
   } else {
     // Create a new branch issue
-    let branch_issue = crate::worktree::BranchIssue {
+    let branch_issue = crate::repo_state::BranchMetadata {
       branch: branch_name.to_string(),
       jira_issue: None, // No Jira issue associated
       github_pr: Some(pr_number),

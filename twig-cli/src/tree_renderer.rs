@@ -3,14 +3,14 @@ use std::io::{self, Write};
 
 use colored::Colorize;
 
-use crate::worktree::BranchIssue;
+use crate::repo_state::BranchMetadata;
 
 /// Represents a branch node in the tree
 #[derive(Debug, Clone)]
 pub struct BranchNode {
   pub name: String,
   pub is_current: bool,
-  pub branch_issue: Option<BranchIssue>,
+  pub metadata: Option<BranchMetadata>,
   pub parents: Vec<String>,
   pub children: Vec<String>,
 }
@@ -250,12 +250,12 @@ impl<'a> TreeRenderer<'a> {
 
     // Only add metadata if there's something to show
     let has_jira = node
-      .branch_issue
+      .metadata
       .as_ref()
       .and_then(|issue| issue.jira_issue.as_ref())
       .map(|jira| !jira.is_empty())
       .unwrap_or(false);
-    let has_pr = node.branch_issue.as_ref().and_then(|issue| issue.github_pr).is_some();
+    let has_pr = node.metadata.as_ref().and_then(|issue| issue.github_pr).is_some();
     let has_cross_refs = self
       .cross_refs
       .get(&node.name)
@@ -269,7 +269,7 @@ impl<'a> TreeRenderer<'a> {
       let cross_ref_column_pos = pr_column_pos + 12; // Space for "[PR#123]"
 
       // Add issue/PR metadata with proper alignment
-      if let Some(issue) = &node.branch_issue {
+      if let Some(issue) = &node.metadata {
         let mut current_pos = current_width;
 
         // Add Jira issue if it exists and is not empty
@@ -364,7 +364,7 @@ mod tests {
   use insta::assert_snapshot;
 
   use super::*;
-  use crate::worktree::BranchIssue;
+  use crate::repo_state::BranchMetadata;
 
   #[test]
   fn test_build_cross_references_single_parent() {
@@ -896,7 +896,7 @@ mod tests {
     BranchNode {
       name: name.to_string(),
       is_current,
-      branch_issue: None,
+      metadata: None,
       parents,
       children,
     }
@@ -913,7 +913,7 @@ mod tests {
     BranchNode {
       name: name.to_string(),
       is_current,
-      branch_issue: Some(BranchIssue {
+      metadata: Some(BranchMetadata {
         branch: name.to_string(),
         jira_issue: Some(jira_issue.to_string()),
         github_pr,
@@ -936,7 +936,7 @@ mod tests {
       BranchNode {
         name: "feature-branch".to_string(),
         is_current: false,
-        branch_issue: Some(BranchIssue {
+        metadata: Some(BranchMetadata {
           branch: "feature-branch".to_string(),
           jira_issue: None,     // No JIRA issue
           github_pr: Some(123), // Has GitHub PR
@@ -983,7 +983,7 @@ mod tests {
       BranchNode {
         name: "PROJ-123/feature-branch".to_string(),
         is_current: false,
-        branch_issue: Some(BranchIssue {
+        metadata: Some(BranchMetadata {
           branch: "PROJ-123/feature-branch".to_string(),
           jira_issue: Some("PROJ-123".to_string()),
           github_pr: Some(456),
@@ -1021,7 +1021,7 @@ mod tests {
       BranchNode {
         name: "ABC-456/long-branch-name".to_string(),
         is_current: false,
-        branch_issue: Some(BranchIssue {
+        metadata: Some(BranchMetadata {
           branch: "ABC-456/long-branch-name".to_string(),
           jira_issue: Some("ABC-456".to_string()),
           github_pr: Some(789),
@@ -1038,7 +1038,7 @@ mod tests {
       BranchNode {
         name: "short".to_string(),
         is_current: false,
-        branch_issue: Some(BranchIssue {
+        metadata: Some(BranchMetadata {
           branch: "short".to_string(),
           jira_issue: None,
           github_pr: Some(321),

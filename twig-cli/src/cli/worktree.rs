@@ -78,18 +78,18 @@ pub fn handle_commands(worktree_matches: &clap::ArgMatches) -> Result<()> {
       let branch = create_matches.get_one::<String>("branch").unwrap();
       let repo_arg = create_matches.get_one::<String>("repo").map(|s| s.as_str());
       let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
-      crate::worktree::create_worktree(repo_path, branch)?;
+      crate::repo_state::create_worktree(repo_path, branch)?;
       Ok(())
     }
     Some(("list", list_matches)) => {
       let repo_arg = list_matches.get_one::<String>("repo").map(|s| s.as_str());
       let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
-      crate::worktree::list_worktrees(repo_path)
+      crate::repo_state::list_worktrees(repo_path)
     }
     Some(("clean", clean_matches)) => {
       let repo_arg = clean_matches.get_one::<String>("repo").map(|s| s.as_str());
       let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
-      crate::worktree::clean_worktrees(repo_path)
+      crate::repo_state::clean_worktrees(repo_path)
     }
     _ => {
       use crate::utils::output::print_warning;

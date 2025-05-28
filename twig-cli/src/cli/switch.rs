@@ -7,8 +7,8 @@ use twig_jira::create_jira_client;
 
 use crate::creds::{get_github_credentials, get_jira_credentials};
 use crate::git::detect_current_repository;
+use crate::repo_state::RepoState;
 use crate::utils::output::{print_error, print_info, print_success, print_warning};
-use crate::worktree::RepoState;
 
 /// Build the switch subcommand
 pub fn build_command() -> Command {
@@ -412,7 +412,7 @@ fn store_jira_association(repo_path: &std::path::Path, branch_name: &str, issue_
     .unwrap()
     .to_rfc3339();
 
-  repo_state.add_branch_issue(crate::worktree::BranchIssue {
+  repo_state.add_branch_issue(crate::repo_state::BranchMetadata {
     branch: branch_name.to_string(),
     jira_issue: Some(issue_key.to_string()),
     github_pr: None,
@@ -429,7 +429,7 @@ fn store_github_pr_association(repo_path: &std::path::Path, branch_name: &str, p
 
   let now = chrono::Utc::now().to_rfc3339();
 
-  repo_state.add_branch_issue(crate::worktree::BranchIssue {
+  repo_state.add_branch_issue(crate::repo_state::BranchMetadata {
     branch: branch_name.to_string(),
     jira_issue: None, // No Jira issue associated
     github_pr: Some(pr_number),

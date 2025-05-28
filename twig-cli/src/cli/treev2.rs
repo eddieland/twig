@@ -7,9 +7,9 @@ use git2::{BranchType, Repository as Git2Repository};
 
 use super::tree::display_summary;
 use crate::git::detect_current_repository;
+use crate::repo_state::RepoState;
 use crate::tree_renderer::{BranchNode, TreeRenderer};
 use crate::utils::output::print_warning;
-use crate::worktree::RepoState;
 
 /// Build the treev2 subcommand
 pub fn build_command() -> Command {
@@ -83,7 +83,7 @@ pub fn handle_command(treev2_matches: &clap::ArgMatches) -> Result<()> {
       let node = BranchNode {
         name: name.to_string(),
         is_current,
-        branch_issue: branch_issue.cloned(),
+        metadata: branch_issue.cloned(),
         parents: Vec::new(),
         children: Vec::new(),
       };

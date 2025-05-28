@@ -1998,6 +1998,7 @@ dependencies = [
  "insta",
  "mockall",
  "no-worries",
+ "once_cell",
  "regex",
  "reqwest",
  "serde",

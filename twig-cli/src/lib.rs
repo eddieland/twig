@@ -4,7 +4,7 @@ pub mod config;
 pub mod creds;
 pub mod diagnostics;
 pub mod git;
+pub mod repo_state;
 pub mod state;
 pub mod tree_renderer;
 pub mod utils;
-pub mod worktree;
