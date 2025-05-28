@@ -101,3 +101,69 @@ pub fn init() -> Result<()> {
 pub fn get_config_dirs() -> Result<ConfigDirs> {
   ConfigDirs::new()
 }
+
+#[cfg(test)]
+mod tests {
+  use std::env;
+
+  use tempfile::TempDir;
+
+  use super::*;
+
+  #[test]
+  fn test_config_dirs_creation() {
+    let config_dirs = ConfigDirs::new().unwrap();
+
+    assert!(config_dirs.config_dir().exists() || config_dirs.config_dir().parent().unwrap().exists());
+    assert!(config_dirs.data_dir().exists() || config_dirs.data_dir().parent().unwrap().exists());
+    assert!(config_dirs.cache_dir().is_some());
+  }
+
+  #[test]
+  fn test_registry_path() {
+    let config_dirs = ConfigDirs::new().unwrap();
+    let registry_path = config_dirs.registry_path();
+
+    assert!(registry_path.ends_with("registry.json"));
+    assert!(registry_path.starts_with(config_dirs.data_dir()));
+  }
+
+  #[test]
+  fn test_repo_state_paths() {
+    let temp_dir = TempDir::new().unwrap();
+    let repo_path = temp_dir.path();
+    let config_dirs = ConfigDirs::new().unwrap();
+
+    let state_dir = config_dirs.repo_state_dir(repo_path);
+    let state_path = config_dirs.repo_state_path(repo_path);
+
+    assert_eq!(state_dir, repo_path.join(".twig"));
+    assert_eq!(state_path, repo_path.join(".twig/state.json"));
+  }
+
+  #[test]
+  fn test_init_creates_directories() {
+    // Override XDG directories for testing
+    let temp_dir = TempDir::new().unwrap();
+    let config_home = temp_dir.path().join("config");
+    let data_home = temp_dir.path().join("data");
+
+    unsafe {
+      env::set_var("XDG_CONFIG_HOME", &config_home);
+      env::set_var("XDG_DATA_HOME", &data_home);
+    }
+
+    let config_dirs = ConfigDirs::new().unwrap();
+    config_dirs.init().unwrap();
+
+    assert!(config_dirs.config_dir().exists());
+    assert!(config_dirs.data_dir().exists());
+    assert!(config_dirs.registry_path().exists());
+
+    // Clean up
+    unsafe {
+      env::remove_var("XDG_CONFIG_HOME");
+      env::remove_var("XDG_DATA_HOME");
+    }
+  }
+}
