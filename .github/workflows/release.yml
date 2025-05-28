@@ -23,7 +23,7 @@ jobs:
 
   build-ubuntu:
     needs: validate-version
-    name: Build Ubuntu
+    name: Build Linux
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -41,15 +41,15 @@ jobs:
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - name: Compress binary
         run: |
-          tar -czf twig-ubuntu-x86_64-v${{ steps.version.outputs.version }}.tar.gz -C target/release twig
-          shasum -a 256 twig-ubuntu-x86_64-v${{ steps.version.outputs.version }}.tar.gz > twig-ubuntu-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
+          tar -czf twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz -C target/release twig
+          shasum -a 256 twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz > twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: twig-ubuntu
+          name: twig-linux
           path: |
-            twig-ubuntu-x86_64-v${{ steps.version.outputs.version }}.tar.gz
-            twig-ubuntu-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
+            twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
+            twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
 
   build-macos:
     needs: validate-version
@@ -100,10 +100,10 @@ jobs:
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           echo "PREVIOUS_TAG=${PREVIOUS_TAG#v}" >>$GITHUB_ENV
 
-      - name: Download Ubuntu artifact
+      - name: Download Linux artifact
         uses: actions/download-artifact@v4
         with:
-          name: twig-ubuntu
+          name: twig-linux
           path: ./
 
       - name: Download macOS artifact
@@ -123,8 +123,8 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ./twig-ubuntu-x86_64-*.tar.gz
-            ./twig-ubuntu-x86_64-*.tar.gz.sha256
+            ./twig-linux-x86_64-*.tar.gz
+            ./twig-linux-x86_64-*.tar.gz.sha256
             ./twig-macos-x86_64-*.tar.gz
             ./twig-macos-x86_64-*.tar.gz.sha256
           body_path: release_notes.md
