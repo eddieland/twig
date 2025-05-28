@@ -1,11 +1,14 @@
+use std::collections::HashMap;
+use std::io;
+
 use anyhow::{Context, Result};
 use clap::{Arg, Command};
-use colored::Colorize;
 use git2::{BranchType, Repository as Git2Repository};
 
 use crate::git::detect_current_repository;
+use crate::tree_renderer::{BranchNode, TreeRenderer};
 use crate::utils::output::{format_command, print_info, print_warning};
-use crate::worktree::{BranchIssue, RepoState};
+use crate::worktree::RepoState;
 
 /// Build the tree subcommand
 pub fn build_command() -> Command {
@@ -25,6 +28,27 @@ pub fn build_command() -> Command {
         .short('r')
         .help("Path to a specific repository")
         .value_name("PATH"),
+    )
+    .arg(
+      Arg::new("max-depth")
+        .long("max-depth")
+        .short('d')
+        .help("Maximum depth to display in the tree")
+        .value_name("DEPTH")
+        .value_parser(clap::value_parser!(u32)),
+    )
+    .arg(
+      Arg::new("no-color")
+        .long("no-color")
+        .help("Disable colored output")
+        .action(clap::ArgAction::SetTrue),
+    )
+    .arg(
+      Arg::new("root")
+        .long("root")
+        .help("Root branch to start the tree from")
+        .value_name("BRANCH")
+        .default_value("main"),
     )
 }
 
@@ -47,98 +71,138 @@ pub fn handle_command(tree_matches: &clap::ArgMatches) -> Result<()> {
   // Get all local branches
   let branches = repo.branches(Some(BranchType::Local))?;
 
-  // Collect branch information
-  let mut branch_info = Vec::new();
+  // Get command line options
+  let max_depth = tree_matches.get_one::<u32>("max-depth").copied();
+  let no_color = tree_matches.get_flag("no-color");
+  let root_branch = tree_matches.get_one::<String>("root").unwrap().clone();
+
+  // Collect branch information and convert to BranchNode format
+  let mut branch_nodes = HashMap::new();
+  let mut all_branch_names = Vec::new();
+
   for branch_result in branches {
     let (branch, _) = branch_result?;
     if let Some(name) = branch.name()? {
-      let is_current = branch.is_head();
       let branch_issue = repo_state.get_branch_issue_by_branch(name);
 
-      branch_info.push(BranchInfo {
+      all_branch_names.push(name.to_string());
+
+      // Create branch node with dependencies
+      let (parents, children) = if name == root_branch {
+        // Root branch has no parents, all other branches as children
+        let children = all_branch_names
+          .iter()
+          .filter(|&branch_name| branch_name != name)
+          .cloned()
+          .collect();
+        (vec![], children)
+      } else {
+        // Non-root branches depend on the root
+        (vec![root_branch.clone()], vec![])
+      };
+
+      let is_current = branch.is_head();
+      let branch_node = BranchNode {
         name: name.to_string(),
         is_current,
         branch_issue: branch_issue.cloned(),
-      });
+        parents,
+        children,
+      };
+
+      branch_nodes.insert(name.to_string(), branch_node);
     }
   }
 
-  if branch_info.is_empty() {
+  // Now we need to update the root branch with all the children after collecting
+  // all branches
+  if let Some(root_node) = branch_nodes.get_mut(&root_branch) {
+    root_node.children = all_branch_names
+      .iter()
+      .filter(|&branch_name| branch_name != &root_branch)
+      .cloned()
+      .collect();
+  }
+
+  if branch_nodes.is_empty() {
     print_warning("No local branches found.");
     return Ok(());
   }
 
-  // Sort branches - current branch first, then alphabetically
-  branch_info.sort_by(|a, b| {
-    if a.is_current {
+  // Sort branch names - current branch first, then alphabetically
+  all_branch_names.sort_by(|a, b| {
+    let a_node = &branch_nodes[a];
+    let b_node = &branch_nodes[b];
+
+    if a_node.is_current {
       std::cmp::Ordering::Less
-    } else if b.is_current {
+    } else if b_node.is_current {
       std::cmp::Ordering::Greater
     } else {
-      a.name.cmp(&b.name)
+      a.cmp(b)
     }
   });
 
-  // Display the tree
-  display_branch_tree(&branch_info);
+  // Update the root branch's children to be in sorted order
+  // We need to sort the children separately to avoid borrowing issues
+  let mut sorted_children: Vec<String> = all_branch_names
+    .iter()
+    .filter(|&branch_name| branch_name != &root_branch)
+    .cloned()
+    .collect();
+
+  // Sort children with the same logic
+  sorted_children.sort_by(|a, b| {
+    let a_node = &branch_nodes[a];
+    let b_node = &branch_nodes[b];
+
+    if a_node.is_current {
+      std::cmp::Ordering::Less
+    } else if b_node.is_current {
+      std::cmp::Ordering::Greater
+    } else {
+      a.cmp(b)
+    }
+  });
+
+  // Now update the root node with sorted children
+  if let Some(root_node) = branch_nodes.get_mut(&root_branch) {
+    root_node.children = sorted_children;
+  }
+
+  // Check if the specified root branch exists
+  if !branch_nodes.contains_key(&root_branch) {
+    print_warning(&format!("Root branch '{root_branch}' not found. Available branches:",));
+    for name in &all_branch_names {
+      println!("  {name}",);
+    }
+    return Ok(());
+  }
+
+  // Use the specified root branch
+  let roots = vec![root_branch.clone()];
+
+  // Create and configure the tree renderer
+  let mut renderer = TreeRenderer::new(&branch_nodes, &roots, max_depth, no_color);
+
+  // Render the tree starting from the specified root
+  let mut stdout = io::stdout();
+  renderer.render_tree(&mut stdout, &root_branch, 0, &[])?;
+
+  // Show summary and help text
+  display_summary(&branch_nodes);
 
   Ok(())
 }
 
-#[derive(Debug)]
-struct BranchInfo {
-  name: String,
-  is_current: bool,
-  branch_issue: Option<BranchIssue>,
-}
+pub fn display_summary(branch_nodes: &HashMap<String, BranchNode>) {
+  let branches_with_issues = branch_nodes.values().filter(|node| node.branch_issue.is_some()).count();
 
-fn display_branch_tree(branches: &[BranchInfo]) {
-  for (i, branch) in branches.iter().enumerate() {
-    let is_last = i == branches.len() - 1;
-    let tree_symbol = if is_last { "└──" } else { "├──" };
-
-    // Build the complete line with branch, ticket, and PR info
-    let mut line_parts = Vec::new();
-
-    // Branch name with current indicator
-    let branch_display = if branch.is_current {
-      format!("{} {}", tree_symbol, branch.name.green().bold())
-    } else {
-      format!("{} {}", tree_symbol, branch.name)
-    };
-    line_parts.push(branch_display);
-
-    // Add current branch indicator
-    if branch.is_current {
-      line_parts.push("(current)".dimmed().to_string());
-    }
-
-    // Add ticket and PR info horizontally
-    if let Some(issue) = &branch.branch_issue {
-      // Add Jira issue
-      line_parts.push(format!("🎫 {}", issue.jira_issue.cyan()));
-
-      // Add GitHub PR if available
-      if let Some(pr_number) = issue.github_pr {
-        line_parts.push(format!("🔗 PR#{}", pr_number.to_string().yellow()));
-      }
-    }
-
-    // Print the complete line
-    println!("{}", line_parts.join(" "));
-
-    // Add spacing between branches (except for the last one)
-    if !is_last {
-      println!("│");
-    }
-  }
-
-  // Show summary
-  let branches_with_issues = branches.iter().filter(|b| b.branch_issue.is_some()).count();
-  let branches_with_prs = branches
-    .iter()
-    .filter(|b| {
-      b.branch_issue
+  let branches_with_prs = branch_nodes
+    .values()
+    .filter(|node| {
+      node
+        .branch_issue
         .as_ref()
         .map(|issue| issue.github_pr.is_some())
         .unwrap_or(false)
@@ -148,13 +212,13 @@ fn display_branch_tree(branches: &[BranchInfo]) {
   if branches_with_issues == 0 && branches_with_prs == 0 {
     println!();
     print_info("To associate branches with issues and PRs:");
-    print_info(&format!(
+    println!(
       "  • Link Jira issues: {}",
       format_command("twig jira branch link <issue-key>")
-    ));
-    print_info(&format!(
+    );
+    println!(
       "  • Link GitHub PRs: {}",
       format_command("twig github pr link <pr-url>")
-    ));
+    );
   }
 }

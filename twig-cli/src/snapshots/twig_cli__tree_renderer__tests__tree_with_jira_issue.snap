@@ -1,0 +1,7 @@
+---
+source: twig-cli/src/tree_renderer.rs
+expression: output_str
+---
+main
+├── PROJ-123/feat-one (current)                [PROJ-123]  [PR#456]
+└── PROJ-124/feat-two-add-more-hats (current)  [PROJ-124]  [PR#789]

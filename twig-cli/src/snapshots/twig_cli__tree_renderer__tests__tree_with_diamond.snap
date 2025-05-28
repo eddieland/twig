@@ -1,0 +1,8 @@
+---
+source: twig-cli/src/tree_renderer.rs
+expression: output_str
+---
+main
+├── PROJ-100/left-branch                 [PROJ-100]  [PR#111]
+    └── PROJ-300/merge-branch (current)  [PROJ-300]  [PR#333]
+└── PROJ-200/right-branch                [PROJ-200]  [PR#222]

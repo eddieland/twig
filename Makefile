@@ -44,6 +44,24 @@ watch-test: ## Run tests in watch mode (requires cargo-watch)
 .PHONY: all
 all: fmt lint test ## Run fmt, lint, and test
 
+### Snapshot Testing
+
+.PHONY: insta-review
+insta-review: ## Review Insta snapshots
+	cargo insta review
+
+.PHONY: insta-accept
+insta-accept: ## Accept all pending Insta snapshots
+	cargo insta accept
+
+.PHONY: insta-reject
+insta-reject: ## Reject all pending Insta snapshots
+	cargo insta reject
+
+.PHONY: update-snapshots
+update-snapshots: ## Run tests and update snapshots
+	INSTA_UPDATE=1 cargo nextest run
+
 ### Analysis
 
 .PHONY: cloc
@@ -106,6 +124,7 @@ install-dev-tools: ## Install development tools
 	cargo install cargo-outdated
 	cargo install cargo-nextest
 	cargo install cargo-llvm-cov
+	cargo install cargo-insta
 	uv tool install pre-commit
 
 .PHONY: pre-commit-setup

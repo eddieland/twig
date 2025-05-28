@@ -167,3 +167,16 @@ Key Makefile targets include:
 - **Development**: `fmt`, `lint`, `test`, `check`, `doc`
 - **Build**: `build`, `release`, `clean`, `run`
 - **Installation**: `install`, `install-dev-tools`, `pre-commit-setup`
+- **Snapshot Testing**: `insta-review`, `insta-accept`, `insta-reject`, `test-update-snapshots`
+
+## Snapshot Testing
+
+Twig uses [Insta](https://insta.rs/) for snapshot testing, which helps ensure consistent output across changes. Snapshot tests capture the output of components and compare them against previously saved "snapshots" to detect unintended changes.
+
+### Workflow
+
+1. **Running Tests**: When you run tests with `make test`, any snapshot tests will be executed
+2. **Reviewing Changes**: If snapshots change or new ones are created, use `make insta-review` to interactively review them
+3. **Accepting Changes**: Accept all pending snapshots with `make insta-accept`
+4. **Rejecting Changes**: Reject all pending snapshots with `make insta-reject`
+5. **Updating Snapshots**: Run tests and automatically update snapshots with `make test-update-snapshots`

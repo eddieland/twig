@@ -8,6 +8,7 @@ mod creds;
 mod diagnostics;
 mod git;
 mod state;
+mod tree_renderer;
 mod utils;
 mod worktree;
 
