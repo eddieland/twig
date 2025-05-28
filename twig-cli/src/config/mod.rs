@@ -110,9 +110,60 @@ mod tests {
 
   use super::*;
 
+  /// Test environment helper that properly manages XDG environment variables
+  /// This ensures tests don't interfere with each other when running in
+  /// parallel
+  struct TestEnvGuard {
+    _temp_dir: TempDir,
+    original_config_home: Option<String>,
+    original_data_home: Option<String>,
+  }
+
+  impl TestEnvGuard {
+    fn new() -> Self {
+      let temp_dir = TempDir::new().unwrap();
+      let config_home = temp_dir.path().join("config");
+      let data_home = temp_dir.path().join("data");
+
+      // Save original values
+      let original_config_home = env::var("XDG_CONFIG_HOME").ok();
+      let original_data_home = env::var("XDG_DATA_HOME").ok();
+
+      // Set test values
+      unsafe {
+        env::set_var("XDG_CONFIG_HOME", &config_home);
+        env::set_var("XDG_DATA_HOME", &data_home);
+      }
+
+      Self {
+        _temp_dir: temp_dir,
+        original_config_home,
+        original_data_home,
+      }
+    }
+  }
+
+  impl Drop for TestEnvGuard {
+    fn drop(&mut self) {
+      // Restore original values
+      match &self.original_config_home {
+        Some(val) => unsafe { env::set_var("XDG_CONFIG_HOME", val) },
+        None => unsafe { env::remove_var("XDG_CONFIG_HOME") },
+      }
+      match &self.original_data_home {
+        Some(val) => unsafe { env::set_var("XDG_DATA_HOME", val) },
+        None => unsafe { env::remove_var("XDG_DATA_HOME") },
+      }
+    }
+  }
+
   #[test]
   fn test_config_dirs_creation() {
+    // Use RAII guard to properly manage environment variables
+    let _env_guard = TestEnvGuard::new();
+
     let config_dirs = ConfigDirs::new().unwrap();
+    let _ = config_dirs.init();
 
     assert!(config_dirs.config_dir().exists() || config_dirs.config_dir().parent().unwrap().exists());
     assert!(config_dirs.data_dir().exists() || config_dirs.data_dir().parent().unwrap().exists());
@@ -121,6 +172,8 @@ mod tests {
 
   #[test]
   fn test_registry_path() {
+    let _env_guard = TestEnvGuard::new();
+
     let config_dirs = ConfigDirs::new().unwrap();
     let registry_path = config_dirs.registry_path();
 
@@ -130,6 +183,8 @@ mod tests {
 
   #[test]
   fn test_repo_state_paths() {
+    let _env_guard = TestEnvGuard::new();
+
     let temp_dir = TempDir::new().unwrap();
     let repo_path = temp_dir.path();
     let config_dirs = ConfigDirs::new().unwrap();
@@ -143,15 +198,7 @@ mod tests {
 
   #[test]
   fn test_init_creates_directories() {
-    // Override XDG directories for testing
-    let temp_dir = TempDir::new().unwrap();
-    let config_home = temp_dir.path().join("config");
-    let data_home = temp_dir.path().join("data");
-
-    unsafe {
-      env::set_var("XDG_CONFIG_HOME", &config_home);
-      env::set_var("XDG_DATA_HOME", &data_home);
-    }
+    let _env_guard = TestEnvGuard::new();
 
     let config_dirs = ConfigDirs::new().unwrap();
     config_dirs.init().unwrap();
@@ -159,11 +206,5 @@ mod tests {
     assert!(config_dirs.config_dir().exists());
     assert!(config_dirs.data_dir().exists());
     assert!(config_dirs.registry_path().exists());
-
-    // Clean up
-    unsafe {
-      env::remove_var("XDG_CONFIG_HOME");
-      env::remove_var("XDG_DATA_HOME");
-    }
   }
 }
