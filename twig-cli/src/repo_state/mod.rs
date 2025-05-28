@@ -768,3 +768,328 @@ pub fn clean_worktrees<P: AsRef<Path>>(repo_path: P) -> Result<()> {
 
   Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+  use std::fs;
+
+  use tempfile::TempDir;
+
+  use super::*;
+
+  #[test]
+  fn test_repo_state_creation() {
+    let temp_dir = TempDir::new().unwrap();
+    let repo_path = temp_dir.path();
+
+    let state = RepoState::load(repo_path).unwrap();
+
+    assert_eq!(state.version, 1);
+    assert!(state.worktrees.is_empty());
+    assert!(state.branches.is_empty());
+    assert!(state.dependencies.is_empty());
+    assert!(state.root_branches.is_empty());
+  }
+
+  #[test]
+  fn test_add_worktree() {
+    let mut state = RepoState::default();
+
+    let worktree = Worktree {
+      name: "test-worktree".to_string(),
+      path: "/path/to/worktree".to_string(),
+      branch: "feature-branch".to_string(),
+      created_at: "2023-01-01T00:00:00Z".to_string(),
+    };
+
+    state.add_worktree(worktree);
+    assert_eq!(state.worktrees.len(), 1);
+    assert_eq!(state.worktrees[0].name, "test-worktree");
+  }
+
+  #[test]
+  fn test_add_duplicate_worktree() {
+    let mut state = RepoState::default();
+
+    let worktree1 = Worktree {
+      name: "test-worktree".to_string(),
+      path: "/path/to/worktree1".to_string(),
+      branch: "branch1".to_string(),
+      created_at: "2023-01-01T00:00:00Z".to_string(),
+    };
+
+    let worktree2 = Worktree {
+      name: "test-worktree".to_string(),
+      path: "/path/to/worktree2".to_string(),
+      branch: "branch2".to_string(),
+      created_at: "2023-01-02T00:00:00Z".to_string(),
+    };
+
+    state.add_worktree(worktree1);
+    state.add_worktree(worktree2);
+
+    // Should only have one worktree (the newer one)
+    assert_eq!(state.worktrees.len(), 1);
+    assert_eq!(state.worktrees[0].path, "/path/to/worktree2");
+  }
+
+  #[test]
+  fn test_remove_worktree() {
+    let mut state = RepoState::default();
+
+    let worktree = Worktree {
+      name: "test-worktree".to_string(),
+      path: "/path/to/worktree".to_string(),
+      branch: "feature-branch".to_string(),
+      created_at: "2023-01-01T00:00:00Z".to_string(),
+    };
+
+    state.add_worktree(worktree);
+    assert_eq!(state.worktrees.len(), 1);
+
+    let removed = state.remove_worktree("test-worktree");
+    assert!(removed);
+    assert_eq!(state.worktrees.len(), 0);
+
+    // Try removing non-existent worktree
+    let removed = state.remove_worktree("nonexistent");
+    assert!(!removed);
+  }
+
+  #[test]
+  fn test_set_branch_jira_issue() {
+    let mut state = RepoState::default();
+
+    let metadata = BranchMetadata {
+      branch: "feature-branch".to_string(),
+      jira_issue: Some("PROJ-123".to_string()),
+      github_pr: None,
+      created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    state.add_branch_issue(metadata);
+
+    assert_eq!(state.branches.len(), 1);
+    assert!(state.branches.contains_key("feature-branch"));
+    assert_eq!(
+      state.branches["feature-branch"].jira_issue,
+      Some("PROJ-123".to_string())
+    );
+
+    // Check indices were built
+    assert_eq!(
+      state.branch_to_jira_index.get("feature-branch"),
+      Some(&"PROJ-123".to_string())
+    );
+    assert_eq!(
+      state.jira_to_branch_index.get("PROJ-123"),
+      Some(&"feature-branch".to_string())
+    );
+  }
+
+  #[test]
+  fn test_set_branch_github_pr() {
+    let mut state = RepoState::default();
+
+    let metadata = BranchMetadata {
+      branch: "feature-branch".to_string(),
+      jira_issue: None,
+      github_pr: Some(123),
+      created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    state.add_branch_issue(metadata);
+
+    assert_eq!(state.branches.len(), 1);
+    assert!(state.branches.contains_key("feature-branch"));
+    assert_eq!(state.branches["feature-branch"].github_pr, Some(123));
+  }
+
+  #[test]
+  fn test_add_dependency() {
+    let mut state = RepoState::default();
+
+    state
+      .add_dependency("child-branch".to_string(), "parent-branch".to_string())
+      .unwrap();
+
+    assert_eq!(state.dependencies.len(), 1);
+    assert_eq!(state.dependencies[0].child, "child-branch");
+    assert_eq!(state.dependencies[0].parent, "parent-branch");
+
+    // Check indices were updated
+    assert_eq!(state.get_dependency_children("parent-branch"), vec!["child-branch"]);
+    assert_eq!(state.get_dependency_parents("child-branch"), vec!["parent-branch"]);
+  }
+
+  #[test]
+  fn test_remove_dependency() {
+    let mut state = RepoState::default();
+
+    state
+      .add_dependency("child-branch".to_string(), "parent-branch".to_string())
+      .unwrap();
+    assert_eq!(state.dependencies.len(), 1);
+
+    let removed = state.remove_dependency("child-branch", "parent-branch");
+    assert!(removed);
+    assert_eq!(state.dependencies.len(), 0);
+
+    // Check indices were updated
+    assert!(state.get_dependency_children("parent-branch").is_empty());
+    assert!(state.get_dependency_parents("child-branch").is_empty());
+  }
+
+  #[test]
+  fn test_add_root_branch() {
+    let mut state = RepoState::default();
+
+    state.add_root("main".to_string(), true).unwrap();
+
+    assert_eq!(state.root_branches.len(), 1);
+    assert_eq!(state.root_branches[0].branch, "main");
+    assert!(state.root_branches[0].is_default);
+  }
+
+  #[test]
+  fn test_multiple_root_branches_only_one_default() {
+    let mut state = RepoState::default();
+
+    state.add_root("main".to_string(), true).unwrap();
+    state.add_root("develop".to_string(), true).unwrap(); // This should make main non-default
+
+    assert_eq!(state.root_branches.len(), 2);
+
+    let default_count = state.root_branches.iter().filter(|r| r.is_default).count();
+    assert_eq!(default_count, 1);
+
+    let default_branch = state.root_branches.iter().find(|r| r.is_default).unwrap();
+    assert_eq!(default_branch.branch, "develop");
+  }
+
+  #[test]
+  fn test_remove_root_branch() {
+    let mut state = RepoState::default();
+
+    state.add_root("main".to_string(), true).unwrap();
+    assert_eq!(state.root_branches.len(), 1);
+
+    let removed = state.remove_root("main");
+    assert!(removed);
+    assert_eq!(state.root_branches.len(), 0);
+  }
+
+  #[test]
+  fn test_rebuild_indices() {
+    let mut state = RepoState::default();
+
+    // Add some data using existing methods
+    let metadata1 = BranchMetadata {
+      branch: "feature-1".to_string(),
+      jira_issue: Some("PROJ-123".to_string()),
+      github_pr: None,
+      created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    let metadata2 = BranchMetadata {
+      branch: "feature-2".to_string(),
+      jira_issue: Some("PROJ-456".to_string()),
+      github_pr: None,
+      created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    state.add_branch_issue(metadata1);
+    state.add_branch_issue(metadata2);
+    state
+      .add_dependency("feature-1".to_string(), "main".to_string())
+      .unwrap();
+    state
+      .add_dependency("feature-2".to_string(), "main".to_string())
+      .unwrap();
+
+    // Clear indices manually to test rebuilding
+    state.branch_to_jira_index.clear();
+    state.jira_to_branch_index.clear();
+    state.dependency_children_index.clear();
+    state.dependency_parents_index.clear();
+
+    // Rebuild indices
+    state.rebuild_indices();
+
+    // Verify indices were rebuilt correctly
+    assert_eq!(state.branch_to_jira_index.len(), 2);
+    assert_eq!(state.jira_to_branch_index.len(), 2);
+    assert_eq!(state.dependency_children_index["main"].len(), 2);
+    assert_eq!(state.dependency_parents_index["feature-1"].len(), 1);
+    assert_eq!(state.dependency_parents_index["feature-2"].len(), 1);
+  }
+
+  #[test]
+  fn test_save_and_load_state() {
+    let temp_dir = TempDir::new().unwrap();
+    let repo_path = temp_dir.path();
+
+    // Create initial state
+    let mut state = RepoState::default();
+    state.add_worktree(Worktree {
+      name: "test".to_string(),
+      path: "/test/path".to_string(),
+      branch: "feature".to_string(),
+      created_at: "2023-01-01T00:00:00Z".to_string(),
+    });
+
+    let metadata = BranchMetadata {
+      branch: "feature".to_string(),
+      jira_issue: Some("PROJ-123".to_string()),
+      github_pr: None,
+      created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    state.add_branch_issue(metadata);
+    state.add_dependency("feature".to_string(), "main".to_string()).unwrap();
+
+    // Save state
+    state.save(repo_path).unwrap();
+
+    // Load state and verify
+    let loaded_state = RepoState::load(repo_path).unwrap();
+    assert_eq!(loaded_state.worktrees.len(), 1);
+    assert_eq!(loaded_state.branches.len(), 1);
+    assert_eq!(loaded_state.dependencies.len(), 1);
+    assert_eq!(loaded_state.worktrees[0].name, "test");
+    assert_eq!(
+      loaded_state.branches["feature"].jira_issue,
+      Some("PROJ-123".to_string())
+    );
+  }
+
+  #[test]
+  fn test_gitignore_creation() {
+    let temp_dir = TempDir::new().unwrap();
+    let repo_path = temp_dir.path();
+
+    let state = RepoState::default();
+    state.save(repo_path).unwrap();
+
+    // Check that .gitignore was created with .twig/ entry
+    let gitignore_path = repo_path.join(".gitignore");
+    assert!(gitignore_path.exists());
+
+    let gitignore_content = fs::read_to_string(gitignore_path).unwrap();
+    assert!(gitignore_content.contains(".twig/"));
+  }
+
+  #[test]
+  fn test_gitignore_append() {
+    let temp_dir = TempDir::new().unwrap();
+    let repo_path = temp_dir.path();
+
+    // Create existing .gitignore
+    let gitignore_path = repo_path.join(".gitignore");
+    fs::write(&gitignore_path, "*.log\ntarget/").unwrap();
+
+    let state = RepoState::default();
+    state.save(repo_path).unwrap();
+
+    // Check that .twig/ was appended
+    let gitignore_content = fs::read_to_string(gitignore_path).unwrap();
+    assert!(gitignore_content.contains("*.log"));
+    assert!(gitignore_content.contains("target/"));
+    assert!(gitignore_content.contains(".twig/"));
+  }
+}
