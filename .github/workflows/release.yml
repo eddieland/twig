@@ -41,15 +41,15 @@ jobs:
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - name: Compress binary
         run: |
-          tar -czf twig-ubuntu-x86_64-${{ steps.version.outputs.version }}.tar.gz -C target/release twig
-          shasum -a 256 twig-ubuntu-x86_64-${{ steps.version.outputs.version }}.tar.gz > twig-ubuntu-x86_64-${{ steps.version.outputs.version }}.tar.gz.sha256
+          tar -czf twig-ubuntu-x86_64-v${{ steps.version.outputs.version }}.tar.gz -C target/release twig
+          shasum -a 256 twig-ubuntu-x86_64-v${{ steps.version.outputs.version }}.tar.gz > twig-ubuntu-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: twig-ubuntu
           path: |
-            twig-ubuntu-x86_64-${{ steps.version.outputs.version }}.tar.gz
-            twig-ubuntu-x86_64-${{ steps.version.outputs.version }}.tar.gz.sha256
+            twig-ubuntu-x86_64-v${{ steps.version.outputs.version }}.tar.gz
+            twig-ubuntu-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
 
   build-macos:
     needs: validate-version
@@ -71,15 +71,15 @@ jobs:
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - name: Compress binary
         run: |
-          tar -czf twig-macos-x86_64-${{ steps.version.outputs.version }}.tar.gz -C target/release twig
-          shasum -a 256 twig-macos-x86_64-${{ steps.version.outputs.version }}.tar.gz > twig-macos-x86_64-${{ steps.version.outputs.version }}.tar.gz.sha256
+          tar -czf twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz -C target/release twig
+          shasum -a 256 twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz > twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: twig-macos
           path: |
-            twig-macos-x86_64-${{ steps.version.outputs.version }}.tar.gz
-            twig-macos-x86_64-${{ steps.version.outputs.version }}.tar.gz.sha256
+            twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
+            twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
 
   create-release:
     name: Create Release
