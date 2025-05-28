@@ -1,8 +1,0 @@
-# Cargo configuration file
-
-[alias]
-# Run code coverage using cargo-llvm-cov
-coverage = "llvm-cov --workspace"
-coverage-html = "llvm-cov --workspace --html"
-coverage-open = "llvm-cov --workspace --html --open"
-coverage-report = "llvm-cov --workspace --lcov --output-path lcov.info"
