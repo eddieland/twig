@@ -1130,7 +1130,7 @@ dependencies = [
 
 [[package]]
 name = "no-worries"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "backtrace",
  "chrono",
@@ -2007,7 +2007,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "twig-cli"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2040,7 +2040,7 @@ dependencies = [
 
 [[package]]
 name = "twig-gh"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "regex",
@@ -2053,7 +2053,7 @@ dependencies = [
 
 [[package]]
 name = "twig-jira"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "reqwest",
