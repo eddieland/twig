@@ -8,10 +8,10 @@
 
 ```bash
 # Download the release
-curl -L -o twig-ubuntu-x86_64.tar.gz https://github.com/eddieland/twig/releases/download/v${VERSION}/twig-ubuntu-x86_64-v${VERSION}.tar.gz
+curl -L -o twig-linux-x86_64.tar.gz https://github.com/eddieland/twig/releases/download/v${VERSION}/twig-linux-x86_64-v${VERSION}.tar.gz
 
 # Extract the archive
-tar -xzf twig-ubuntu-x86_64.tar.gz
+tar -xzf twig-linux-x86_64.tar.gz
 
 # Install to /usr/local/bin (requires sudo)
 sudo cp twig /usr/local/bin/
@@ -20,7 +20,7 @@ sudo cp twig /usr/local/bin/
 sudo chmod +x /usr/local/bin/twig
 
 # Clean up downloaded files
-rm twig-ubuntu-x86_64.tar.gz twig
+rm twig-linux-x86_64.tar.gz twig
 ```
 
 ### macOS
@@ -47,7 +47,7 @@ rm twig-macos-x86_64.tar.gz twig
 ### Ubuntu/Linux
 
 ```bash
-curl -L https://github.com/eddieland/twig/releases/download/v${VERSION}/twig-ubuntu-x86_64-v${VERSION}.tar.gz | tar -xz && sudo cp twig /usr/local/bin/ && sudo chmod +x /usr/local/bin/twig && rm twig
+curl -L https://github.com/eddieland/twig/releases/download/v${VERSION}/twig-linux-x86_64-v${VERSION}.tar.gz | tar -xz && sudo cp twig /usr/local/bin/ && sudo chmod +x /usr/local/bin/twig && rm twig
 ```
 
 ### macOS
