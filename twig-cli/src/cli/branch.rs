@@ -1,3 +1,8 @@
+//! # Branch Command
+//!
+//! CLI commands for managing branch dependencies and root branches,
+//! including adding, removing, and listing branch relationships.
+
 use anyhow::{Context, Result};
 use clap::{Arg, Command};
 

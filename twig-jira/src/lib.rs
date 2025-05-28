@@ -1,3 +1,9 @@
+//! # Jira API Client
+//!
+//! Provides Jira REST API integration for issue management, transitions, and
+//! project data, supporting authentication and common Jira operations for twig
+//! workflows.
+
 mod client;
 mod endpoints;
 mod models;

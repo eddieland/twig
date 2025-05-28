@@ -1,3 +1,9 @@
+//! # System Diagnostics
+//!
+//! Provides comprehensive system diagnostics and health checks for twig,
+//! including configuration validation, credential checking, and Git repository
+//! status.
+
 use std::process::Command;
 use std::{env, fs};
 

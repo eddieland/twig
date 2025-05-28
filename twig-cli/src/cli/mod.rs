@@ -1,3 +1,9 @@
+//! # Command Line Interface
+//!
+//! Defines the CLI structure and command handlers for the twig tool,
+//! including subcommands for branch management, Git operations, and
+//! integrations.
+
 use anyhow::Result;
 use clap::Command;
 
@@ -12,7 +18,6 @@ mod jira;
 mod switch;
 mod sync;
 mod tree;
-mod treev2;
 mod worktree;
 
 /// Build the CLI command structure
@@ -36,7 +41,6 @@ pub fn build_cli() -> Command {
     .subcommand(switch::build_command())
     .subcommand(sync::build_command())
     .subcommand(tree::build_command())
-    .subcommand(treev2::build_command())
     .subcommand(worktree::build_command())
     .subcommand(diagnostics::build_diagnostics_command())
     .subcommand(completion::build_completion_command())
@@ -55,7 +59,6 @@ pub fn handle_commands(matches: &clap::ArgMatches) -> Result<()> {
     Some(("switch", switch_matches)) => switch::handle_command(switch_matches),
     Some(("sync", sync_matches)) => sync::handle_command(sync_matches),
     Some(("tree", tree_matches)) => tree::handle_command(tree_matches),
-    Some(("treev2", treev2_matches)) => treev2::handle_command(treev2_matches),
     Some(("worktree", worktree_matches)) => worktree::handle_commands(worktree_matches),
     Some(("diagnose", _)) => diagnostics::handle_diagnostics_command(),
     Some(("completion", completion_matches)) => completion::handle_completion_command(completion_matches),

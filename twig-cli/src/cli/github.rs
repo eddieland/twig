@@ -1,3 +1,9 @@
+//! # GitHub Command
+//!
+//! CLI commands for GitHub integration, including pull request management,
+//! status checks, and synchronization with branch metadata for development
+//! workflows.
+
 use anyhow::Result;
 use clap::{Arg, Command};
 use git2::Repository as Git2Repository;

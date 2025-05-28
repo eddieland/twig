@@ -1,3 +1,8 @@
+//! # Application State Management
+//!
+//! Manages global application state including repository registry,
+//! workspace tracking, and persistent configuration across twig sessions.
+
 use std::fs;
 use std::path::Path;
 

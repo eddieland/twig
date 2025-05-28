@@ -1,3 +1,8 @@
+//! # Utility Functions
+//!
+//! Common utility functions and helpers for file operations, Git repository
+//! validation, and shared functionality across the twig application.
+
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};

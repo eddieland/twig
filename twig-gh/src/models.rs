@@ -1,3 +1,8 @@
+//! # GitHub API Models
+//!
+//! Data structures and serialization models for GitHub API responses,
+//! including pull requests, checks, users, and authentication types.
+
 #![allow(dead_code)]
 
 use serde::Deserialize;

@@ -1,3 +1,8 @@
+//! # Jira API Models
+//!
+//! Data structures and serialization models for Jira API responses,
+//! including issues, transitions, statuses, and authentication types.
+
 #![allow(dead_code)]
 
 use serde::{Deserialize, Serialize};

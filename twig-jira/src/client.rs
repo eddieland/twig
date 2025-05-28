@@ -1,3 +1,9 @@
+//! # Jira HTTP Client
+//!
+//! HTTP client implementation for Jira API interactions, handling
+//! authentication, request building, and response parsing for Jira REST API
+//! operations.
+
 use anyhow::{Context, Result};
 use reqwest::Client;
 

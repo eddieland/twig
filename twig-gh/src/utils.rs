@@ -1,3 +1,8 @@
+//! # GitHub Utility Functions
+//!
+//! Helper functions for GitHub URL parsing, repository information extraction,
+//! and other common GitHub-related operations.
+
 use anyhow::{Context, Result};
 
 use crate::client::GitHubClient;

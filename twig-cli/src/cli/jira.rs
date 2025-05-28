@@ -1,3 +1,8 @@
+//! # Jira Command
+//!
+//! CLI commands for Jira integration, including issue management, transitions,
+//! and synchronization with branch metadata for workflow automation.
+
 use anyhow::{Context, Result};
 use clap::{Arg, Command};
 use colored::Colorize;

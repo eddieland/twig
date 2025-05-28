@@ -1,3 +1,8 @@
+//! # Jira Issue Endpoints
+//!
+//! Jira API endpoint implementations for issue operations,
+//! including fetching, creating, and updating Jira issues.
+
 use anyhow::{Context, Result};
 use reqwest::StatusCode;
 

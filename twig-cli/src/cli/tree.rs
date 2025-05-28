@@ -1,25 +1,32 @@
-use std::collections::HashMap;
+//! # Tree Command
+//!
+//! CLI command for visualizing branch dependency trees, showing hierarchical
+//! relationships between branches with optional depth limits and formatting
+//! options.
+
 use std::io;
 
 use anyhow::{Context, Result};
 use clap::{Arg, Command};
-use git2::{BranchType, Repository as Git2Repository};
+use git2::Repository as Git2Repository;
 
 use crate::git::detect_current_repository;
 use crate::repo_state::RepoState;
-use crate::tree_renderer::{BranchNode, TreeRenderer};
+use crate::tree_renderer::TreeRenderer;
+use crate::user_defined_dependency_resolver::UserDefinedDependencyResolver;
 use crate::utils::output::{format_command, print_info, print_warning};
 
 /// Build the tree subcommand
 pub fn build_command() -> Command {
   Command::new("tree")
-    .about("Show your branch tree with associated issues and PRs")
+    .about("Show your branch tree with user-defined dependencies")
     .long_about(
-      "Display local branches in a tree-like view with their associated Jira issues and GitHub PRs.\n\n\
-            This command shows all local branches in the current repository along with\n\
-            any associated Jira tickets and GitHub pull requests. This gives you a\n\
-            bird's-eye view of your development tree, helping you track which branches\n\
-            are linked to specific issues and PRs for better workflow management.",
+      "Display local branches in a tree-like view based on user-defined dependencies.\n\n\
+            This command shows branch relationships that you have explicitly defined using\n\
+            the 'twig branch depend' command. It also displays associated Jira issues and\n\
+            GitHub PRs. Branches without defined dependencies or root status will be shown\n\
+            as orphaned branches. Use 'twig branch depend' to create relationships and\n\
+            'twig branch root add' to designate root branches.",
     )
     .alias("t")
     .arg(
@@ -43,13 +50,6 @@ pub fn build_command() -> Command {
         .help("Disable colored output")
         .action(clap::ArgAction::SetTrue),
     )
-    .arg(
-      Arg::new("root")
-        .long("root")
-        .help("Root branch to start the tree from")
-        .value_name("BRANCH")
-        .default_value("main"),
-    )
 }
 
 /// Handle the tree command
@@ -68,126 +68,55 @@ pub fn handle_command(tree_matches: &clap::ArgMatches) -> Result<()> {
   // Load repository state
   let repo_state = RepoState::load(&repo_path).unwrap_or_default();
 
-  // Get all local branches
-  let branches = repo.branches(Some(BranchType::Local))?;
-
   // Get command line options
   let max_depth = tree_matches.get_one::<u32>("max-depth").copied();
   let no_color = tree_matches.get_flag("no-color");
-  let root_branch = tree_matches.get_one::<String>("root").unwrap().clone();
 
-  // Collect branch information and convert to BranchNode format
-  let mut branch_nodes = HashMap::new();
-  let mut all_branch_names = Vec::new();
+  // Create the user-defined dependency resolver
+  let resolver = UserDefinedDependencyResolver;
 
-  for branch_result in branches {
-    let (branch, _) = branch_result?;
-    if let Some(name) = branch.name()? {
-      let branch_issue = repo_state.get_branch_issue_by_branch(name);
+  // Build the branch node tree structure
+  let branch_nodes = resolver.resolve_user_dependencies(&repo, &repo_state)?;
 
-      all_branch_names.push(name.to_string());
-
-      // Create branch node with dependencies
-      let (parents, children) = if name == root_branch {
-        // Root branch has no parents, all other branches as children
-        let children = all_branch_names
-          .iter()
-          .filter(|&branch_name| branch_name != name)
-          .cloned()
-          .collect();
-        (vec![], children)
-      } else {
-        // Non-root branches depend on the root
-        (vec![root_branch.clone()], vec![])
-      };
-
-      let is_current = branch.is_head();
-      let branch_node = BranchNode {
-        name: name.to_string(),
-        is_current,
-        metadata: branch_issue.cloned(),
-        parents,
-        children,
-      };
-
-      branch_nodes.insert(name.to_string(), branch_node);
-    }
-  }
-
-  // Now we need to update the root branch with all the children after collecting
-  // all branches
-  if let Some(root_node) = branch_nodes.get_mut(&root_branch) {
-    root_node.children = all_branch_names
-      .iter()
-      .filter(|&branch_name| branch_name != &root_branch)
-      .cloned()
-      .collect();
-  }
-
+  // Check if we have any branches at all
   if branch_nodes.is_empty() {
     print_warning("No local branches found.");
     return Ok(());
   }
 
-  // Sort branch names - current branch first, then alphabetically
-  all_branch_names.sort_by(|a, b| {
-    let a_node = &branch_nodes[a];
-    let b_node = &branch_nodes[b];
+  // Check if we have any user-defined dependencies
+  let has_dependencies = repo_state.has_user_defined_dependencies();
+  let has_root_branches = !repo_state.get_root_branches().is_empty();
 
-    if a_node.is_current {
-      std::cmp::Ordering::Less
-    } else if b_node.is_current {
-      std::cmp::Ordering::Greater
-    } else {
-      a.cmp(b)
-    }
-  });
-
-  // Update the root branch's children to be in sorted order
-  // We need to sort the children separately to avoid borrowing issues
-  let mut sorted_children: Vec<String> = all_branch_names
-    .iter()
-    .filter(|&branch_name| branch_name != &root_branch)
-    .cloned()
-    .collect();
-
-  // Sort children with the same logic
-  sorted_children.sort_by(|a, b| {
-    let a_node = &branch_nodes[a];
-    let b_node = &branch_nodes[b];
-
-    if a_node.is_current {
-      std::cmp::Ordering::Less
-    } else if b_node.is_current {
-      std::cmp::Ordering::Greater
-    } else {
-      a.cmp(b)
-    }
-  });
-
-  // Now update the root node with sorted children
-  if let Some(root_node) = branch_nodes.get_mut(&root_branch) {
-    root_node.children = sorted_children;
-  }
-
-  // Check if the specified root branch exists
-  if !branch_nodes.contains_key(&root_branch) {
-    print_warning(&format!("Root branch '{root_branch}' not found. Available branches:",));
-    for name in &all_branch_names {
-      println!("  {name}",);
-    }
+  if !has_dependencies && !has_root_branches {
+    display_empty_state_help();
     return Ok(());
   }
 
-  // Use the specified root branch
-  let roots = vec![root_branch.clone()];
+  // Get root branches and orphaned branches for the tree
+  let (roots, orphaned) = resolver.build_tree_from_user_dependencies(&branch_nodes, &repo_state);
+
+  if roots.is_empty() {
+    display_no_roots_warning(&branch_nodes);
+    return Ok(());
+  }
 
   // Create and configure the tree renderer
   let mut renderer = TreeRenderer::new(&branch_nodes, &roots, max_depth, no_color);
 
-  // Render the tree starting from the specified root
+  // Render all root trees
   let mut stdout = io::stdout();
-  renderer.render_tree(&mut stdout, &root_branch, 0, &[], false)?;
+  for (i, root) in roots.iter().enumerate() {
+    if i > 0 {
+      println!(); // Add spacing between multiple trees
+    }
+    renderer.render_tree(&mut stdout, root, 0, &[], false)?;
+  }
+
+  // Display orphaned branches if any
+  if !orphaned.is_empty() {
+    display_orphaned_branches(&orphaned);
+  }
 
   // Show summary and help text
   display_summary(&branch_nodes);
@@ -195,7 +124,7 @@ pub fn handle_command(tree_matches: &clap::ArgMatches) -> Result<()> {
   Ok(())
 }
 
-pub fn display_summary(branch_nodes: &HashMap<String, BranchNode>) {
+pub fn display_summary(branch_nodes: &std::collections::HashMap<String, crate::tree_renderer::BranchNode>) {
   let branches_with_issues = branch_nodes.values().filter(|node| node.metadata.is_some()).count();
 
   let branches_with_prs = branch_nodes
@@ -221,4 +150,49 @@ pub fn display_summary(branch_nodes: &HashMap<String, BranchNode>) {
       format_command("twig github pr link <pr-url>")
     );
   }
+}
+
+fn display_empty_state_help() {
+  print_info("No user-defined dependencies or root branches found.");
+  println!("\nTo get started with branch dependencies:");
+  println!(
+    "  • Define root branches: {}",
+    format_command("twig branch root add <branch-name>")
+  );
+  println!(
+    "  • Add dependencies: {}",
+    format_command("twig branch depend <parent-branch>")
+  );
+  println!("  • View current setup: {}", format_command("twig branch list"));
+  println!("\nThis will create a tree structure showing your branch relationships.");
+}
+
+fn display_no_roots_warning(branch_nodes: &std::collections::HashMap<String, crate::tree_renderer::BranchNode>) {
+  print_warning("Found user-defined dependencies but no root branches.");
+
+  let branch_names: Vec<&String> = branch_nodes.keys().collect();
+  println!("\nAvailable branches:");
+  for name in &branch_names {
+    println!("  {name}");
+  }
+
+  println!("\nTo fix this, designate one or more root branches:");
+  println!("  {}", format_command("twig branch root add <branch-name>"));
+}
+
+fn display_orphaned_branches(orphaned: &[String]) {
+  println!("\n📝 Orphaned branches (no dependencies defined):");
+  for branch in orphaned {
+    println!("  • {branch}");
+  }
+
+  println!("\nTo organize these branches:");
+  println!(
+    "  • Add as root: {}",
+    format_command("twig branch root add <branch-name>")
+  );
+  println!(
+    "  • Add dependency: {}",
+    format_command("twig branch depend <parent-branch>")
+  );
 }

@@ -1,6 +1,12 @@
+//! # Twig CLI Entry Point
+//!
+//! The main entry point for the twig command-line tool, a Git-based developer
+//! productivity tool for managing branch dependencies and workflows.
+
 use anyhow::Result;
 use no_worries::{Config as NoWorriesConfig, Metadata as NoWorriesMetadata, no_worries};
 
+mod auto_dependency_discovery;
 mod cli;
 mod completion;
 mod config;
@@ -10,6 +16,7 @@ mod git;
 mod repo_state;
 mod state;
 mod tree_renderer;
+mod user_defined_dependency_resolver;
 mod utils;
 
 fn main() -> Result<()> {

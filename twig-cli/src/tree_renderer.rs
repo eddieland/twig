@@ -1,3 +1,8 @@
+//! # Branch Tree Renderer
+//!
+//! Provides tree visualization and rendering functionality for Git branch
+//! dependencies, including formatting, coloring, and hierarchical display.
+
 use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
 
@@ -141,6 +146,7 @@ impl<'a> TreeRenderer<'a> {
   }
 
   /// Helper method to render trees from root branches
+  #[allow(dead_code)]
   pub fn render<W: Write>(&mut self, writer: &mut W, roots: &[String]) -> io::Result<()> {
     for (i, root) in roots.iter().enumerate() {
       let is_last_root = i == roots.len() - 1;

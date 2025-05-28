@@ -1,3 +1,8 @@
+//! # Git Operations
+//!
+//! Core Git functionality including repository discovery, branch operations,
+//! fetching, and worktree management for the twig workflow system.
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};

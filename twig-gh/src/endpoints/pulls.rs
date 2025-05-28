@@ -1,3 +1,8 @@
+//! # GitHub Pull Request Endpoints
+//!
+//! GitHub API endpoint implementations for pull request operations,
+//! including fetching PRs, reviews, and status information.
+
 use anyhow::{Context, Result};
 use reqwest::StatusCode;
 

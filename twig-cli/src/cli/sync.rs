@@ -1,3 +1,9 @@
+//! # Sync Command
+//!
+//! CLI commands for synchronizing branch metadata with external services,
+//! automatically detecting and linking issues from branch names and commit
+//! messages.
+
 use anyhow::{Context, Result};
 use clap::{Arg, Command};
 use git2::{BranchType, Repository as Git2Repository};

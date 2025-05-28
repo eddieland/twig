@@ -1,3 +1,8 @@
+//! # Repository State Management
+//!
+//! Manages persistent state for Git repositories, including branch
+//! dependencies, metadata, and configuration storage for the twig tool.
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -442,6 +447,16 @@ impl RepoState {
   #[allow(dead_code)]
   pub fn is_root(&self, branch: &str) -> bool {
     self.root_branches.iter().any(|r| r.branch == branch)
+  }
+
+  /// Check if there are any user-defined dependencies
+  pub fn has_user_defined_dependencies(&self) -> bool {
+    !self.dependencies.is_empty()
+  }
+
+  /// Get all root branch names
+  pub fn get_root_branches(&self) -> Vec<String> {
+    self.root_branches.iter().map(|r| r.branch.clone()).collect()
   }
 }
 

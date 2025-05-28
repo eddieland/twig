@@ -1,3 +1,8 @@
+//! # Configuration Management
+//!
+//! Handles application configuration, directory management, and settings
+//! for the twig tool, including XDG base directory support.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 

@@ -1,3 +1,8 @@
+//! # Shell Completion
+//!
+//! Generates shell completion scripts for various shells (bash, zsh, fish,
+//! etc.) to provide tab completion for twig commands and arguments.
+
 use std::io;
 
 use anyhow::Result;

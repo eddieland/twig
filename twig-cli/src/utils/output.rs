@@ -1,3 +1,8 @@
+//! # Output Formatting
+//!
+//! Provides formatted output functions with colors, emojis, and consistent
+//! styling for user-facing messages and terminal output.
+
 use colored::Colorize;
 use emojis;
 
