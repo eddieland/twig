@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result};
 use reqwest::StatusCode;
+use tracing::{debug, info, instrument, trace, warn};
 
 use crate::client::GitHubClient;
 use crate::models::{GitHubPRReview, GitHubPRStatus, GitHubPullRequest};
@@ -68,8 +69,11 @@ impl GitHubClient {
   }
 
   /// Get a specific pull request
+  #[instrument(skip(self), level = "debug")]
   pub async fn get_pull_request(&self, owner: &str, repo: &str, pr_number: u32) -> Result<GitHubPullRequest> {
     let url = format!("{}/repos/{}/{}/pulls/{}", self.base_url, owner, repo, pr_number);
+    debug!("Fetching pull request #{} from {}/{}", pr_number, owner, repo);
+    trace!("GitHub API URL: {}", url);
 
     let response = self
       .client
@@ -81,18 +85,27 @@ impl GitHubClient {
       .await
       .context("Failed to fetch pull request")?;
 
-    match response.status() {
+    let status = response.status();
+    debug!("GitHub API response status: {}", status);
+
+    match status {
       StatusCode::OK => {
         // First get the response body as text
         let body = response.text().await.context("Failed to read response body")?;
+        trace!("GitHub API response body: {}", body);
 
         // Then try to parse it as JSON
         let pr = match serde_json::from_str::<GitHubPullRequest>(&body) {
-          Ok(pr) => pr,
+          Ok(pr) => {
+            debug!("Successfully parsed PR #{} for {}/{}", pr_number, owner, repo);
+            pr
+          }
           Err(e) => {
+            warn!("Failed to parse PR response: {}", e);
             // Try to extract the error message from the response
             if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&body) {
               if let Some(message) = error_json.get("message").and_then(|m| m.as_str()) {
+                warn!("GitHub API error: {}", message);
                 return Err(anyhow::anyhow!(
                   "Failed to parse pull request: GitHub API error: {}",
                   message
@@ -106,15 +119,21 @@ impl GitHubClient {
 
         Ok(pr)
       }
-      StatusCode::NOT_FOUND => Err(anyhow::anyhow!("Pull request #{} not found", pr_number)),
-      StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => Err(anyhow::anyhow!(
-        "Authentication failed. Please check your GitHub credentials."
-      )),
-      _ => Err(anyhow::anyhow!(
-        "Unexpected error: HTTP {} - {}",
-        response.status(),
-        response.text().await.unwrap_or_default()
-      )),
+      StatusCode::NOT_FOUND => {
+        warn!("Pull request #{} not found for {}/{}", pr_number, owner, repo);
+        Err(anyhow::anyhow!("Pull request #{} not found", pr_number))
+      }
+      StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+        warn!("Authentication failed when accessing GitHub API");
+        Err(anyhow::anyhow!(
+          "Authentication failed. Please check your GitHub credentials."
+        ))
+      }
+      _ => {
+        let error_text = response.text().await.unwrap_or_default();
+        warn!("Unexpected GitHub API error: HTTP {} - {}", status, error_text);
+        Err(anyhow::anyhow!("Unexpected error: HTTP {} - {}", status, error_text))
+      }
     }
   }
 
@@ -230,16 +249,25 @@ impl GitHubClient {
   }
 
   /// Get full PR status (PR details, reviews, and check runs)
+  #[instrument(skip(self), level = "debug")]
   pub async fn get_pr_status(&self, owner: &str, repo: &str, pr_number: u32) -> Result<GitHubPRStatus> {
+    info!("Fetching complete PR status for #{} from {}/{}", pr_number, owner, repo);
+
     // Get the PR details
+    debug!("Fetching PR details");
     let pr = self.get_pull_request(owner, repo, pr_number).await?;
 
     // Get the reviews
+    debug!("Fetching PR reviews");
     let reviews = self.get_pull_request_reviews(owner, repo, pr_number).await?;
+    debug!("Found {} reviews", reviews.len());
 
     // Get the check runs
+    debug!("Fetching check runs for commit {}", pr.head.sha);
     let check_runs = self.get_check_runs(owner, repo, &pr.head.sha).await?;
+    debug!("Found {} check runs", check_runs.len());
 
+    info!("Successfully fetched complete PR status");
     Ok(GitHubPRStatus {
       pr,
       reviews,

@@ -6,6 +6,7 @@
 
 use anyhow::{Context, Result};
 use reqwest::Client;
+use tracing::{debug, info, instrument, trace, warn};
 
 use crate::models::GitHubAuth;
 
@@ -18,19 +19,26 @@ pub struct GitHubClient {
 
 impl GitHubClient {
   /// Create a new GitHub client
+  #[instrument(skip(auth), level = "debug")]
   pub fn new(auth: GitHubAuth) -> Self {
+    debug!("Creating new GitHub client");
     let client = Client::new();
-    Self {
+    let instance = Self {
       client,
       base_url: "https://api.github.com".to_string(),
       auth,
-    }
+    };
+    debug!("GitHub client created with base URL: {}", instance.base_url);
+    instance
   }
 
   /// Test the GitHub connection by fetching the current user
+  #[instrument(skip(self), level = "debug")]
   pub async fn test_connection(&self) -> Result<bool> {
     let url = format!("{}/user", self.base_url);
+    debug!("Testing GitHub connection to {}", url);
 
+    trace!("Sending request to GitHub API");
     let response = self
       .client
       .get(&url)
@@ -41,18 +49,33 @@ impl GitHubClient {
       .await
       .context("Failed to connect to GitHub")?;
 
-    Ok(response.status().is_success())
+    let status = response.status();
+    let success = status.is_success();
+
+    if success {
+      info!("Successfully connected to GitHub API (status: {})", status);
+    } else {
+      warn!("Failed to connect to GitHub API (status: {})", status);
+    }
+
+    Ok(success)
   }
 }
 
 /// Create a GitHub client from credentials
+#[instrument(level = "debug")]
 pub fn create_github_client(username: &str, token: &str) -> Result<GitHubClient> {
+  debug!("Creating GitHub client with username: {}", username);
+
   let auth = GitHubAuth {
     username: username.to_string(),
     token: token.to_string(),
   };
 
-  Ok(GitHubClient::new(auth))
+  let client = GitHubClient::new(auth);
+  debug!("GitHub client created successfully");
+
+  Ok(client)
 }
 
 #[cfg(test)]

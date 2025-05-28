@@ -5,6 +5,9 @@
 
 use anyhow::Result;
 use no_worries::{Config as NoWorriesConfig, Metadata as NoWorriesMetadata, no_worries};
+use tracing::debug;
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{EnvFilter, fmt};
 
 mod auto_dependency_discovery;
 mod cli;
@@ -33,5 +36,23 @@ fn main() -> Result<()> {
   no_worries!(config).expect("Failed to set up panic handler");
 
   let matches = cli::build_cli().get_matches();
+
+  // Set up tracing based on verbosity level
+  let verbose_count = matches.get_count("verbose");
+  let level = match verbose_count {
+    0 => tracing::Level::WARN,  // Default: warnings and errors
+    1 => tracing::Level::INFO,  // -v: info, warnings, and errors
+    2 => tracing::Level::DEBUG, // -vv: debug, info, warnings, and errors
+    _ => tracing::Level::TRACE, // -vvv or more: trace and everything else
+  };
+
+  // Initialize the tracing subscriber with the specified level
+  tracing_subscriber::registry()
+    .with(fmt::layer())
+    .with(EnvFilter::from_default_env().add_directive(level.into()))
+    .init();
+
+  debug!("Tracing initialized with level: {}", level);
+
   cli::handle_commands(&matches)
 }

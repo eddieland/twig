@@ -5,7 +5,7 @@
 //! integrations.
 
 use anyhow::Result;
-use clap::Command;
+use clap::{Arg, ArgAction, Command};
 
 mod branch;
 mod commands;
@@ -31,6 +31,20 @@ pub fn build_cli() -> Command {
     )
     .version(env!("CARGO_PKG_VERSION"))
     .subcommand_required(false)
+    .arg_required_else_help(true)
+    .arg(
+      Arg::new("verbose")
+        .short('v')
+        .long("verbose")
+        .action(ArgAction::Count)
+        .help("Sets the level of verbosity (can be used multiple times)")
+        .long_help(
+          "Sets the level of verbosity for tracing and logging output.\n\
+                 -v: Show info level messages\n\
+                 -vv: Show debug level messages\n\
+                 -vvv: Show trace level messages",
+        ),
+    )
     .subcommand(commands::build_init_command())
     .subcommand(commands::build_panic_command())
     .subcommand(branch::build_command())

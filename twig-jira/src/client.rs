@@ -6,6 +6,7 @@
 
 use anyhow::{Context, Result};
 use reqwest::Client;
+use tracing::{debug, info, instrument, trace, warn};
 
 use crate::models::JiraAuth;
 
@@ -18,19 +19,26 @@ pub struct JiraClient {
 
 impl JiraClient {
   /// Create a new Jira client
+  #[instrument(skip(auth), level = "debug")]
   pub fn new(base_url: &str, auth: JiraAuth) -> Self {
+    debug!("Creating new Jira client for base URL: {}", base_url);
     let client = Client::new();
-    Self {
+    let instance = Self {
       client,
       base_url: base_url.to_string(),
       auth,
-    }
+    };
+    debug!("Jira client created successfully");
+    instance
   }
 
   /// Test the Jira connection by fetching the current user
+  #[instrument(skip(self), level = "debug")]
   pub async fn test_connection(&self) -> Result<bool> {
     let url = format!("{}/rest/api/2/myself", self.base_url);
+    debug!("Testing Jira connection to {}", url);
 
+    trace!("Sending request to Jira API");
     let response = self
       .client
       .get(&url)
@@ -39,18 +47,33 @@ impl JiraClient {
       .await
       .context("Failed to connect to Jira")?;
 
-    Ok(response.status().is_success())
+    let status = response.status();
+    let success = status.is_success();
+
+    if success {
+      info!("Successfully connected to Jira API (status: {})", status);
+    } else {
+      warn!("Failed to connect to Jira API (status: {})", status);
+    }
+
+    Ok(success)
   }
 }
 
 /// Create a Jira client from credentials
+#[instrument(level = "debug")]
 pub fn create_jira_client(base_url: &str, username: &str, api_token: &str) -> Result<JiraClient> {
+  debug!("Creating Jira client for URL: {} with username: {}", base_url, username);
+
   let auth = JiraAuth {
     username: username.to_string(),
     api_token: api_token.to_string(),
   };
 
-  Ok(JiraClient::new(base_url, auth))
+  let client = JiraClient::new(base_url, auth);
+  debug!("Jira client created successfully");
+
+  Ok(client)
 }
 
 #[cfg(test)]

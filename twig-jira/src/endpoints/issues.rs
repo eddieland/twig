@@ -5,14 +5,18 @@
 
 use anyhow::{Context, Result};
 use reqwest::StatusCode;
+use tracing::{debug, info, instrument, trace, warn};
 
 use crate::client::JiraClient;
 use crate::models::JiraIssue;
 
 impl JiraClient {
   /// Get a Jira issue by key
+  #[instrument(skip(self), level = "debug")]
   pub async fn get_issue(&self, issue_key: &str) -> Result<JiraIssue> {
     let url = format!("{}/rest/api/2/issue/{}", self.base_url, issue_key);
+    debug!("Fetching Jira issue: {}", issue_key);
+    trace!("Jira API URL: {}", url);
 
     let response = self
       .client
@@ -22,23 +26,37 @@ impl JiraClient {
       .await
       .context("Failed to fetch Jira issue")?;
 
-    match response.status() {
+    let status = response.status();
+    debug!("Jira API response status: {}", status);
+
+    match status {
       StatusCode::OK => {
+        debug!("Successfully received Jira issue data");
         let issue = response
           .json::<JiraIssue>()
           .await
           .context("Failed to parse Jira issue")?;
+
+        info!("Successfully fetched Jira issue: {}", issue_key);
+        trace!("Issue summary: {}", issue.fields.summary);
+
         Ok(issue)
       }
-      StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => Err(anyhow::anyhow!(
-        "Authentication failed. Please check your Jira credentials."
-      )),
-      StatusCode::NOT_FOUND => Err(anyhow::anyhow!("Issue {} not found", issue_key)),
-      _ => Err(anyhow::anyhow!(
-        "Unexpected error: HTTP {} - {}",
-        response.status(),
-        response.text().await.unwrap_or_default()
-      )),
+      StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+        warn!("Authentication failed when accessing Jira API");
+        Err(anyhow::anyhow!(
+          "Authentication failed. Please check your Jira credentials."
+        ))
+      }
+      StatusCode::NOT_FOUND => {
+        warn!("Jira issue not found: {}", issue_key);
+        Err(anyhow::anyhow!("Issue {} not found", issue_key))
+      }
+      _ => {
+        let error_text = response.text().await.unwrap_or_default();
+        warn!("Unexpected Jira API error: HTTP {} - {}", status, error_text);
+        Err(anyhow::anyhow!("Unexpected error: HTTP {} - {}", status, error_text))
+      }
     }
   }
 }
