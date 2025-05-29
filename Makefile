@@ -15,7 +15,7 @@ fmt: ## Format code using rustfmt
 
 .PHONY: lint
 lint: ## Run clippy for linting
-	cargo clippy -- -D warnings
+	cargo clippy --workspace -- -D warnings
 
 .PHONY: lint-all
 lint-all: ## Run clippy with all features
@@ -23,7 +23,7 @@ lint-all: ## Run clippy with all features
 
 .PHONY: test
 test: build ## Run tests
-	cargo nextest run
+	cargo nextest run --workspace
 
 .PHONY: test-all
 test-all: ## Run tests with all features
@@ -31,15 +31,15 @@ test-all: ## Run tests with all features
 
 .PHONY: check
 check: ## Run cargo check
-	cargo check
+	cargo check --workspace
 
 .PHONY: doc
 doc: ## Generate documentation
-	cargo doc --no-deps
+	cargo doc --workspace --no-deps
 
 .PHONY: watch-test
 watch-test: ## Run tests in watch mode (requires cargo-watch)
-	cargo watch -x "nextest run"
+	cargo watch -x "nextest run --workspace"
 
 .PHONY: all
 all: fmt lint test ## Run fmt, lint, and test
@@ -60,7 +60,7 @@ insta-reject: ## Reject all pending Insta snapshots
 
 .PHONY: update-snapshots
 update-snapshots: ## Run tests and update snapshots
-	INSTA_UPDATE=1 cargo nextest run
+	INSTA_UPDATE=1 cargo nextest run --workspace
 
 ### Analysis
 
@@ -90,15 +90,15 @@ coverage-report: ## Generate LCOV report
 
 .PHONY: build
 build: ## Build the project
-	cargo build
+	cargo build --workspace
 
 .PHONY: release
 release: ## Build release version
-	cargo build --release
+	cargo build --release --workspace
 
 .PHONY: release-size
 release-size: ## Build size-optimized release version
-	cargo build --release
+	cargo build --release --workspace
 	@echo "\nBinary size before compression:"
 	@du -h target/release/twig
 
@@ -108,7 +108,7 @@ clean: ## Clean build artifacts
 
 .PHONY: run
 run: ## Run the application
-	cargo run
+	cargo run --workspace
 
 ### Installation
 

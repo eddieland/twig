@@ -33,7 +33,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
       - name: Build release
-        run: cargo build --release
+        run: cargo build --release --workspace
       - name: Strip binary
         run: strip target/release/twig
       - name: Extract version
@@ -63,7 +63,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
       - name: Build release
-        run: cargo build --release
+        run: cargo build --release --workspace
       - name: Strip binary
         run: strip target/release/twig
       - name: Extract version

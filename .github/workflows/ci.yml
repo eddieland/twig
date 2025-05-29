@@ -34,7 +34,7 @@ jobs:
 
       - name: Run clippy
         if: matrix.check == 'clippy'
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --workspace -- -D warnings
 
   # Tests can run in parallel with the fast-checks
   test:
@@ -54,9 +54,9 @@ jobs:
         with:
           tool: cargo-nextest
       - name: Build
-        run: cargo build
+        run: cargo build --workspace
       - name: Run tests
-        run: cargo nextest run
+        run: cargo nextest run --workspace
 
   # Build job depends on both fast-checks and test
   build:
@@ -70,7 +70,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
       - name: Build release
-        run: cargo build --release
+        run: cargo build --release --workspace
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
