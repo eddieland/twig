@@ -58,7 +58,6 @@ pub struct RepoState {
   pub branches: HashMap<String, BranchMetadata>,
   pub dependencies: Vec<BranchDependency>,
   pub root_branches: Vec<RootBranch>,
-  pub config_overrides: serde_json::Value,
 
   // Pre-built indices for fast lookups (rebuilt on load, not saved)
   #[serde(skip)]
@@ -86,7 +85,6 @@ impl RepoState {
         branches: HashMap::new(),
         dependencies: Vec::new(),
         root_branches: Vec::new(),
-        config_overrides: serde_json::Value::Object(serde_json::Map::new()),
         branch_to_jira_index: HashMap::new(),
         jira_to_branch_index: HashMap::new(),
         dependency_children_index: HashMap::new(),
