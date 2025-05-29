@@ -6,11 +6,13 @@
 use anyhow::{Context, Result};
 use clap::{Arg, Command};
 use colored::Colorize;
+use tabled::settings::Style;
+use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
 use twig_jira::create_jira_client;
 
 use crate::creds::get_jira_credentials;
-use crate::utils::output::{print_error, print_info, print_warning};
+use crate::utils::output::{print_error, print_info, print_success, print_warning};
 
 /// Build the jira subcommand
 pub fn build_command() -> Command {
@@ -29,11 +31,51 @@ pub fn build_command() -> Command {
         .about("Jira issue commands")
         .long_about(
           "Commands for working with Jira issues.\n\n\
-                    These commands allow you to view and manage Jira issues directly\n\
-                    from the command line. You can view issue details and transition\n\
-                    issues through your workflow.",
+                     These commands allow you to view and manage Jira issues directly\n\
+                     from the command line. You can view issue details and transition\n\
+                     issues through your workflow.",
         )
         .alias("i")
+        .subcommand(
+          Command::new("list")
+            .about("List Jira issues")
+            .long_about(
+              "List Jira issues with filtering options.\n\n\
+                           This command displays a table of Jira issues with key information\n\
+                           such as issue key, summary, status, and assignee.",
+            )
+            .alias("ls")
+            .arg(
+              Arg::new("project")
+                .help("Filter by project key")
+                .long("project")
+                .short('p')
+                .value_name("PROJECT"),
+            )
+            .arg(
+              Arg::new("status")
+                .help("Filter by issue status")
+                .long("status")
+                .short('s')
+                .value_name("STATUS"),
+            )
+            .arg(
+              Arg::new("assignee")
+                .help("Filter by assignee (me or username)")
+                .long("assignee")
+                .short('a')
+                .value_name("ASSIGNEE"),
+            )
+            .arg(
+              Arg::new("limit")
+                .help("Maximum number of issues to display")
+                .long("limit")
+                .short('l')
+                .value_name("COUNT")
+                .value_parser(clap::value_parser!(u32))
+                .default_value("50"),
+            ),
+        )
         .subcommand(
           Command::new("view")
             .about("View a Jira issue")
@@ -56,10 +98,10 @@ pub fn build_command() -> Command {
             .about("Transition a Jira issue to a new status")
             .long_about(
               "Transition a Jira issue to a new status in the workflow.\n\n\
-                            This command allows you to move an issue through your workflow\n\
-                            by transitioning it to a new status. You can specify the transition\n\
-                            by name or ID. If no transition is specified, available transitions\n\
-                            will be displayed.",
+                             This command allows you to move an issue through your workflow\n\
+                             by transitioning it to a new status. You can specify the transition\n\
+                             by name or ID. If no transition is specified, available transitions\n\
+                             will be displayed.",
             )
             .alias("trans")
             .arg(
@@ -72,6 +114,43 @@ pub fn build_command() -> Command {
               Arg::new("transition")
                 .help("The transition name or ID (e.g., 'In Progress')")
                 .index(2),
+            ),
+        )
+        .subcommand(
+          Command::new("comment")
+            .about("Add a comment to a Jira issue")
+            .long_about(
+              "Add a comment to a Jira issue.\n\n\
+                             This command allows you to add a comment to a Jira issue\n\
+                             either by providing the comment text directly or by reading\n\
+                             it from a file.",
+            )
+            .arg(
+              Arg::new("issue_key")
+                .help("The Jira issue key (e.g., PROJ-123)")
+                .required(true)
+                .index(1),
+            )
+            .arg(Arg::new("comment_text").help("The comment text").index(2))
+            .arg(
+              Arg::new("file")
+                .help("Path to a file containing the comment text")
+                .long("file")
+                .short('f')
+                .value_name("PATH")
+                .conflicts_with("comment_text"),
+            )
+            .arg(
+              Arg::new("dry_run")
+                .help("Show what would be done without actually adding the comment")
+                .long("dry-run")
+                .action(clap::ArgAction::SetTrue),
+            )
+            .arg(
+              Arg::new("preview")
+                .help("Show comment preview before submission")
+                .long("preview")
+                .action(clap::ArgAction::SetTrue),
             ),
         ),
     )
@@ -176,16 +255,249 @@ fn handle_issue_commands(issue_matches: &clap::ArgMatches) -> Result<()> {
       let issue_key = view_matches.get_one::<String>("issue_key").unwrap();
       handle_view_issue_command(issue_key)
     }
+    Some(("list", list_matches)) => handle_list_issues_command(list_matches),
     Some(("transition", transition_matches)) => {
       let issue_key = transition_matches.get_one::<String>("issue_key").unwrap();
       let transition = transition_matches.get_one::<String>("transition");
       handle_transition_issue_command(issue_key, transition.map(|s| s.as_str()))
     }
+    Some(("comment", comment_matches)) => handle_comment_issue_command(comment_matches),
     _ => {
       print_warning("Unknown issue command.");
       Ok(())
     }
   }
+}
+
+/// Handle the list issues command
+fn handle_list_issues_command(list_matches: &clap::ArgMatches) -> Result<()> {
+  use colored::Colorize;
+
+  // Create a tokio runtime for async operations
+  let rt = Runtime::new().context("Failed to create async runtime")?;
+
+  rt.block_on(async {
+    // Get Jira credentials
+    let creds = match get_jira_credentials() {
+      Ok(creds) => creds,
+      Err(e) => {
+        print_error(&format!("Failed to get Jira credentials: {e}"));
+        print_info("Use the 'twig creds check' command to verify your credentials.");
+        return Ok(());
+      }
+    };
+
+    // Load environment variables from .env file
+    dotenv::dotenv().ok();
+
+    // Get Jira host from environment or use default
+    let jira_host = std::env::var("JIRA_HOST").unwrap_or_else(|_| "https://eddieland.atlassian.net".to_string());
+
+    // Create Jira client
+    let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
+
+    // Get filter parameters
+    let project = list_matches.get_one::<String>("project").map(|s| s.as_str());
+    let status = list_matches.get_one::<String>("status").map(|s| s.as_str());
+    let assignee = list_matches.get_one::<String>("assignee").map(|s| s.as_str());
+    let limit = list_matches.get_one::<u32>("limit").copied().unwrap_or(50);
+
+    // Set up pagination
+    let pagination = Some((limit, 0));
+
+    // Build filter description for output
+    let mut filters = Vec::new();
+    if let Some(p) = project {
+      filters.push(format!("project={p}"));
+    }
+    if let Some(s) = status {
+      filters.push(format!("status=\"{s}\""));
+    }
+    if let Some(a) = assignee {
+      if a == "me" {
+        filters.push("assignee=me".to_string());
+      } else {
+        filters.push(format!("assignee=\"{a}\""));
+      }
+    }
+
+    let filter_desc = if filters.is_empty() {
+      "all".to_string()
+    } else {
+      filters.join(", ")
+    };
+
+    // Fetch issues
+    println!("Fetching Jira issues with filters: {filter_desc}");
+
+    match jira_client.list_issues(project, status, assignee, pagination).await {
+      Ok(issues) => {
+        if issues.is_empty() {
+          println!("No issues found matching the specified filters");
+          return Ok(());
+        }
+
+        // Define a struct for issue data with Tabled trait
+        #[derive(Tabled)]
+        struct IssueRow {
+          #[tabled(rename = "Key")]
+          key: String,
+          #[tabled(rename = "Summary")]
+          summary: String,
+          #[tabled(rename = "Status")]
+          status: String,
+          #[tabled(rename = "Assignee")]
+          assignee: String,
+        }
+
+        // Convert issues to table rows
+        let rows: Vec<IssueRow> = issues
+          .into_iter()
+          .map(|issue| {
+            // Truncate summary if too long
+            let summary = if issue.fields.summary.len() > 47 {
+              format!("{}...", &issue.fields.summary[0..44])
+            } else {
+              issue.fields.summary.clone()
+            };
+
+            // Format status with color
+            let status_colored = match issue.fields.status.name.as_str() {
+              "To Do" | "Open" | "New" => issue.fields.status.name.blue().to_string(),
+              "In Progress" | "In Review" => issue.fields.status.name.yellow().to_string(),
+              "Done" | "Closed" | "Resolved" => issue.fields.status.name.green().to_string(),
+              _ => issue.fields.status.name.normal().to_string(),
+            };
+
+            // Get assignee
+            let assignee = issue
+              .fields
+              .assignee
+              .map(|a| a.display_name)
+              .unwrap_or_else(|| "Unassigned".to_string());
+
+            IssueRow {
+              key: issue.key.bold().to_string(),
+              summary,
+              status: status_colored,
+              assignee,
+            }
+          })
+          .collect();
+
+        // Create and display the table with a simpler style
+        println!();
+        println!("{}", Table::new(rows).with(Style::ascii()));
+        println!();
+      }
+      Err(e) => {
+        print_error(&format!("Failed to fetch issues: {e}"));
+      }
+    }
+
+    Ok(())
+  })
+}
+
+/// Handle the comment issue command
+fn handle_comment_issue_command(comment_matches: &clap::ArgMatches) -> Result<()> {
+  use std::fs;
+  use std::io::{self, Read};
+
+  // Create a tokio runtime for async operations
+  let rt = Runtime::new().context("Failed to create async runtime")?;
+
+  rt.block_on(async {
+    // Get issue key
+    let issue_key = comment_matches.get_one::<String>("issue_key").unwrap();
+
+    // Get comment text from argument, file, or stdin
+    let comment_text = if let Some(text) = comment_matches.get_one::<String>("comment_text") {
+      text.clone()
+    } else if let Some(file_path) = comment_matches.get_one::<String>("file") {
+      match fs::read_to_string(file_path) {
+        Ok(content) => content,
+        Err(e) => {
+          print_error(&format!("Failed to read comment file: {e}"));
+          return Ok(());
+        }
+      }
+    } else {
+      // If no comment text or file is provided, read from stdin
+      println!("Enter comment text (press Ctrl+D when finished):");
+      let mut buffer = String::new();
+      match io::stdin().read_to_string(&mut buffer) {
+        Ok(_) => buffer,
+        Err(e) => {
+          print_error(&format!("Failed to read from stdin: {e}"));
+          return Ok(());
+        }
+      }
+    };
+
+    // Check if comment is empty
+    if comment_text.trim().is_empty() {
+      print_error("Comment text cannot be empty");
+      return Ok(());
+    }
+
+    // Preview comment if requested
+    let preview = comment_matches.get_flag("preview");
+    if preview {
+      println!("\nComment Preview for {}: ", issue_key.bold());
+      println!("{comment_text}\n");
+      println!("Press Enter to continue or Ctrl+C to cancel...");
+      let mut input = String::new();
+      io::stdin().read_line(&mut input).ok();
+    }
+
+    // Get dry run flag
+    let dry_run = comment_matches.get_flag("dry_run");
+
+    // Get Jira credentials
+    let creds = match get_jira_credentials() {
+      Ok(creds) => creds,
+      Err(e) => {
+        print_error(&format!("Failed to get Jira credentials: {e}"));
+        print_info("Use the 'twig creds check' command to verify your credentials.");
+        return Ok(());
+      }
+    };
+
+    // Load environment variables from .env file
+    dotenv::dotenv().ok();
+
+    // Get Jira host from environment or use default
+    let jira_host = std::env::var("JIRA_HOST").unwrap_or_else(|_| "https://eddieland.atlassian.net".to_string());
+
+    // Create Jira client
+    let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
+
+    // Add comment
+    if dry_run {
+      println!("Dry run: Would add comment to issue {issue_key}");
+      println!("Comment text: {comment_text}");
+      return Ok(());
+    }
+
+    match jira_client.add_comment(issue_key, &comment_text, false).await {
+      Ok(Some(comment)) => {
+        print_success(&format!("Successfully added comment to issue {issue_key}"));
+        print_info(&format!("Comment ID: {}", comment.id));
+        print_info(&format!("Created: {}", comment.created));
+        Ok(())
+      }
+      Ok(None) => {
+        // This shouldn't happen since dry_run is false
+        print_warning("No comment was added (dry run)");
+        Ok(())
+      }
+      Err(e) => {
+        print_error(&format!("Failed to add comment: {e}"));
+        Ok(())
+      }
+    }
+  })
 }
 
 /// Handle the view issue command

@@ -6,7 +6,10 @@
 
 use anyhow::Result;
 use clap::{Arg, Command};
+use colored::Colorize;
 use git2::Repository as Git2Repository;
+use tabled::settings::Style;
+use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
 use twig_gh::{GitHubPRStatus, create_github_client};
 
@@ -35,12 +38,68 @@ pub fn build_command() -> Command {
                   authenticated user if successful.",
     ))
     .subcommand(
+      Command::new("checks")
+        .about("View CI/CD checks for a PR")
+        .alias("ci")
+        .long_about(
+          "View CI/CD checks for a GitHub pull request.\n\n\
+                     This command displays the status of CI/CD checks for a specific pull request,\n\
+                     including check name, status, conclusion, and links to detailed results.",
+        )
+        .arg(
+          Arg::new("pr_number")
+            .help("PR number (defaults to current branch's PR)")
+            .index(1),
+        )
+        .arg(
+          Arg::new("repo")
+            .help("Path to a specific repository (defaults to current repository)")
+            .long("repo")
+            .short('r')
+            .value_name("PATH"),
+        ),
+    )
+    .subcommand(
       Command::new("pr")
         .about("Pull request operations")
         .long_about(
           "Manage GitHub pull requests.\n\n\
-                    This command group provides functionality for working with GitHub pull requests,\n\
-                    including viewing status and linking branches to pull requests.",
+                     This command group provides functionality for working with GitHub pull requests,\n\
+                     including viewing status and linking branches to pull requests.",
+        )
+        .subcommand(
+          Command::new("list")
+            .about("List pull requests for a repository")
+            .alias("ls")
+            .long_about(
+              "List pull requests for a repository with filtering options.\n\n\
+                          This command displays a table of pull requests with key information\n\
+                          such as PR number, title, author, state, and creation date.",
+            )
+            .arg(
+              Arg::new("state")
+                .help("Filter by PR state (open, closed, all)")
+                .long("state")
+                .short('s')
+                .value_name("STATE")
+                .default_value("open"),
+            )
+            .arg(
+              Arg::new("repo")
+                .help("Path to a specific repository (defaults to current repository)")
+                .long("repo")
+                .short('r')
+                .value_name("PATH"),
+            )
+            .arg(
+              Arg::new("limit")
+                .help("Maximum number of PRs to display")
+                .long("limit")
+                .short('l')
+                .value_name("COUNT")
+                .value_parser(clap::value_parser!(u32))
+                .default_value("30"),
+            ),
         )
         .subcommand(
           Command::new("status")
@@ -74,8 +133,10 @@ pub fn build_command() -> Command {
 pub fn handle_commands(github_matches: &clap::ArgMatches) -> Result<()> {
   match github_matches.subcommand() {
     Some(("check", _)) => handle_check_command(),
+    Some(("checks", checks_matches)) => handle_checks_command(checks_matches),
     Some(("pr", pr_matches)) => match pr_matches.subcommand() {
       Some(("status", _)) => handle_pr_status_command(),
+      Some(("list", list_matches)) => handle_pr_list_command(list_matches),
       Some(("link", link_matches)) => {
         let pr_url_or_id = link_matches.get_one::<String>("pr_url_or_id").unwrap();
         handle_pr_link_command(pr_url_or_id)
@@ -142,6 +203,228 @@ fn handle_check_command() -> Result<()> {
     }
     Err(e) => {
       print_error(&format!("Failed to authenticate with GitHub: {e}"));
+    }
+  }
+
+  Ok(())
+}
+
+/// Handle the checks command
+fn handle_checks_command(checks_matches: &clap::ArgMatches) -> Result<()> {
+  use std::path::PathBuf;
+
+  // Create a runtime for async operations
+  let rt = Runtime::new()?;
+
+  // Get GitHub credentials
+  let credentials = match get_github_credentials() {
+    Ok(creds) => creds,
+    Err(e) => {
+      print_error(&format!("Failed to get GitHub credentials: {e}"));
+      return Ok(());
+    }
+  };
+
+  // Create GitHub client
+  let github_client = create_github_client(&credentials.username, &credentials.password)?;
+
+  // Get repository path (current or specified)
+  let repo_path = if let Some(path) = checks_matches.get_one::<String>("repo") {
+    PathBuf::from(path)
+  } else {
+    match detect_current_repository() {
+      Ok(path) => path,
+      Err(e) => {
+        print_error(&format!("Failed to detect current repository: {e}"));
+        return Ok(());
+      }
+    }
+  };
+
+  // Open the git repository
+  let repo = match Git2Repository::open(&repo_path) {
+    Ok(repo) => repo,
+    Err(e) => {
+      print_error(&format!("Failed to open git repository: {e}"));
+      return Ok(());
+    }
+  };
+
+  // Get the remote URL to extract owner and repo
+  let remote = match repo.find_remote("origin") {
+    Ok(remote) => remote,
+    Err(e) => {
+      print_error(&format!("Failed to find remote 'origin': {e}"));
+      return Ok(());
+    }
+  };
+
+  let remote_url = match remote.url() {
+    Some(url) => url,
+    None => {
+      print_error("Failed to get remote URL");
+      return Ok(());
+    }
+  };
+
+  // Extract owner and repo from remote URL
+  let (owner, repo_name) = match github_client.extract_repo_info_from_url(remote_url) {
+    Ok((owner, repo)) => (owner, repo),
+    Err(e) => {
+      print_error(&format!("Failed to extract repository info from URL: {e}"));
+      return Ok(());
+    }
+  };
+
+  // Determine PR number
+  let pr_number = if let Some(pr_num_str) = checks_matches.get_one::<String>("pr_number") {
+    // PR number provided as argument
+    match pr_num_str.parse::<u32>() {
+      Ok(num) => num,
+      Err(_) => {
+        print_error(&format!("Invalid PR number: {pr_num_str}"));
+        return Ok(());
+      }
+    }
+  } else {
+    // Try to get PR number from current branch
+    let head = match repo.head() {
+      Ok(head) => head,
+      Err(e) => {
+        print_error(&format!("Failed to get repository HEAD: {e}"));
+        return Ok(());
+      }
+    };
+
+    let branch_name = match head.shorthand() {
+      Some(name) => name,
+      None => {
+        print_error("Failed to get branch name");
+        return Ok(());
+      }
+    };
+
+    // Load the repository state
+    let repo_state = match RepoState::load(&repo_path) {
+      Ok(state) => state,
+      Err(e) => {
+        print_error(&format!("Failed to load repository state: {e}"));
+        return Ok(());
+      }
+    };
+
+    // Check if the branch has an associated PR
+    let branch_issue = repo_state.get_branch_issue_by_branch(branch_name);
+
+    if let Some(branch_issue) = branch_issue {
+      if let Some(pr_number) = branch_issue.github_pr {
+        pr_number
+      } else {
+        print_error(&format!("Branch '{branch_name}' has no associated PR"));
+        print_info(&format!(
+          "Link a PR with {} or specify a PR number",
+          format_command("twig github pr link <pr-url>")
+        ));
+        return Ok(());
+      }
+    } else {
+      print_error(&format!("Branch '{branch_name}' has no associated PR"));
+      print_info(&format!(
+        "Link a PR with {} or specify a PR number",
+        format_command("twig github pr link <pr-url>")
+      ));
+      return Ok(());
+    }
+  };
+
+  // Fetch PR to get the commit SHA
+  println!("Fetching PR #{pr_number} for {owner}/{repo_name}...");
+
+  let pr = match rt.block_on(github_client.get_pull_request(&owner, &repo_name, pr_number)) {
+    Ok(pr) => pr,
+    Err(e) => {
+      print_error(&format!("Failed to fetch PR: {e}"));
+      return Ok(());
+    }
+  };
+
+  // Fetch check runs for the PR's head commit
+  println!("Fetching checks for commit {}...", pr.head.sha);
+
+  match rt.block_on(github_client.get_check_runs(&owner, &repo_name, &pr.head.sha)) {
+    Ok(check_runs) => {
+      if check_runs.is_empty() {
+        println!("No checks found for this PR");
+        return Ok(());
+      }
+
+      // Define a struct for check run data with Tabled trait
+      #[derive(Tabled)]
+      struct CheckRunRow {
+        #[tabled(rename = "Check Name")]
+        name: String,
+        #[tabled(rename = "Status")]
+        status: String,
+        #[tabled(rename = "Conclusion")]
+        conclusion: String,
+        #[tabled(rename = "Started At")]
+        started_at: String,
+      }
+
+      // Convert check runs to table rows
+      let rows: Vec<CheckRunRow> = check_runs
+        .iter()
+        .map(|check| {
+          // Format status with color
+          let status_colored = match check.status.as_str() {
+            "completed" => check.status.green().to_string(),
+            "in_progress" => check.status.yellow().to_string(),
+            "queued" => check.status.blue().to_string(),
+            _ => check.status.normal().to_string(),
+          };
+
+          // Format conclusion with color
+          let conclusion = match &check.conclusion {
+            Some(conclusion) => match conclusion.as_str() {
+              "success" => conclusion.green().to_string(),
+              "failure" => conclusion.red().to_string(),
+              "neutral" => conclusion.normal().to_string(),
+              "cancelled" => conclusion.yellow().to_string(),
+              "skipped" => conclusion.blue().to_string(),
+              "timed_out" => conclusion.red().to_string(),
+              "action_required" => conclusion.yellow().to_string(),
+              _ => conclusion.normal().to_string(),
+            },
+            None => "N/A".normal().to_string(),
+          };
+
+          // Format date to be more readable
+          let started_date = check.started_at.split('T').next().unwrap_or(&check.started_at);
+
+          CheckRunRow {
+            name: check.name.clone(),
+            status: status_colored,
+            conclusion,
+            started_at: started_date.to_string(),
+          }
+        })
+        .collect();
+
+      // Create and display the table with a simpler style
+      println!();
+      println!("{}", Table::new(rows).with(Style::ascii()));
+
+      // Display details URLs
+      println!("\nDetails:");
+      for check in &check_runs {
+        if let Some(url) = &check.details_url {
+          println!("  • {}: {}", check.name, url);
+        }
+      }
+      println!();
+    }
+    Err(e) => {
+      print_error(&format!("Failed to fetch check runs: {e}"));
     }
   }
 
@@ -269,6 +552,154 @@ fn handle_pr_status_command() -> Result<()> {
   Ok(())
 }
 
+/// Handle the PR list command
+fn handle_pr_list_command(list_matches: &clap::ArgMatches) -> Result<()> {
+  use std::path::PathBuf;
+
+  // Create a runtime for async operations
+  let rt = Runtime::new()?;
+
+  // Get GitHub credentials
+  let credentials = match get_github_credentials() {
+    Ok(creds) => creds,
+    Err(e) => {
+      print_error(&format!("Failed to get GitHub credentials: {e}"));
+      return Ok(());
+    }
+  };
+
+  // Create GitHub client
+  let github_client = create_github_client(&credentials.username, &credentials.password)?;
+
+  // Get repository path (current or specified)
+  let repo_path = if let Some(path) = list_matches.get_one::<String>("repo") {
+    PathBuf::from(path)
+  } else {
+    match detect_current_repository() {
+      Ok(path) => path,
+      Err(e) => {
+        print_error(&format!("Failed to detect current repository: {e}"));
+        return Ok(());
+      }
+    }
+  };
+
+  // Open the git repository
+  let repo = match Git2Repository::open(&repo_path) {
+    Ok(repo) => repo,
+    Err(e) => {
+      print_error(&format!("Failed to open git repository: {e}"));
+      return Ok(());
+    }
+  };
+
+  // Get the remote URL to extract owner and repo
+  let remote = match repo.find_remote("origin") {
+    Ok(remote) => remote,
+    Err(e) => {
+      print_error(&format!("Failed to find remote 'origin': {e}"));
+      return Ok(());
+    }
+  };
+
+  let remote_url = match remote.url() {
+    Some(url) => url,
+    None => {
+      print_error("Failed to get remote URL");
+      return Ok(());
+    }
+  };
+
+  // Extract owner and repo from remote URL
+  let (owner, repo_name) = match github_client.extract_repo_info_from_url(remote_url) {
+    Ok((owner, repo)) => (owner, repo),
+    Err(e) => {
+      print_error(&format!("Failed to extract repository info from URL: {e}"));
+      return Ok(());
+    }
+  };
+
+  // Get filter parameters
+  let state = list_matches.get_one::<String>("state").unwrap();
+  let limit = *list_matches.get_one::<u32>("limit").unwrap();
+
+  // Set up pagination
+  let pagination = twig_gh::endpoints::pulls::PaginationOptions {
+    per_page: limit,
+    page: 1,
+  };
+
+  // Fetch pull requests
+  println!("Fetching {state} pull requests for {owner}/{repo_name}...");
+
+  match rt.block_on(github_client.list_pull_requests(&owner, &repo_name, Some(state), Some(pagination))) {
+    Ok(prs) => {
+      if prs.is_empty() {
+        println!("No {state} pull requests found for {owner}/{repo_name}");
+        return Ok(());
+      }
+
+      // Define a struct for PR data with Tabled trait
+      #[derive(Tabled)]
+      struct PullRequestRow {
+        #[tabled(rename = "PR #")]
+        number: u32,
+        #[tabled(rename = "Title")]
+        title: String,
+        #[tabled(rename = "Author")]
+        author: String,
+        #[tabled(rename = "State")]
+        state: String,
+        #[tabled(rename = "Created")]
+        created: String,
+      }
+
+      // Convert PRs to table rows
+      let rows: Vec<PullRequestRow> = prs
+        .into_iter()
+        .map(|pr| {
+          // Truncate title if too long
+          let title = if pr.title.len() > 47 {
+            format!("{}...", &pr.title[0..44])
+          } else {
+            pr.title.clone()
+          };
+
+          // Format state with color
+          let state_colored = match pr.state.as_str() {
+            "open" => pr.state.green().to_string(),
+            "closed" => pr.state.red().to_string(),
+            _ => pr.state.normal().to_string(),
+          };
+
+          // Format date to be more readable
+          let created_date = pr.created_at.split('T').next().unwrap_or(&pr.created_at);
+
+          PullRequestRow {
+            number: pr.number,
+            title,
+            author: pr.user.login,
+            state: state_colored,
+            created: created_date.to_string(),
+          }
+        })
+        .collect();
+
+      let mut table = Table::new(rows);
+      table.with(Style::ascii());
+
+      println!();
+      println!("{table}",);
+      println!();
+    }
+    Err(e) => {
+      print_error(&format!("Failed to fetch pull requests: {e}"));
+    }
+  }
+
+  Ok(())
+}
+
 /// Handle the PR link command
 fn handle_pr_link_command(pr_url_or_id: &str) -> Result<()> {
   // Create a runtime for async operations
@@ -355,24 +786,6 @@ fn handle_pr_link_command(pr_url_or_id: &str) -> Result<()> {
     Ok(pr) => pr,
     Err(e) => {
       print_error(&format!("Failed to get PR: {e}"));
-      return Ok(());
-    }
-  };
-
-  // Get the current repository
-  let repo_path = match detect_current_repository() {
-    Ok(path) => path,
-    Err(e) => {
-      print_error(&format!("Failed to detect current repository: {e}"));
-      return Ok(());
-    }
-  };
-
-  // Open the git repository
-  let repo = match Git2Repository::open(&repo_path) {
-    Ok(repo) => repo,
-    Err(e) => {
-      print_error(&format!("Failed to open git repository: {e}"));
       return Ok(());
     }
   };
@@ -505,3 +918,4 @@ fn display_pr_status(status: &GitHubPRStatus) {
 
   println!();
 }
+// End of file

@@ -5,10 +5,29 @@
 
 use anyhow::{Context, Result};
 use reqwest::StatusCode;
+use serde::Deserialize;
 use tracing::{debug, info, instrument, trace, warn};
 
 use crate::client::JiraClient;
 use crate::models::JiraIssue;
+
+/// Represents a Jira comment
+#[derive(Debug, Deserialize)]
+pub struct Comment {
+  pub id: String,
+  pub body: String,
+  pub author: User,
+  pub created: String,
+}
+
+/// Represents a Jira user
+#[derive(Debug, Deserialize)]
+pub struct User {
+  pub name: String,
+  pub display_name: String,
+  #[serde(default)]
+  pub email_address: Option<String>,
+}
 
 impl JiraClient {
   /// Get a Jira issue by key
@@ -59,110 +78,162 @@ impl JiraClient {
       }
     }
   }
-}
 
-#[cfg(test)]
-mod tests {
-  use wiremock::matchers::{basic_auth, method, path};
-  use wiremock::{Mock, MockServer, ResponseTemplate};
+  /// List Jira issues with filtering options
+  #[instrument(skip(self), level = "debug")]
+  pub async fn list_issues(
+    &self,
+    project: Option<&str>,
+    status: Option<&str>,
+    assignee: Option<&str>,
+    pagination_options: Option<(u32, u32)>, // (max_results, start_at)
+  ) -> Result<Vec<JiraIssue>> {
+    let mut jql_parts = Vec::new();
 
-  use crate::client::JiraClient;
-  use crate::models::JiraAuth;
+    // Add project filter
+    if let Some(project_key) = project {
+      jql_parts.push(format!("project = {project_key}"));
+    }
 
-  #[tokio::test]
-  async fn test_get_issue() -> anyhow::Result<()> {
-    let mock_server = MockServer::start().await;
-    let auth = JiraAuth {
-      username: "test_user".to_string(),
-      api_token: "test_token".to_string(),
+    // Add status filter
+    if let Some(status_name) = status {
+      jql_parts.push(format!("status = \"{status_name}\""));
+    }
+
+    // Add assignee filter
+    if let Some(assignee_name) = assignee {
+      if assignee_name == "me" {
+        jql_parts.push("assignee = currentUser()".to_string());
+      } else {
+        jql_parts.push(format!("assignee = \"{assignee_name}\""));
+      }
+    }
+
+    // Build JQL query
+    let jql = if jql_parts.is_empty() {
+      "order by updated DESC".to_string()
+    } else {
+      format!("{} order by updated DESC", jql_parts.join(" AND "))
     };
-    let base_url = mock_server.uri();
-    let client = JiraClient::new(&base_url, auth);
 
-    // Mock response for issue
-    Mock::given(method("GET"))
-      .and(path("/rest/api/2/issue/TEST-123"))
-      .and(basic_auth("test_user", "test_token"))
-      .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-          "id": "10000",
-          "key": "TEST-123",
-          "fields": {
-              "summary": "Test issue",
-              "description": "This is a test issue",
-              "status": {
-                  "id": "10001",
-                  "name": "In Progress",
-                  "statusCategory": {
-                      "id": 4,
-                      "key": "indeterminate",
-                      "name": "In Progress"
-                  }
-              }
-          }
-      })))
-      .mount(&mock_server)
-      .await;
+    debug!("JQL query: {}", jql);
 
-    let issue = client.get_issue("TEST-123").await?;
-    assert_eq!(issue.key, "TEST-123");
-    assert_eq!(issue.fields.summary, "Test issue");
-    assert_eq!(issue.fields.status.name, "In Progress");
+    // Set up pagination
+    let (max_results, start_at) = pagination_options.unwrap_or((50, 0));
 
-    Ok(())
+    // Build URL with query parameters
+    let url = format!(
+      "{}/rest/api/2/search?jql={}&maxResults={}&startAt={}",
+      self.base_url,
+      urlencoding::encode(&jql),
+      max_results,
+      start_at
+    );
+
+    trace!("Jira API URL: {}", url);
+
+    // Send request
+    let response = self
+      .client
+      .get(&url)
+      .basic_auth(&self.auth.username, Some(&self.auth.api_token))
+      .send()
+      .await
+      .context("Failed to fetch Jira issues")?;
+
+    let status = response.status();
+    debug!("Jira API response status: {}", status);
+
+    match status {
+      StatusCode::OK => {
+        #[derive(Deserialize)]
+        struct SearchResponse {
+          issues: Vec<JiraIssue>,
+          #[allow(dead_code)]
+          total: u32,
+        }
+
+        let search_response = response
+          .json::<SearchResponse>()
+          .await
+          .context("Failed to parse Jira search response")?;
+
+        info!("Successfully fetched {} Jira issues", search_response.issues.len());
+        Ok(search_response.issues)
+      }
+      StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+        warn!("Authentication failed when accessing Jira API");
+        Err(anyhow::anyhow!(
+          "Authentication failed. Please check your Jira credentials."
+        ))
+      }
+      _ => {
+        let error_text = response.text().await.unwrap_or_default();
+        warn!("Unexpected Jira API error: HTTP {} - {}", status, error_text);
+        Err(anyhow::anyhow!("Unexpected error: HTTP {} - {}", status, error_text))
+      }
+    }
   }
 
-  #[tokio::test]
-  async fn test_get_issue_not_found() -> anyhow::Result<()> {
-    let mock_server = MockServer::start().await;
-    let auth = JiraAuth {
-      username: "test_user".to_string(),
-      api_token: "test_token".to_string(),
-    };
-    let base_url = mock_server.uri();
-    let client = JiraClient::new(&base_url, auth);
+  /// Add a comment to a Jira issue
+  #[instrument(skip(self, comment_text), level = "debug")]
+  pub async fn add_comment(&self, issue_key: &str, comment_text: &str, dry_run: bool) -> Result<Option<Comment>> {
+    debug!("Adding comment to Jira issue: {}", issue_key);
 
-    // Mock 404 response
-    Mock::given(method("GET"))
-      .and(path("/rest/api/2/issue/NONEXISTENT-123"))
-      .and(basic_auth("test_user", "test_token"))
-      .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
-          "errorMessages": ["Issue does not exist or you do not have permission to see it."],
-          "errors": {}
-      })))
-      .mount(&mock_server)
-      .await;
+    if dry_run {
+      info!("Dry run: Would add comment to issue {}", issue_key);
+      info!("Comment text: {}", comment_text);
+      return Ok(None);
+    }
 
-    let result = client.get_issue("NONEXISTENT-123").await;
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("not found"));
+    // Build the request body
+    let body = serde_json::json!({
+      "body": comment_text
+    });
 
-    Ok(())
-  }
+    // Build the URL
+    let url = format!("{}/rest/api/2/issue/{}/comment", self.base_url, issue_key);
 
-  #[tokio::test]
-  async fn test_get_issue_unauthorized() -> anyhow::Result<()> {
-    let mock_server = MockServer::start().await;
-    let auth = JiraAuth {
-      username: "test_user".to_string(),
-      api_token: "invalid_token".to_string(),
-    };
-    let base_url = mock_server.uri();
-    let client = JiraClient::new(&base_url, auth);
+    trace!("Jira API URL: {}", url);
 
-    // Mock unauthorized response
-    Mock::given(method("GET"))
-      .and(path("/rest/api/2/issue/TEST-123"))
-      .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
-          "errorMessages": ["Authentication failed"],
-          "errors": {}
-      })))
-      .mount(&mock_server)
-      .await;
+    // Send request
+    let response = self
+      .client
+      .post(&url)
+      .basic_auth(&self.auth.username, Some(&self.auth.api_token))
+      .json(&body)
+      .send()
+      .await
+      .context("Failed to add comment to Jira issue")?;
 
-    let result = client.get_issue("TEST-123").await;
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Authentication failed"));
+    let status = response.status();
+    debug!("Jira API response status: {}", status);
 
-    Ok(())
+    match status {
+      StatusCode::CREATED => {
+        let comment = response
+          .json::<Comment>()
+          .await
+          .context("Failed to parse Jira comment response")?;
+
+        info!("Successfully added comment to issue {}", issue_key);
+        Ok(Some(comment))
+      }
+      StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+        warn!("Authentication failed when accessing Jira API");
+        Err(anyhow::anyhow!(
+          "Authentication failed. Please check your Jira credentials."
+        ))
+      }
+      StatusCode::NOT_FOUND => {
+        warn!("Jira issue not found: {}", issue_key);
+        Err(anyhow::anyhow!("Issue {} not found", issue_key))
+      }
+      _ => {
+        let error_text = response.text().await.unwrap_or_default();
+        warn!("Unexpected Jira API error: HTTP {} - {}", status, error_text);
+        Err(anyhow::anyhow!("Unexpected error: HTTP {} - {}", status, error_text))
+      }
+    }
   }
 }

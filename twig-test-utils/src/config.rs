@@ -42,9 +42,9 @@ impl TestConfigDirs {
     let cache_home = env::var(TestEnv::XDG_CACHE_HOME).ok();
 
     // Construct the application-specific paths
-    let config_dir = PathBuf::from(config_home).join(format!("{}/{}", organization, application));
-    let data_dir = PathBuf::from(data_home).join(format!("{}/{}", organization, application));
-    let cache_dir = cache_home.map(|dir| PathBuf::from(dir).join(format!("{}/{}", organization, application)));
+    let config_dir = PathBuf::from(config_home).join(format!("{organization}/{application}"));
+    let data_dir = PathBuf::from(data_home).join(format!("{organization}/{application}"));
+    let cache_dir = cache_home.map(|dir| PathBuf::from(dir).join(format!("{organization}/{application}")));
 
     Ok(Self {
       config_dir,

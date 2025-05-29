@@ -5,8 +5,8 @@
 //! workflows.
 
 mod client;
-mod endpoints;
-mod models;
+pub mod endpoints;
+pub mod models;
 mod utils;
 
 // Re-export the client

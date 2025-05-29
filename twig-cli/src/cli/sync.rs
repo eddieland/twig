@@ -25,15 +25,6 @@ static JIRA_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
   ]
 });
 
-static PR_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
-  vec![
-    Regex::new(r"^pr-(\d+)-").unwrap(),
-    Regex::new(r"^github-pr-(\d+)").unwrap(),
-    Regex::new(r"^pull-(\d+)").unwrap(),
-    Regex::new(r"^pr/(\d+)").unwrap(),
-  ]
-});
-
 /// Build the sync subcommand
 pub fn build_command() -> Command {
   Command::new("sync")
@@ -153,15 +144,7 @@ fn sync_branches(
     };
 
     let detected_pr = if !no_github {
-      // First try GitHub API detection
-      let api_pr = rt.block_on(detect_github_pr_from_branch_async(branch_name, repo_path));
-
-      // Fall back to pattern detection if API fails
-      if api_pr.is_some() {
-        api_pr
-      } else {
-        detect_github_pr_from_branch_pattern(branch_name)
-      }
+      rt.block_on(detect_github_pr_from_branch(branch_name, repo_path))
     } else {
       None
     };
@@ -245,7 +228,7 @@ fn detect_jira_issue_from_branch(branch_name: &str) -> Option<String> {
 }
 
 /// Detect GitHub PR number from branch using GitHub API
-async fn detect_github_pr_from_branch_async(branch_name: &str, repo_path: &std::path::Path) -> Option<u32> {
+async fn detect_github_pr_from_branch(branch_name: &str, repo_path: &std::path::Path) -> Option<u32> {
   // Get GitHub credentials
   let credentials = match get_github_credentials() {
     Ok(creds) => creds,
@@ -282,7 +265,7 @@ async fn detect_github_pr_from_branch_async(branch_name: &str, repo_path: &std::
 
   // Search for PRs with this branch as head
   match github_client
-    .find_pull_requests_by_head_branch(&owner, &repo_name, branch_name)
+    .find_pull_requests_by_head_branch(&owner, &repo_name, branch_name, None)
     .await
   {
     Ok(prs) => {
@@ -296,26 +279,6 @@ async fn detect_github_pr_from_branch_async(branch_name: &str, repo_path: &std::
     }
     Err(_) => None, // Silently fall back if API call fails
   }
-}
-
-/// Detect GitHub PR number from branch name (fallback to pattern matching)
-fn detect_github_pr_from_branch_pattern(branch_name: &str) -> Option<u32> {
-  // Patterns to match:
-  // 1. pr-123-description
-  // 2. github-pr-123
-  // 3. pull-123
-  // 4. pr/123
-  for pattern in PR_PATTERNS.iter() {
-    if let Some(captures) = pattern.captures(branch_name) {
-      if let Some(pr_match) = captures.get(1) {
-        if let Ok(pr_number) = pr_match.as_str().parse::<u32>() {
-          return Some(pr_number);
-        }
-      }
-    }
-  }
-
-  None
 }
 
 /// Print summary of sync findings
@@ -478,20 +441,5 @@ mod tests {
     assert_eq!(detect_jira_issue_from_branch("main"), None);
     assert_eq!(detect_jira_issue_from_branch("proj-123"), None); // lowercase
     assert_eq!(detect_jira_issue_from_branch("P-123"), None); // too short prefix
-  }
-
-  #[test]
-  fn test_detect_github_pr_from_branch_pattern() {
-    // Test various patterns
-    assert_eq!(detect_github_pr_from_branch_pattern("pr-123-description"), Some(123));
-    assert_eq!(detect_github_pr_from_branch_pattern("github-pr-456"), Some(456));
-    assert_eq!(detect_github_pr_from_branch_pattern("pull-789"), Some(789));
-    assert_eq!(detect_github_pr_from_branch_pattern("pr/123"), Some(123));
-
-    // Test non-matching patterns
-    assert_eq!(detect_github_pr_from_branch_pattern("feature-branch"), None);
-    assert_eq!(detect_github_pr_from_branch_pattern("main"), None);
-    assert_eq!(detect_github_pr_from_branch_pattern("pr-abc"), None); // non-numeric
-    assert_eq!(detect_github_pr_from_branch_pattern("something-pr-123"), None); // not at start
   }
 }

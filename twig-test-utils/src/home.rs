@@ -18,6 +18,12 @@ pub struct TestHomeEnv {
   original_home: String,
 }
 
+impl Default for TestHomeEnv {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl TestHomeEnv {
   /// Create a new test environment with a temporary HOME directory
   pub fn new() -> Self {

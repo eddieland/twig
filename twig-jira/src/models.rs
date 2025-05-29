@@ -15,7 +15,7 @@ pub struct JiraAuth {
 }
 
 /// Represents a Jira issue
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct JiraIssue {
   pub id: String,
   pub key: String,
@@ -23,29 +23,42 @@ pub struct JiraIssue {
 }
 
 /// Represents Jira issue fields
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct JiraIssueFields {
   pub summary: String,
   pub description: Option<String>,
   pub status: JiraIssueStatus,
+  pub assignee: Option<JiraUser>,
+  #[serde(default)]
+  pub updated: String,
+}
+
+/// Represents a Jira user
+#[derive(Debug, Deserialize, Serialize)]
+pub struct JiraUser {
+  pub name: String,
+  #[serde(rename = "displayName")]
+  pub display_name: String,
+  #[serde(rename = "emailAddress", default)]
+  pub email_address: Option<String>,
 }
 
 /// Represents a Jira issue status
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct JiraIssueStatus {
   pub id: Option<String>,
   pub name: String,
 }
 
 /// Represents a Jira transition
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct JiraTransition {
   pub id: String,
   pub name: String,
 }
 
 /// Represents a list of Jira transitions
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct JiraTransitions {
   pub transitions: Vec<JiraTransition>,
 }

@@ -428,7 +428,7 @@ machine github.com
       existing_content = std::fs::read_to_string(path).context("Failed to read existing .netrc file")?;
 
       // Check if machine already exists
-      machine_exists = existing_content.contains(&format!("machine {}", machine));
+      machine_exists = existing_content.contains(&format!("machine {machine}"));
     }
 
     if machine_exists {
@@ -441,12 +441,12 @@ machine github.com
         let trimmed = line.trim();
 
         if trimmed.starts_with("machine ") {
-          if trimmed == format!("machine {}", machine) {
+          if trimmed == format!("machine {machine}") {
             skip_until_next_machine = true;
             // Add the updated machine entry
-            new_content.push_str(&format!("machine {}\n", machine));
-            new_content.push_str(&format!("  login {}\n", username));
-            new_content.push_str(&format!("  password {}\n", password));
+            new_content.push_str(&format!("machine {machine}\n"));
+            new_content.push_str(&format!("  login {username}\n"));
+            new_content.push_str(&format!("  password {password}\n"));
           } else {
             skip_until_next_machine = false;
             new_content.push_str(line);
@@ -472,9 +472,9 @@ machine github.com
         writeln!(file)?;
       }
 
-      writeln!(file, "machine {}", machine)?;
-      writeln!(file, "  login {}", username)?;
-      writeln!(file, "  password {}", password)?;
+      writeln!(file, "machine {machine}")?;
+      writeln!(file, "  login {username}")?;
+      writeln!(file, "  password {password}")?;
     }
 
     Ok(())

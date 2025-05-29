@@ -9,7 +9,7 @@
 //! may not be used by all tests, and the compiler cannot detect usage across
 //! crate boundaries in development dependencies.
 
-#![allow(clippy::dead_code)]
+#![allow(dead_code)]
 
 pub mod config;
 pub mod env;

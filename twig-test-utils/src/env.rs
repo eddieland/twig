@@ -21,6 +21,12 @@ pub struct TestEnv {
   original_cache_home: Option<String>,
 }
 
+impl Default for TestEnv {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl TestEnv {
   /// XDG environment variable names
   pub const XDG_CONFIG_HOME: &'static str = "XDG_CONFIG_HOME";

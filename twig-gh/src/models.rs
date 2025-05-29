@@ -5,7 +5,7 @@
 
 #![allow(dead_code)]
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Represents GitHub authentication credentials
 #[derive(Clone)]
@@ -15,7 +15,7 @@ pub struct GitHubAuth {
 }
 
 /// Represents a GitHub user
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct GitHubUser {
   pub login: String,
   pub id: u64,
@@ -23,7 +23,7 @@ pub struct GitHubUser {
 }
 
 /// Represents a GitHub pull request
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct GitHubPullRequest {
   pub number: u32,
   pub title: String,
@@ -40,7 +40,7 @@ pub struct GitHubPullRequest {
 }
 
 /// Represents a GitHub pull request reference (head or base)
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct GitHubPRRef {
   pub label: String,
   pub ref_name: Option<String>,
@@ -48,7 +48,7 @@ pub struct GitHubPRRef {
 }
 
 /// Represents a GitHub pull request review
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct GitHubPRReview {
   pub id: u64,
   pub user: GitHubUser,
@@ -57,18 +57,19 @@ pub struct GitHubPRReview {
 }
 
 /// Represents a GitHub check run
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct GitHubCheckRun {
   pub id: u64,
   pub name: String,
   pub status: String,
   pub conclusion: Option<String>,
+  pub details_url: Option<String>,
   pub started_at: String,
   pub completed_at: Option<String>,
 }
 
 /// Represents a GitHub check suite
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct GitHubCheckSuite {
   pub id: u64,
   pub status: String,
@@ -77,7 +78,7 @@ pub struct GitHubCheckSuite {
 }
 
 /// Represents a GitHub PR status summary
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct GitHubPRStatus {
   pub pr: GitHubPullRequest,
   pub reviews: Vec<GitHubPRReview>,
@@ -181,6 +182,7 @@ mod tests {
         "name": "test-suite",
         "status": "completed",
         "conclusion": "success",
+        "details_url": "https://github.com/octocat/Hello-World/runs/4",
         "started_at": "2011-01-26T19:01:12Z",
         "completed_at": "2011-01-26T19:01:12Z"
     });
@@ -191,5 +193,9 @@ mod tests {
     assert_eq!(check.name, "test-suite");
     assert_eq!(check.status, "completed");
     assert_eq!(check.conclusion, Some("success".to_string()));
+    assert_eq!(
+      check.details_url,
+      Some("https://github.com/octocat/Hello-World/runs/4".to_string())
+    );
   }
 }

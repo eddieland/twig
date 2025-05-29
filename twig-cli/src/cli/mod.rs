@@ -11,6 +11,7 @@ mod branch;
 mod commands;
 mod completion;
 mod creds;
+mod dashboard;
 mod diagnostics;
 mod git;
 mod github;
@@ -58,6 +59,7 @@ pub fn build_cli() -> Command {
     .subcommand(worktree::build_command())
     .subcommand(diagnostics::build_diagnostics_command())
     .subcommand(completion::build_completion_command())
+    .subcommand(dashboard::build_command())
 }
 
 /// Handle the CLI commands
@@ -76,6 +78,7 @@ pub fn handle_commands(matches: &clap::ArgMatches) -> Result<()> {
     Some(("worktree", worktree_matches)) => worktree::handle_commands(worktree_matches),
     Some(("diagnose", _)) => diagnostics::handle_diagnostics_command(),
     Some(("completion", completion_matches)) => completion::handle_completion_command(completion_matches),
+    Some(("dashboard", dashboard_matches)) => dashboard::handle_command(dashboard_matches),
     _ => commands::handle_unknown_command(),
   }
 }
