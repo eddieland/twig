@@ -16,18 +16,18 @@ pub struct JiraAuth {
 
 /// Represents a Jira issue
 #[derive(Debug, Deserialize, Serialize)]
-pub struct JiraIssue {
+pub struct Issue {
   pub id: String,
   pub key: String,
-  pub fields: JiraIssueFields,
+  pub fields: IssueFields,
 }
 
 /// Represents Jira issue fields
 #[derive(Debug, Deserialize, Serialize)]
-pub struct JiraIssueFields {
+pub struct IssueFields {
   pub summary: String,
   pub description: Option<String>,
-  pub status: JiraIssueStatus,
+  pub status: IssueStatus,
   pub assignee: Option<JiraUser>,
   #[serde(default)]
   pub updated: String,
@@ -45,22 +45,22 @@ pub struct JiraUser {
 
 /// Represents a Jira issue status
 #[derive(Debug, Deserialize, Serialize)]
-pub struct JiraIssueStatus {
+pub struct IssueStatus {
   pub id: Option<String>,
   pub name: String,
 }
 
 /// Represents a Jira transition
 #[derive(Debug, Deserialize, Serialize)]
-pub struct JiraTransition {
+pub struct Transition {
   pub id: String,
   pub name: String,
 }
 
 /// Represents a list of Jira transitions
 #[derive(Debug, Deserialize, Serialize)]
-pub struct JiraTransitions {
-  pub transitions: Vec<JiraTransition>,
+pub struct Transitions {
+  pub transitions: Vec<Transition>,
 }
 
 /// Represents a transition request payload
@@ -106,7 +106,7 @@ mod tests {
         }
     });
 
-    let issue: JiraIssue = serde_json::from_value(json).unwrap();
+    let issue: Issue = serde_json::from_value(json).unwrap();
 
     assert_eq!(issue.id, "10000");
     assert_eq!(issue.key, "PROJ-123");
@@ -134,7 +134,7 @@ mod tests {
         ]
     });
 
-    let transitions: JiraTransitions = serde_json::from_value(json).unwrap();
+    let transitions: Transitions = serde_json::from_value(json).unwrap();
 
     assert_eq!(transitions.transitions.len(), 3);
     assert_eq!(transitions.transitions[0].id, "11");

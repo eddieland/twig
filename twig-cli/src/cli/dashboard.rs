@@ -11,7 +11,7 @@ use tabled::settings::Style;
 use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
 use twig_gh::{GitHubPullRequest, create_github_client};
-use twig_jira::{JiraIssue, create_jira_client};
+use twig_jira::{Issue, create_jira_client};
 
 use crate::creds::{get_github_credentials, get_jira_credentials};
 use crate::git::detect_current_repository;
@@ -23,7 +23,7 @@ use crate::utils::output::{print_error, print_warning};
 pub struct DashboardData {
   pub branches: Vec<BranchInfo>,
   pub pull_requests: Vec<GitHubPullRequest>,
-  pub issues: Vec<JiraIssue>,
+  pub issues: Vec<Issue>,
 }
 
 #[derive(Serialize)]

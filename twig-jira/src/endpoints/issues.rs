@@ -9,7 +9,7 @@ use serde::Deserialize;
 use tracing::{debug, info, instrument, trace, warn};
 
 use crate::client::JiraClient;
-use crate::models::JiraIssue;
+use crate::models::Issue;
 
 /// Represents a Jira comment
 #[derive(Debug, Deserialize)]
@@ -32,7 +32,7 @@ pub struct User {
 impl JiraClient {
   /// Get a Jira issue by key
   #[instrument(skip(self), level = "debug")]
-  pub async fn get_issue(&self, issue_key: &str) -> Result<JiraIssue> {
+  pub async fn get_issue(&self, issue_key: &str) -> Result<Issue> {
     let url = format!("{}/rest/api/2/issue/{}", self.base_url, issue_key);
     debug!("Fetching Jira issue: {}", issue_key);
     trace!("Jira API URL: {}", url);
@@ -51,10 +51,7 @@ impl JiraClient {
     match status {
       StatusCode::OK => {
         debug!("Successfully received Jira issue data");
-        let issue = response
-          .json::<JiraIssue>()
-          .await
-          .context("Failed to parse Jira issue")?;
+        let issue = response.json::<Issue>().await.context("Failed to parse Jira issue")?;
 
         info!("Successfully fetched Jira issue: {}", issue_key);
         trace!("Issue summary: {}", issue.fields.summary);
@@ -87,7 +84,7 @@ impl JiraClient {
     status: Option<&str>,
     assignee: Option<&str>,
     pagination_options: Option<(u32, u32)>, // (max_results, start_at)
-  ) -> Result<Vec<JiraIssue>> {
+  ) -> Result<Vec<Issue>> {
     let mut jql_parts = Vec::new();
 
     // Add project filter
@@ -148,7 +145,7 @@ impl JiraClient {
       StatusCode::OK => {
         #[derive(Deserialize)]
         struct SearchResponse {
-          issues: Vec<JiraIssue>,
+          issues: Vec<Issue>,
           #[allow(dead_code)]
           total: u32,
         }

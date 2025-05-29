@@ -2,11 +2,11 @@ use anyhow::{Context, Result};
 use reqwest::StatusCode;
 
 use crate::client::JiraClient;
-use crate::models::{JiraTransition, JiraTransitions, TransitionId, TransitionRequest};
+use crate::models::{Transition, TransitionId, TransitionRequest, Transitions};
 
 impl JiraClient {
   /// Get available transitions for an issue
-  pub async fn get_transitions(&self, issue_key: &str) -> Result<Vec<JiraTransition>> {
+  pub async fn get_transitions(&self, issue_key: &str) -> Result<Vec<Transition>> {
     let url = format!("{}/rest/api/2/issue/{}/transitions", self.base_url, issue_key);
 
     let response = self
@@ -20,7 +20,7 @@ impl JiraClient {
     match response.status() {
       StatusCode::OK => {
         let transitions = response
-          .json::<JiraTransitions>()
+          .json::<Transitions>()
           .await
           .context("Failed to parse Jira transitions")?;
         Ok(transitions.transitions)

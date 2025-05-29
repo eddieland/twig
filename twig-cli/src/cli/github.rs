@@ -11,7 +11,7 @@ use git2::Repository as Git2Repository;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
-use twig_gh::{GitHubPRStatus, create_github_client};
+use twig_gh::{PullRequestStatus, create_github_client};
 
 use crate::creds::get_github_credentials;
 use crate::git::detect_current_repository;
@@ -849,7 +849,7 @@ fn handle_pr_link_command(pr_url_or_id: &str) -> Result<()> {
 }
 
 /// Display PR status information
-fn display_pr_status(status: &GitHubPRStatus) {
+fn display_pr_status(status: &PullRequestStatus) {
   let pr = &status.pr;
 
   println!();

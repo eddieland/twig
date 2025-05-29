@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use tracing::{debug, instrument, trace, warn};
 
 use crate::client::GitHubClient;
-use crate::models::{GitHubPRReview, GitHubPRStatus, GitHubPullRequest};
+use crate::models::{GitHubPullRequest, PullRequestReview, PullRequestStatus};
 
 /// Pagination options for GitHub API requests
 #[derive(Debug, Clone, Copy)]
@@ -134,7 +134,12 @@ impl GitHubClient {
 
   /// Get pull request reviews
   #[instrument(skip(self), level = "debug")]
-  pub async fn get_pull_request_reviews(&self, owner: &str, repo: &str, pr_number: u32) -> Result<Vec<GitHubPRReview>> {
+  pub async fn get_pull_request_reviews(
+    &self,
+    owner: &str,
+    repo: &str,
+    pr_number: u32,
+  ) -> Result<Vec<PullRequestReview>> {
     debug!("Fetching reviews for PR #{} in {}/{}", pr_number, owner, repo);
 
     let url = format!("{}/repos/{}/{}/pulls/{}/reviews", self.base_url, owner, repo, pr_number);
@@ -158,7 +163,7 @@ impl GitHubClient {
       reqwest::StatusCode::OK => {
         debug!("Successfully received PR reviews data");
         let reviews = response
-          .json::<Vec<GitHubPRReview>>()
+          .json::<Vec<PullRequestReview>>()
           .await
           .context("Failed to parse GitHub PR reviews")?;
 
@@ -186,7 +191,7 @@ impl GitHubClient {
   /// Get comprehensive PR status including the PR details, reviews, and check
   /// runs
   #[instrument(skip(self), level = "debug")]
-  pub async fn get_pr_status(&self, owner: &str, repo: &str, pr_number: u32) -> Result<GitHubPRStatus> {
+  pub async fn get_pr_status(&self, owner: &str, repo: &str, pr_number: u32) -> Result<PullRequestStatus> {
     debug!("Fetching PR status for #{} in {}/{}", pr_number, owner, repo);
 
     // Get the PR details
@@ -199,7 +204,7 @@ impl GitHubClient {
     let check_runs = self.get_check_runs(owner, repo, &pr.head.sha).await?;
 
     // Combine all the data into a GitHubPRStatus
-    let status = GitHubPRStatus {
+    let status = PullRequestStatus {
       pr,
       reviews,
       check_runs,

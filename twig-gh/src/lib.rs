@@ -13,6 +13,5 @@ mod utils;
 pub use client::{GitHubClient, create_github_client};
 // Re-export models
 pub use models::{
-  GitHubAuth, GitHubCheckRun, GitHubCheckSuite, GitHubPRRef, GitHubPRReview, GitHubPRStatus, GitHubPullRequest,
-  GitHubUser,
+  CheckRun, CheckSuite, GitHubAuth, GitHubPullRequest, GitHubUser, PullRequestRef, PullRequestReview, PullRequestStatus,
 };

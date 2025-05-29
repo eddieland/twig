@@ -32,8 +32,8 @@ pub struct GitHubPullRequest {
   pub user: GitHubUser,
   pub created_at: String,
   pub updated_at: String,
-  pub head: GitHubPRRef,
-  pub base: GitHubPRRef,
+  pub head: PullRequestRef,
+  pub base: PullRequestRef,
   pub mergeable: Option<bool>,
   pub mergeable_state: Option<String>,
   pub draft: Option<bool>,
@@ -41,7 +41,7 @@ pub struct GitHubPullRequest {
 
 /// Represents a GitHub pull request reference (head or base)
 #[derive(Debug, Deserialize, Serialize)]
-pub struct GitHubPRRef {
+pub struct PullRequestRef {
   pub label: String,
   pub ref_name: Option<String>,
   pub sha: String,
@@ -49,7 +49,7 @@ pub struct GitHubPRRef {
 
 /// Represents a GitHub pull request review
 #[derive(Debug, Deserialize, Serialize)]
-pub struct GitHubPRReview {
+pub struct PullRequestReview {
   pub id: u64,
   pub user: GitHubUser,
   pub state: String,
@@ -58,7 +58,7 @@ pub struct GitHubPRReview {
 
 /// Represents a GitHub check run
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct GitHubCheckRun {
+pub struct CheckRun {
   pub id: u64,
   pub name: String,
   pub status: String,
@@ -70,19 +70,19 @@ pub struct GitHubCheckRun {
 
 /// Represents a GitHub check suite
 #[derive(Debug, Deserialize, Serialize)]
-pub struct GitHubCheckSuite {
+pub struct CheckSuite {
   pub id: u64,
   pub status: String,
   pub conclusion: Option<String>,
-  pub check_runs: Vec<GitHubCheckRun>,
+  pub check_runs: Vec<CheckRun>,
 }
 
 /// Represents a GitHub PR status summary
 #[derive(Debug, Serialize)]
-pub struct GitHubPRStatus {
+pub struct PullRequestStatus {
   pub pr: GitHubPullRequest,
-  pub reviews: Vec<GitHubPRReview>,
-  pub check_runs: Vec<GitHubCheckRun>,
+  pub reviews: Vec<PullRequestReview>,
+  pub check_runs: Vec<CheckRun>,
 }
 
 #[cfg(test)]
@@ -168,7 +168,7 @@ mod tests {
         "submitted_at": "2011-01-26T19:01:12Z"
     });
 
-    let review: GitHubPRReview = serde_json::from_value(json).unwrap();
+    let review: PullRequestReview = serde_json::from_value(json).unwrap();
 
     assert_eq!(review.id, 80);
     assert_eq!(review.state, "APPROVED");
@@ -187,7 +187,7 @@ mod tests {
         "completed_at": "2011-01-26T19:01:12Z"
     });
 
-    let check: GitHubCheckRun = serde_json::from_value(json).unwrap();
+    let check: CheckRun = serde_json::from_value(json).unwrap();
 
     assert_eq!(check.id, 4);
     assert_eq!(check.name, "test-suite");

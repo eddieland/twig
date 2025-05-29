@@ -12,6 +12,5 @@ pub mod models;
 pub use client::{JiraClient, create_jira_client};
 // Re-export models
 pub use models::{
-  JiraAuth, JiraIssue, JiraIssueFields, JiraIssueStatus, JiraTransition, JiraTransitions, JiraUser, TransitionId,
-  TransitionRequest,
+  Issue, IssueFields, IssueStatus, JiraAuth, JiraUser, Transition, TransitionId, TransitionRequest, Transitions,
 };

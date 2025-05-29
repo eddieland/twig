@@ -3,11 +3,11 @@ use reqwest::StatusCode;
 use serde::Deserialize;
 
 use crate::client::GitHubClient;
-use crate::models::GitHubCheckRun;
+use crate::models::CheckRun;
 
 impl GitHubClient {
   /// Get check runs for a pull request
-  pub async fn get_check_runs(&self, owner: &str, repo: &str, ref_sha: &str) -> Result<Vec<GitHubCheckRun>> {
+  pub async fn get_check_runs(&self, owner: &str, repo: &str, ref_sha: &str) -> Result<Vec<CheckRun>> {
     let url = format!(
       "{}/repos/{}/{}/commits/{}/check-runs",
       self.base_url, owner, repo, ref_sha
@@ -25,7 +25,7 @@ impl GitHubClient {
 
     #[derive(Deserialize)]
     struct CheckRunsResponse {
-      check_runs: Vec<GitHubCheckRun>,
+      check_runs: Vec<CheckRun>,
     }
 
     match response.status() {
