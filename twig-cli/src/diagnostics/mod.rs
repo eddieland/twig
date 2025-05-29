@@ -309,7 +309,7 @@ fn check_network_connectivity() -> Result<()> {
 
   // This is a simple check - in a real scenario you might want more sophisticated
   // testing
-  let services = vec![("GitHub", "github.com"), ("Atlassian", "atlassian.com")];
+  let services = vec![("GitHub", "github.com"), ("Atlassian", "atlassian.net")];
 
   for (name, host) in services {
     // Use a simple ping command to test connectivity

@@ -90,7 +90,7 @@ fn handle_check_command() -> Result<()> {
     Ok(true) => print_success("Jira credentials found."),
     Ok(false) => {
       print_warning("No Jira credentials found.");
-      println!("Add credentials for machine 'atlassian.com' to your .netrc file.");
+      println!("Add credentials for machine 'atlassian.net' to your .netrc file.");
     }
     Err(e) => print_error(&format!("Error checking Jira credentials: {e}")),
   }
@@ -108,7 +108,7 @@ fn handle_check_command() -> Result<()> {
   // Print .netrc format example
   print_info("Example .netrc format:");
   println!("```");
-  println!("machine atlassian.com");
+  println!("machine atlassian.net");
   println!("  login your-email@example.com");
   println!("  password your-api-token");
   println!();
@@ -208,7 +208,7 @@ fn handle_setup_command() -> Result<()> {
           Ok(client) => match rt.block_on(client.test_connection()) {
             Ok(true) => {
               print_success("Jira credentials validated successfully!");
-              write_netrc_entry("atlassian.com", &jira_email, &jira_token)?;
+              write_netrc_entry("atlassian.net", &jira_email, &jira_token)?;
             }
             Ok(false) => {
               print_error("Failed to validate Jira credentials. Please check your credentials and domain.");

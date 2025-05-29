@@ -82,18 +82,36 @@ fn parse_netrc_file(path: &Path, target_machine: &str) -> Result<Option<Credenti
 
 /// Check if Jira credentials are available
 pub fn check_jira_credentials() -> Result<bool> {
-  let creds = parse_netrc_for_machine("atlassian.com")?;
-  Ok(creds.is_some())
+  Ok(get_jira_credentials().is_ok())
 }
 
 /// Get Jira credentials
 pub fn get_jira_credentials() -> Result<Credentials> {
-  match parse_netrc_for_machine("atlassian.com")? {
-    Some(creds) => Ok(creds),
-    None => Err(anyhow::anyhow!(
-      "Jira credentials not found in .netrc file. Please add credentials for machine 'atlassian.com'."
-    )),
+  // Try JIRA_HOST first, then fallback to atlassian.net
+  let jira_host = std::env::var("JIRA_HOST").ok();
+
+  if let Some(host) = &jira_host {
+    if let Some(creds) = parse_netrc_for_machine(host)? {
+      return Ok(creds);
+    }
   }
+
+  // Try atlassian.net
+  if let Some(creds) = parse_netrc_for_machine("atlassian.net")? {
+    return Ok(creds);
+  }
+
+  // Construct error message based on whether JIRA_HOST is set
+  let error_msg = if jira_host.is_some() {
+    format!(
+      "Jira credentials not found in .netrc file. Please add credentials for machine '{}' or 'atlassian.net'.",
+      jira_host.unwrap()
+    )
+  } else {
+    "Jira credentials not found in .netrc file. Please add credentials for machine 'atlassian.net'.".to_string()
+  };
+
+  Err(anyhow::anyhow!(error_msg))
 }
 
 /// Check if GitHub credentials are available
@@ -178,23 +196,13 @@ pub fn write_netrc_entry(machine: &str, username: &str, password: &str) -> Resul
 
 #[cfg(test)]
 mod tests {
-  use std::fs;
   use std::io::Write;
+  use std::os::unix::fs::PermissionsExt;
+  use std::{env, fs};
 
   use tempfile::TempDir;
 
   use super::*;
-
-  /// Helper function to create a test .netrc file
-  fn create_test_netrc(content: &str) -> (TempDir, PathBuf) {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let netrc_path = temp_dir.path().join(".netrc");
-
-    let mut file = fs::File::create(&netrc_path).expect("Failed to create test .netrc");
-    file.write_all(content.as_bytes()).expect("Failed to write test .netrc");
-
-    (temp_dir, netrc_path)
-  }
 
   #[test]
   fn test_parse_netrc_file_basic() {
@@ -416,6 +424,458 @@ machine github.com
     let creds = result.unwrap();
     assert_eq!(creds.username, "user2");
     assert_eq!(creds.password, "pass2");
+  }
+
+  #[test]
+  fn test_parse_netrc_for_machine() {
+    let content = r#"machine example.com
+  login user1
+  password pass1
+
+machine github.com
+  login user2
+  password pass2
+"#;
+
+    let (temp_dir, _netrc_path) = create_test_netrc(content);
+
+    // Mock the get_netrc_path function to return our test path
+    let original_path = get_netrc_path();
+    unsafe {
+      std::env::set_var("HOME", temp_dir.path());
+    }
+
+    // Test existing machine
+    let result = parse_netrc_for_machine("github.com").unwrap();
+    assert!(result.is_some());
+
+    let creds = result.unwrap();
+    assert_eq!(creds.username, "user2");
+    assert_eq!(creds.password, "pass2");
+
+    // Test non-existent machine
+    let result = parse_netrc_for_machine("nonexistent.com").unwrap();
+    assert!(result.is_none());
+
+    // Reset environment
+    unsafe {
+      std::env::set_var("HOME", original_path.parent().unwrap());
+    }
+  }
+
+  #[test]
+  fn test_get_jira_credentials() {
+    let content = r#"machine custom-jira-host.com
+  login custom@example.com
+  password custom-token
+
+machine atlassian.com
+  login test@example.com
+  password test-token
+
+machine atlassian.net
+  login net@example.com
+  password net-token
+"#;
+
+    let (temp_dir, _netrc_path) = create_test_netrc(content);
+
+    // Mock the get_netrc_path function to return our test path
+    let original_path = get_netrc_path();
+    unsafe {
+      std::env::set_var("HOME", temp_dir.path());
+    }
+
+    // Test with JIRA_HOST set to custom host
+    unsafe {
+      std::env::set_var("JIRA_HOST", "custom-jira-host.com");
+    }
+
+    let jira_creds = get_jira_credentials().unwrap();
+    assert_eq!(jira_creds.username, "custom@example.com");
+    assert_eq!(jira_creds.password, "custom-token");
+
+    // Test with JIRA_HOST set to non-existent host (should fall back to
+    // atlassian.net)
+    unsafe {
+      std::env::set_var("JIRA_HOST", "nonexistent-host.com");
+    }
+    let jira_creds = get_jira_credentials().unwrap();
+    assert_eq!(jira_creds.username, "net@example.com");
+    assert_eq!(jira_creds.password, "net-token");
+
+    // Test with JIRA_HOST unset (should use atlassian.net)
+    unsafe {
+      std::env::remove_var("JIRA_HOST");
+    }
+    let jira_creds = get_jira_credentials().unwrap();
+    assert_eq!(jira_creds.username, "net@example.com");
+    assert_eq!(jira_creds.password, "net-token");
+
+    // Reset environment
+    unsafe {
+      std::env::set_var("HOME", original_path.parent().unwrap());
+    }
+  }
+
+  #[test]
+  fn test_get_jira_credentials_error_messages() {
+    let (temp_dir, _netrc_path) = create_test_netrc("");
+
+    // Mock the get_netrc_path function to return our test path
+    let original_path = get_netrc_path();
+    unsafe {
+      env::set_var("HOME", temp_dir.path());
+    }
+
+    // Test with JIRA_HOST set
+    unsafe {
+      env::set_var("JIRA_HOST", "custom-jira-host.com");
+    }
+    let error = get_jira_credentials().unwrap_err().to_string();
+    assert!(error.contains("custom-jira-host.com"));
+    assert!(error.contains("atlassian.net"));
+    assert!(!error.contains("atlassian.com")); // This is no longer in the error message
+
+    // Test with JIRA_HOST unset
+    unsafe {
+      env::remove_var("JIRA_HOST");
+    }
+    let error = get_jira_credentials().unwrap_err().to_string();
+    assert!(error.contains("atlassian.net"));
+    assert!(!error.contains("atlassian.com")); // This is no longer in the error message
+    assert!(!error.contains("custom-jira-host.com"));
+
+    // Reset environment
+    unsafe {
+      env::set_var("HOME", original_path.parent().unwrap());
+    }
+
+    // Test check_jira_credentials with empty .netrc
+    assert!(!check_jira_credentials().unwrap());
+  }
+
+  #[test]
+  fn test_check_jira_credentials() {
+    let content = r#"machine custom-jira-host.com
+  login custom@example.com
+  password custom-token
+
+machine atlassian.com
+  login test@example.com
+  password test-token
+
+machine atlassian.net
+  login net@example.com
+  password net-token
+"#;
+
+    let (temp_dir, _netrc_path) = create_test_netrc(content);
+
+    // Mock the get_netrc_path function to return our test path
+    let original_path = get_netrc_path();
+    unsafe {
+      std::env::set_var("HOME", temp_dir.path());
+    }
+
+    // Test with JIRA_HOST set to custom host
+    unsafe {
+      std::env::set_var("JIRA_HOST", "custom-jira-host.com");
+    }
+    assert!(check_jira_credentials().unwrap());
+
+    // Test with JIRA_HOST set to non-existent host (should fall back to
+    // atlassian.net)
+    unsafe {
+      std::env::set_var("JIRA_HOST", "nonexistent-host.com");
+    }
+    assert!(check_jira_credentials().unwrap());
+
+    // Test with JIRA_HOST unset (should use atlassian.net)
+    unsafe {
+      std::env::remove_var("JIRA_HOST");
+    }
+    assert!(check_jira_credentials().unwrap());
+
+    // Reset environment
+    unsafe {
+      std::env::set_var("HOME", original_path.parent().unwrap());
+    }
+  }
+
+  #[test]
+  fn test_check_jira_credentials_with_empty_netrc() {
+    let (temp_dir, _netrc_path) = create_test_netrc("");
+
+    // Mock the get_netrc_path function to return our test path
+    let original_path = get_netrc_path();
+    unsafe {
+      std::env::set_var("HOME", temp_dir.path());
+    }
+    // Test with empty .netrc
+    assert!(!check_jira_credentials().unwrap());
+
+    // Reset environment
+    unsafe {
+      std::env::set_var("HOME", original_path.parent().unwrap());
+    }
+  }
+
+  #[test]
+  fn test_get_github_credentials() {
+    let content = r#"machine github.com
+  login testuser
+  password gh-token
+"#;
+
+    let (temp_dir, _netrc_path) = create_test_netrc(content);
+
+    // Mock the get_netrc_path function to return our test path
+    let original_path = get_netrc_path();
+    unsafe {
+      std::env::set_var("HOME", temp_dir.path());
+    }
+
+    // Test getting GitHub credentials
+    let github_creds = get_github_credentials().unwrap();
+    assert_eq!(github_creds.username, "testuser");
+    assert_eq!(github_creds.password, "gh-token");
+
+    // Reset environment
+    unsafe {
+      std::env::set_var("HOME", original_path.parent().unwrap());
+    }
+  }
+
+  #[test]
+  fn test_get_github_credentials_error() {
+    let (temp_dir, _netrc_path) = create_test_netrc("");
+
+    // Mock the get_netrc_path function to return our test path
+    let original_path = get_netrc_path();
+    unsafe {
+      std::env::set_var("HOME", temp_dir.path());
+    }
+
+    // Test error when GitHub credentials are missing
+    let error = get_github_credentials().unwrap_err().to_string();
+    assert!(error.contains("GitHub credentials not found"));
+    assert!(error.contains("github.com"));
+
+    // Reset environment
+    unsafe {
+      std::env::set_var("HOME", original_path.parent().unwrap());
+    }
+  }
+
+  #[test]
+  fn test_check_github_credentials() {
+    let content = r#"machine github.com
+  login testuser
+  password gh-token
+"#;
+
+    let (temp_dir, _netrc_path) = create_test_netrc(content);
+
+    // Mock the get_netrc_path function to return our test path
+    let original_path = get_netrc_path();
+    unsafe {
+      std::env::set_var("HOME", temp_dir.path());
+    }
+    // Test checking GitHub credentials
+    assert!(check_github_credentials().unwrap());
+
+    // Reset environment
+    unsafe {
+      std::env::set_var("HOME", original_path.parent().unwrap());
+    }
+  }
+
+  #[test]
+  fn test_check_github_credentials_with_empty_netrc() {
+    let (temp_dir, _netrc_path) = create_test_netrc("");
+
+    // Mock the get_netrc_path function to return our test path
+    let original_path = get_netrc_path();
+    unsafe {
+      std::env::set_var("HOME", temp_dir.path());
+    }
+    // Test with empty .netrc
+    assert!(!check_github_credentials().unwrap());
+
+    // Reset environment
+    unsafe {
+      std::env::set_var("HOME", original_path.parent().unwrap());
+    }
+  }
+
+  #[test]
+  fn test_netrc_permission_checking() {
+    let content = r#"machine example.com
+  login testuser
+  password testpass
+"#;
+
+    let (_temp_dir, netrc_path) = create_test_netrc(content);
+
+    // Set insecure permissions (readable by group/others)
+    let mut perms = fs::metadata(&netrc_path).unwrap().permissions();
+    perms.set_mode(0o644); // Insecure: readable by group and others
+    fs::set_permissions(&netrc_path, perms).unwrap();
+
+    // Check permissions
+    let metadata = fs::metadata(&netrc_path).unwrap();
+    let permissions = metadata.permissions();
+    let mode = permissions.mode();
+
+    // Should detect insecure permissions
+    assert_ne!(mode & 0o077, 0, "Expected insecure permissions to be detected");
+
+    // Fix permissions
+    let mut secure_perms = permissions;
+    secure_perms.set_mode(0o600);
+    fs::set_permissions(&netrc_path, secure_perms).unwrap();
+
+    // Verify secure permissions
+    let metadata = fs::metadata(&netrc_path).unwrap();
+    let permissions = metadata.permissions();
+    let mode = permissions.mode();
+
+    assert_eq!(mode & 0o077, 0, "Expected secure permissions after fix");
+  }
+
+  #[test]
+  fn test_credential_validation_scenarios() {
+    // Test empty username/password
+    let empty_creds = Credentials {
+      username: "".to_string(),
+      password: "".to_string(),
+    };
+    assert!(empty_creds.username.is_empty());
+    assert!(empty_creds.password.is_empty());
+
+    // Test valid credentials structure
+    let valid_creds = Credentials {
+      username: "testuser".to_string(),
+      password: "testpass".to_string(),
+    };
+    assert!(!valid_creds.username.is_empty());
+    assert!(!valid_creds.password.is_empty());
+    assert_eq!(valid_creds.username, "testuser");
+    assert_eq!(valid_creds.password, "testpass");
+  }
+
+  #[test]
+  fn test_parse_netrc_file_malformed() {
+    let content = r#"machine custom-jira-host.com
+  login custom@example.com
+  # missing password
+
+machine atlassian.com
+  login test@example.com
+  # missing password
+
+machine github.com
+  login testuser
+  password gh-token
+  some-invalid-line
+"#;
+
+    let (_temp_dir, netrc_path) = create_test_netrc(content);
+
+    // Test parsing should handle malformed entries gracefully
+    let result = parse_netrc_file(&netrc_path, "custom-jira-host.com").unwrap();
+    assert!(result.is_none()); // Should be None because password is missing
+
+    let result = parse_netrc_file(&netrc_path, "atlassian.com").unwrap();
+    assert!(result.is_none()); // Should be None because password is missing
+
+    let result = parse_netrc_file(&netrc_path, "github.com").unwrap();
+    assert!(result.is_some()); // Should still work despite extra line
+    let creds = result.unwrap();
+    assert_eq!(creds.username, "testuser");
+    assert_eq!(creds.password, "gh-token");
+  }
+
+  #[test]
+  fn test_jira_credentials_with_env_var() {
+    let content = r#"machine custom-jira-host.com
+  login custom@example.com
+  password custom-token
+
+machine atlassian.com
+  login test@example.com
+  password test-token
+
+machine atlassian.net
+  login net@example.com
+  password net-token
+"#;
+
+    let (temp_dir, _netrc_path) = create_test_netrc(content);
+
+    // Mock the get_netrc_path function to return our test path
+    let original_path = get_netrc_path();
+    unsafe {
+      env::set_var("HOME", temp_dir.path());
+    }
+
+    // Test with JIRA_HOST set to custom host
+    unsafe {
+      env::set_var("JIRA_HOST", "custom-jira-host.com");
+    }
+    let jira_creds = get_jira_credentials().unwrap();
+    assert_eq!(jira_creds.username, "custom@example.com");
+    assert_eq!(jira_creds.password, "custom-token");
+
+    // Test with JIRA_HOST set to non-existent host (should fall back to
+    // atlassian.net)
+    unsafe {
+      env::set_var("JIRA_HOST", "nonexistent-host.com");
+    }
+    let jira_creds = get_jira_credentials().unwrap();
+    assert_eq!(jira_creds.username, "net@example.com");
+    assert_eq!(jira_creds.password, "net-token");
+
+    // Test with JIRA_HOST unset (should use atlassian.net)
+    unsafe {
+      env::remove_var("JIRA_HOST");
+    }
+    let jira_creds = get_jira_credentials().unwrap();
+    assert_eq!(jira_creds.username, "net@example.com");
+    assert_eq!(jira_creds.password, "net-token");
+
+    // Test the check_jira_credentials function
+    unsafe {
+      env::set_var("JIRA_HOST", "custom-jira-host.com");
+    }
+    assert!(check_jira_credentials().unwrap());
+
+    unsafe {
+      env::set_var("JIRA_HOST", "nonexistent-host.com");
+    }
+    assert!(check_jira_credentials().unwrap());
+
+    unsafe {
+      env::remove_var("JIRA_HOST");
+    }
+    assert!(check_jira_credentials().unwrap());
+
+    // Reset environment
+    unsafe {
+      env::set_var("HOME", original_path.parent().unwrap());
+    }
+  }
+
+  /// Helper function to create a test .netrc file
+  fn create_test_netrc(content: &str) -> (TempDir, PathBuf) {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let netrc_path = temp_dir.path().join(".netrc");
+
+    let mut file = fs::File::create(&netrc_path).expect("Failed to create test .netrc");
+    file.write_all(content.as_bytes()).expect("Failed to write test .netrc");
+
+    (temp_dir, netrc_path)
   }
 
   /// Helper function to write netrc entry to a specific path (for testing)
