@@ -1,11 +1,13 @@
 use anyhow::{Context, Result};
 use reqwest::StatusCode;
+use tracing::instrument;
 
 use crate::client::JiraClient;
 use crate::models::{Transition, TransitionId, TransitionRequest, Transitions};
 
 impl JiraClient {
   /// Get available transitions for an issue
+  #[instrument(skip(self), level = "debug")]
   pub async fn get_transitions(&self, issue_key: &str) -> Result<Vec<Transition>> {
     let url = format!("{}/rest/api/2/issue/{}/transitions", self.base_url, issue_key);
 
@@ -38,6 +40,7 @@ impl JiraClient {
   }
 
   /// Transition an issue to a new status
+  #[instrument(skip(self), level = "debug")]
   pub async fn transition_issue(&self, issue_key: &str, transition_id: &str) -> Result<()> {
     let url = format!("{}/rest/api/2/issue/{}/transitions", self.base_url, issue_key);
 
