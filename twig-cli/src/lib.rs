@@ -8,6 +8,7 @@ pub mod auto_dependency_discovery;
 pub mod cli;
 pub mod completion;
 pub mod config;
+pub mod consts;
 pub mod creds;
 pub mod diagnostics;
 pub mod git;

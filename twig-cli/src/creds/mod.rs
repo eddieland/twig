@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use directories::BaseDirs;
 
+use crate::consts::ENV_JIRA_HOST;
+
 /// Represents credentials for a service
 #[derive(Debug, Clone)]
 pub struct Credentials {
@@ -88,7 +90,7 @@ pub fn check_jira_credentials() -> Result<bool> {
 /// Get Jira credentials
 pub fn get_jira_credentials() -> Result<Credentials> {
   // Try JIRA_HOST first, then fallback to atlassian.net
-  let jira_host = std::env::var("JIRA_HOST").ok();
+  let jira_host = std::env::var(ENV_JIRA_HOST).ok();
 
   if let Some(host) = &jira_host {
     if let Some(creds) = parse_netrc_for_machine(host)? {
@@ -469,7 +471,7 @@ machine atlassian.net
 
     // Test with JIRA_HOST set to custom host
     unsafe {
-      std::env::set_var("JIRA_HOST", "custom-jira-host.com");
+      std::env::set_var(ENV_JIRA_HOST, "custom-jira-host.com");
     }
 
     let jira_creds = get_jira_credentials().unwrap();
@@ -479,7 +481,7 @@ machine atlassian.net
     // Test with JIRA_HOST set to non-existent host (should fall back to
     // atlassian.net)
     unsafe {
-      std::env::set_var("JIRA_HOST", "nonexistent-host.com");
+      std::env::set_var(ENV_JIRA_HOST, "nonexistent-host.com");
     }
     let jira_creds = get_jira_credentials().unwrap();
     assert_eq!(jira_creds.username, "net@example.com");
@@ -487,7 +489,7 @@ machine atlassian.net
 
     // Test with JIRA_HOST unset (should use atlassian.net)
     unsafe {
-      std::env::remove_var("JIRA_HOST");
+      std::env::remove_var(ENV_JIRA_HOST);
     }
     let jira_creds = get_jira_credentials().unwrap();
     assert_eq!(jira_creds.username, "net@example.com");
@@ -500,7 +502,7 @@ machine atlassian.net
 
     // Test with JIRA_HOST set
     unsafe {
-      env::set_var("JIRA_HOST", "custom-jira-host.com");
+      env::set_var(ENV_JIRA_HOST, "custom-jira-host.com");
     }
     let error = get_jira_credentials().unwrap_err().to_string();
     assert!(error.contains("custom-jira-host.com"));
@@ -509,7 +511,7 @@ machine atlassian.net
 
     // Test with JIRA_HOST unset
     unsafe {
-      env::remove_var("JIRA_HOST");
+      env::remove_var(ENV_JIRA_HOST);
     }
     let error = get_jira_credentials().unwrap_err().to_string();
     assert!(error.contains("atlassian.net"));
@@ -538,20 +540,20 @@ machine atlassian.net
 
     // Test with JIRA_HOST set to custom host
     unsafe {
-      std::env::set_var("JIRA_HOST", "custom-jira-host.com");
+      std::env::set_var(ENV_JIRA_HOST, "custom-jira-host.com");
     }
     assert!(check_jira_credentials().unwrap());
 
     // Test with JIRA_HOST set to non-existent host (should fall back to
     // atlassian.net)
     unsafe {
-      std::env::set_var("JIRA_HOST", "nonexistent-host.com");
+      std::env::set_var(ENV_JIRA_HOST, "nonexistent-host.com");
     }
     assert!(check_jira_credentials().unwrap());
 
     // Test with JIRA_HOST unset (should use atlassian.net)
     unsafe {
-      std::env::remove_var("JIRA_HOST");
+      std::env::remove_var(ENV_JIRA_HOST);
     }
     assert!(check_jira_credentials().unwrap());
   }
@@ -715,7 +717,7 @@ machine atlassian.net
 
     // Test with JIRA_HOST set to custom host
     unsafe {
-      env::set_var("JIRA_HOST", "custom-jira-host.com");
+      env::set_var(ENV_JIRA_HOST, "custom-jira-host.com");
     }
     let jira_creds = get_jira_credentials().unwrap();
     assert_eq!(jira_creds.username, "custom@example.com");
@@ -724,7 +726,7 @@ machine atlassian.net
     // Test with JIRA_HOST set to non-existent host (should fall back to
     // atlassian.net)
     unsafe {
-      env::set_var("JIRA_HOST", "nonexistent-host.com");
+      env::set_var(ENV_JIRA_HOST, "nonexistent-host.com");
     }
     let jira_creds = get_jira_credentials().unwrap();
     assert_eq!(jira_creds.username, "net@example.com");
@@ -732,7 +734,7 @@ machine atlassian.net
 
     // Test with JIRA_HOST unset (should use atlassian.net)
     unsafe {
-      env::remove_var("JIRA_HOST");
+      env::remove_var(ENV_JIRA_HOST);
     }
     let jira_creds = get_jira_credentials().unwrap();
     assert_eq!(jira_creds.username, "net@example.com");
@@ -740,17 +742,17 @@ machine atlassian.net
 
     // Test the check_jira_credentials function
     unsafe {
-      env::set_var("JIRA_HOST", "custom-jira-host.com");
+      env::set_var(ENV_JIRA_HOST, "custom-jira-host.com");
     }
     assert!(check_jira_credentials().unwrap());
 
     unsafe {
-      env::set_var("JIRA_HOST", "nonexistent-host.com");
+      env::set_var(ENV_JIRA_HOST, "nonexistent-host.com");
     }
     assert!(check_jira_credentials().unwrap());
 
     unsafe {
-      env::remove_var("JIRA_HOST");
+      env::remove_var(ENV_JIRA_HOST);
     }
     assert!(check_jira_credentials().unwrap());
   }

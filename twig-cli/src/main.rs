@@ -13,6 +13,7 @@ mod auto_dependency_discovery;
 mod cli;
 mod completion;
 mod config;
+mod consts;
 mod creds;
 mod diagnostics;
 mod git;

@@ -11,6 +11,7 @@ use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
 use twig_jira::create_jira_client;
 
+use crate::consts::{DEFAULT_JIRA_HOST, ENV_JIRA_HOST};
 use crate::creds::get_jira_credentials;
 use crate::utils::output::{print_error, print_info, print_success, print_warning};
 
@@ -291,7 +292,7 @@ fn handle_list_issues_command(list_matches: &clap::ArgMatches) -> Result<()> {
     dotenv::dotenv().ok();
 
     // Get Jira host from environment or use default
-    let jira_host = std::env::var("JIRA_HOST").unwrap_or_else(|_| "https://eddieland.atlassian.net".to_string());
+    let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
 
     // Create Jira client
     let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
@@ -468,7 +469,7 @@ fn handle_comment_issue_command(comment_matches: &clap::ArgMatches) -> Result<()
     dotenv::dotenv().ok();
 
     // Get Jira host from environment or use default
-    let jira_host = std::env::var("JIRA_HOST").unwrap_or_else(|_| "https://eddieland.atlassian.net".to_string());
+    let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
 
     // Create Jira client
     let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
@@ -520,7 +521,7 @@ fn handle_view_issue_command(issue_key: &str) -> Result<()> {
     dotenv::dotenv().ok();
 
     // Get Jira host from environment or use default
-    let jira_host = std::env::var("JIRA_HOST").unwrap_or_else(|_| "https://eddieland.atlassian.net".to_string());
+    let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
 
     // Create Jira client
     let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
@@ -611,7 +612,7 @@ fn handle_transition_issue_command(issue_key: &str, transition: Option<&str>) ->
     dotenv::dotenv().ok();
 
     // Get Jira host from environment or use default
-    let jira_host = std::env::var("JIRA_HOST").unwrap_or_else(|_| "https://eddieland.atlassian.net".to_string());
+    let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
 
     // Create Jira client
     let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
@@ -710,7 +711,7 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
     dotenv::dotenv().ok();
 
     // Get Jira host from environment or use default
-    let jira_host = std::env::var("JIRA_HOST").unwrap_or_else(|_| "https://eddieland.atlassian.net".to_string());
+    let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
 
     // Create Jira client
     let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
@@ -845,7 +846,7 @@ fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Res
     dotenv::dotenv().ok();
 
     // Get Jira host from environment or use default
-    let jira_host = std::env::var("JIRA_HOST").unwrap_or_else(|_| "https://eddieland.atlassian.net".to_string());
+    let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
 
     // Create Jira client
     let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;

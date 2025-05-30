@@ -5,7 +5,7 @@
 use anyhow::Result;
 use clap::{Arg, Command};
 use colored::Colorize;
-use git2::Repository as Git2Repository;
+use git2::{BranchType, Repository as Git2Repository};
 use serde::Serialize;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
@@ -13,6 +13,7 @@ use tokio::runtime::Runtime;
 use twig_gh::{GitHubPullRequest, create_github_client};
 use twig_jira::{Issue, create_jira_client};
 
+use crate::consts::{DEFAULT_JIRA_HOST, ENV_JIRA_HOST};
 use crate::creds::{get_github_credentials, get_jira_credentials};
 use crate::git::detect_current_repository;
 use crate::repo_state::RepoState;
@@ -37,12 +38,13 @@ pub struct BranchInfo {
 /// Build the dashboard command
 pub fn build_command() -> Command {
   Command::new("dashboard")
-    .about("Show a comprehensive dashboard of branches, PRs, and issues")
+    .about("Show a comprehensive dashboard of local branches, PRs, and issues")
     .long_about(
-      "Show a comprehensive dashboard of branches, PRs, and issues.\n\n\
+      "Show a comprehensive dashboard of local branches, PRs, and issues.\n\n\
              This command displays a unified view of your development context,\n\
              including local branches, associated pull requests, and related Jira issues.\n\
-             It helps you keep track of your work across different systems.",
+             It helps you keep track of your work across different systems.\n\n\
+             By default, only local branches are shown. Use --include-remote to include remote branches.",
     )
     .alias("dash")
     .arg(
@@ -75,6 +77,12 @@ pub fn build_command() -> Command {
         .value_parser(["text", "json"])
         .default_value("text"),
     )
+    .arg(
+      Arg::new("include_remote")
+        .help("Include remote branches in the dashboard")
+        .long("include-remote")
+        .action(clap::ArgAction::SetTrue),
+    )
 }
 
 /// Handle the dashboard command
@@ -85,6 +93,7 @@ pub fn handle_command(matches: &clap::ArgMatches) -> Result<()> {
   // Get command options
   let show_mine_only = matches.get_flag("mine");
   let show_recent_only = matches.get_flag("recent");
+  let include_remote = matches.get_flag("include_remote");
   let output_format = matches.get_one::<String>("format").unwrap();
 
   // Get repository path (current or specified)
@@ -137,7 +146,7 @@ pub fn handle_command(matches: &clap::ArgMatches) -> Result<()> {
 
   // Collect branch information
   let mut branches = Vec::new();
-  let branch_iter = match repo.branches(None) {
+  let branch_iter = match repo.branches(if include_remote { None } else { Some(BranchType::Local) }) {
     Ok(branches) => branches,
     Err(e) => {
       print_error(&format!("Failed to list branches: {e}"));
@@ -223,7 +232,7 @@ pub fn handle_command(matches: &clap::ArgMatches) -> Result<()> {
     dotenv::dotenv().ok();
 
     // Get Jira host from environment or use default
-    let jira_host = std::env::var("JIRA_HOST").unwrap_or_else(|_| "https://eddieland.atlassian.net".to_string());
+    let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
 
     if let Ok(jira_client) = create_jira_client(&jira_host, &creds.username, &creds.password) {
       // Set up JQL filters
@@ -271,7 +280,7 @@ pub fn handle_command(matches: &clap::ArgMatches) -> Result<()> {
     }
     _ => {
       // Output as text
-      display_text_dashboard(&dashboard_data);
+      display_text_dashboard(&dashboard_data, include_remote);
     }
   }
 
@@ -279,7 +288,7 @@ pub fn handle_command(matches: &clap::ArgMatches) -> Result<()> {
 }
 
 /// Display the dashboard in text format
-fn display_text_dashboard(data: &DashboardData) {
+fn display_text_dashboard(data: &DashboardData, include_remote: bool) {
   // Define a struct for branch data with Tabled trait
   #[derive(Tabled)]
   struct BranchRow {
@@ -320,7 +329,16 @@ fn display_text_dashboard(data: &DashboardData) {
   }
 
   // Display branches
-  println!("\n{}", "Local Branches".bold().underline());
+  println!(
+    "\n{}",
+    (if include_remote {
+      "All Branches (Local & Remote)"
+    } else {
+      "Local Branches"
+    })
+    .bold()
+    .underline()
+  );
   if data.branches.is_empty() {
     println!("  No branches found");
   } else {

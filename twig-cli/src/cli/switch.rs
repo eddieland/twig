@@ -5,6 +5,7 @@ use tokio::runtime::Runtime;
 use twig_gh::create_github_client;
 use twig_jira::create_jira_client;
 
+use crate::consts::{DEFAULT_JIRA_HOST, ENV_JIRA_HOST};
 use crate::creds::{get_github_credentials, get_jira_credentials};
 use crate::git::detect_current_repository;
 use crate::repo_state::RepoState;
@@ -295,7 +296,7 @@ fn create_branch_from_jira_issue(repo_path: &std::path::Path, issue_key: &str) -
     dotenv::dotenv().ok();
 
     // Get Jira host from environment or use default
-    let jira_host = std::env::var("JIRA_HOST").unwrap_or_else(|_| "https://eddieland.atlassian.net".to_string());
+    let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
 
     // Create Jira client
     let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
