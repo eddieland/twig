@@ -366,12 +366,11 @@ fn display_text_dashboard(data: &DashboardData, include_remote: bool) {
       })
       .collect();
 
-    // Create and display the table with a simpler style
-    println!("{}", Table::new(branch_rows).with(Style::ascii()));
+    println!("\n{}", Table::new(branch_rows).with(Style::sharp()));
   }
 
   // Display pull requests
-  println!("\n{}", "GitHub Pull Requests".bold().underline());
+  println!("\n{}\n", "GitHub Pull Requests".bold().underline());
   if data.pull_requests.is_empty() {
     println!("  No pull requests found");
   } else {
@@ -399,12 +398,11 @@ fn display_text_dashboard(data: &DashboardData, include_remote: bool) {
       })
       .collect();
 
-    // Create and display the table with a simpler style
-    println!("{}", Table::new(pr_rows).with(Style::ascii()));
+    println!("{}", Table::new(pr_rows).with(Style::sharp()));
   }
 
   // Display Jira issues
-  println!("\n{}", "Jira Issues".bold().underline());
+  println!("\n{}\n", "Jira Issues".bold().underline());
   if data.issues.is_empty() {
     println!("  No issues found");
   } else {
@@ -437,8 +435,7 @@ fn display_text_dashboard(data: &DashboardData, include_remote: bool) {
       })
       .collect();
 
-    // Create and display the table with a simpler style
-    println!("{}", Table::new(issue_rows).with(Style::ascii()));
+    println!("{}", Table::new(issue_rows).with(Style::sharp()));
   }
 
   println!();

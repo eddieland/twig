@@ -386,10 +386,7 @@ fn handle_list_issues_command(list_matches: &clap::ArgMatches) -> Result<()> {
           })
           .collect();
 
-        // Create and display the table with a simpler style
-        println!();
-        println!("{}", Table::new(rows).with(Style::ascii()));
-        println!();
+        println!("\n{}\n", Table::new(rows).with(Style::sharp()));
       }
       Err(e) => {
         print_error(&format!("Failed to fetch issues: {e}"));

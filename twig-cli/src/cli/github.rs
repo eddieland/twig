@@ -410,9 +410,7 @@ fn handle_checks_command(checks_matches: &clap::ArgMatches) -> Result<()> {
         })
         .collect();
 
-      // Create and display the table with a simpler style
-      println!();
-      println!("{}", Table::new(rows).with(Style::ascii()));
+      println!("\n{}", Table::new(rows).with(Style::sharp()));
 
       // Display details URLs
       println!("\nDetails:");
@@ -623,15 +621,12 @@ fn handle_pr_list_command(list_matches: &clap::ArgMatches) -> Result<()> {
   let state = list_matches.get_one::<String>("state").unwrap();
   let limit = *list_matches.get_one::<u32>("limit").unwrap();
 
-  // Set up pagination
   let pagination = twig_gh::endpoints::pulls::PaginationOptions {
     per_page: limit,
     page: 1,
   };
 
-  // Fetch pull requests
   println!("Fetching {state} pull requests for {owner}/{repo_name}...");
-
   match rt.block_on(github_client.list_pull_requests(&owner, &repo_name, Some(state), Some(pagination))) {
     Ok(prs) => {
       if prs.is_empty() {
@@ -685,12 +680,7 @@ fn handle_pr_list_command(list_matches: &clap::ArgMatches) -> Result<()> {
         })
         .collect();
 
-      let mut table = Table::new(rows);
-      table.with(Style::ascii());
-
-      println!();
-      println!("{table}",);
-      println!();
+      println!("\n{}\n", Table::new(rows).with(Style::sharp()));
     }
     Err(e) => {
       print_error(&format!("Failed to fetch pull requests: {e}"));
