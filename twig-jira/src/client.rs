@@ -61,7 +61,7 @@ impl JiraClient {
 }
 
 /// Create a Jira client from credentials
-#[instrument(level = "debug")]
+#[instrument(skip(api_token), level = "debug")]
 pub fn create_jira_client(base_url: &str, username: &str, api_token: &str) -> Result<JiraClient> {
   debug!("Creating Jira client for URL: {} with username: {}", base_url, username);
 

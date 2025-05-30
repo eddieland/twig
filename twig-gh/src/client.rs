@@ -63,7 +63,7 @@ impl GitHubClient {
 }
 
 /// Create a GitHub client from credentials
-#[instrument(level = "debug")]
+#[instrument(skip(token), level = "debug")]
 pub fn create_github_client(username: &str, token: &str) -> Result<GitHubClient> {
   debug!("Creating GitHub client with username: {}", username);
 
