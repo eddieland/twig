@@ -5,9 +5,10 @@
 //! operations.
 
 use anyhow::{Context, Result};
-use reqwest::Client;
+use reqwest::{Client, header};
 use tracing::{debug, info, instrument, trace, warn};
 
+use crate::consts::USER_AGENT;
 use crate::models::JiraAuth;
 
 /// Represents a Jira API client
@@ -42,6 +43,7 @@ impl JiraClient {
     let response = self
       .client
       .get(&url)
+      .header(header::USER_AGENT, USER_AGENT)
       .basic_auth(&self.auth.username, Some(&self.auth.api_token))
       .send()
       .await
@@ -78,6 +80,7 @@ pub fn create_jira_client(base_url: &str, username: &str, api_token: &str) -> Re
 
 #[cfg(test)]
 mod tests {
+  use reqwest::header;
   use wiremock::matchers::{header, method, path};
   use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -112,7 +115,7 @@ mod tests {
     // Create a mock that expects Basic auth header
     Mock::given(method("GET"))
       .and(path("/rest/api/2/myself"))
-      .and(header("Authorization", "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4=")) // test_user:test_token in base64
+      .and(header(header::AUTHORIZATION, "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4=")) // test_user:test_token in base64
       .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
           "name": "test_user",
           "displayName": "Test User",

@@ -4,11 +4,12 @@
 //! including fetching, creating, and updating Jira issues.
 
 use anyhow::{Context, Result};
-use reqwest::StatusCode;
+use reqwest::{StatusCode, header};
 use serde::Deserialize;
 use tracing::{debug, info, instrument, trace, warn};
 
 use crate::client::JiraClient;
+use crate::consts::USER_AGENT;
 use crate::models::Issue;
 
 /// Represents a Jira comment
@@ -40,6 +41,7 @@ impl JiraClient {
     let response = self
       .client
       .get(&url)
+      .header(header::USER_AGENT, USER_AGENT)
       .basic_auth(&self.auth.username, Some(&self.auth.api_token))
       .send()
       .await
@@ -133,6 +135,7 @@ impl JiraClient {
     let response = self
       .client
       .get(&url)
+      .header(header::USER_AGENT, USER_AGENT)
       .basic_auth(&self.auth.username, Some(&self.auth.api_token))
       .send()
       .await
@@ -197,6 +200,7 @@ impl JiraClient {
     let response = self
       .client
       .post(&url)
+      .header(header::USER_AGENT, USER_AGENT)
       .basic_auth(&self.auth.username, Some(&self.auth.api_token))
       .json(&body)
       .send()

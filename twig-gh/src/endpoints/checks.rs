@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
-use reqwest::StatusCode;
+use reqwest::{StatusCode, header};
 use serde::Deserialize;
 use tracing::instrument;
 
 use crate::client::GitHubClient;
+use crate::consts::{ACCEPT, USER_AGENT};
 use crate::models::CheckRun;
 
 impl GitHubClient {
@@ -18,8 +19,8 @@ impl GitHubClient {
     let response = self
       .client
       .get(&url)
-      .header("Accept", "application/vnd.github.v3+json")
-      .header("User-Agent", "twig-cli")
+      .header(header::ACCEPT, ACCEPT)
+      .header(header::USER_AGENT, USER_AGENT)
       .basic_auth(&self.auth.username, Some(&self.auth.token))
       .send()
       .await
@@ -72,8 +73,8 @@ mod tests {
   use wiremock::matchers::{header, method, path};
   use wiremock::{Mock, MockServer, ResponseTemplate};
 
-  use crate::client::GitHubClient;
-  use crate::models::GitHubAuth;
+  use super::*;
+  use crate::GitHubAuth;
 
   #[tokio::test]
   async fn test_get_check_runs() -> anyhow::Result<()> {
@@ -90,9 +91,9 @@ mod tests {
     // Mock response for check runs
     Mock::given(method("GET"))
       .and(path(format!("/repos/owner/repo/commits/{}/check-runs", ref_sha)))
-      .and(header("Accept", "application/vnd.github.v3+json"))
-      .and(header("User-Agent", "twig-cli"))
-      .and(header("Authorization", "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
+      .and(header(header::ACCEPT, ACCEPT))
+      .and(header(header::USER_AGENT, USER_AGENT))
+      .and(header(header::AUTHORIZATION, "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
       .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
           "total_count": 2,
           "check_runs": [
@@ -150,9 +151,9 @@ mod tests {
     // Mock 404 response
     Mock::given(method("GET"))
       .and(path(format!("/repos/owner/repo/commits/{}/check-runs", ref_sha)))
-      .and(header("Accept", "application/vnd.github.v3+json"))
-      .and(header("User-Agent", "twig-cli"))
-      .and(header("Authorization", "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
+      .and(header(header::ACCEPT, ACCEPT))
+      .and(header(header::USER_AGENT, USER_AGENT))
+      .and(header(header::AUTHORIZATION, "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
       .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
           "message": "Not Found",
           "documentation_url": "https://docs.github.com/v3/checks/runs/#list-check-runs-for-a-git-reference"

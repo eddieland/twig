@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
+use reqwest::header;
 use tracing::{debug, instrument, trace, warn};
 
 use crate::client::GitHubClient;
+use crate::consts::{ACCEPT, USER_AGENT};
 use crate::models::{GitHubPullRequest, PullRequestReview, PullRequestStatus};
 
 /// Pagination options for GitHub API requests
@@ -48,8 +50,8 @@ impl GitHubClient {
     let response = self
       .client
       .get(&url)
-      .header("Accept", "application/vnd.github.v3+json")
-      .header("User-Agent", "twig-cli")
+      .header(header::ACCEPT, ACCEPT)
+      .header(header::USER_AGENT, USER_AGENT)
       .basic_auth(&self.auth.username, Some(&self.auth.token))
       .send()
       .await
@@ -70,8 +72,7 @@ impl GitHubClient {
     Ok(pull_requests)
   }
 
-  /// Get pull requests for a repository (legacy method, use list_pull_requests
-  /// instead)
+  /// Get pull requests for a repository
   #[allow(dead_code)]
   pub async fn get_pull_requests(
     &self,
@@ -93,8 +94,8 @@ impl GitHubClient {
     let response = self
       .client
       .get(&url)
-      .header("Accept", "application/vnd.github.v3+json")
-      .header("User-Agent", "twig-cli")
+      .header(header::ACCEPT, ACCEPT)
+      .header(header::USER_AGENT, USER_AGENT)
       .basic_auth(&self.auth.username, Some(&self.auth.token))
       .send()
       .await
@@ -149,8 +150,8 @@ impl GitHubClient {
     let response = self
       .client
       .get(&url)
-      .header("Accept", "application/vnd.github.v3+json")
-      .header("User-Agent", "twig-cli")
+      .header(header::ACCEPT, ACCEPT)
+      .header(header::USER_AGENT, USER_AGENT)
       .basic_auth(&self.auth.username, Some(&self.auth.token))
       .send()
       .await
@@ -264,7 +265,7 @@ mod tests {
   use wiremock::{Mock, MockServer, ResponseTemplate};
 
   use super::*;
-  use crate::models::GitHubAuth;
+  use crate::GitHubAuth;
 
   #[tokio::test]
   async fn test_list_pull_requests() -> anyhow::Result<()> {
@@ -282,9 +283,9 @@ mod tests {
       .and(query_param("state", "open"))
       .and(query_param("per_page", "30"))
       .and(query_param("page", "1"))
-      .and(header("Accept", "application/vnd.github.v3+json"))
-      .and(header("User-Agent", "twig-cli"))
-      .and(header("Authorization", "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
+      .and(header(header::ACCEPT, ACCEPT))
+      .and(header(header::USER_AGENT, USER_AGENT))
+      .and(header(header::AUTHORIZATION, "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
       .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
         {
           "id": 1,
@@ -345,9 +346,9 @@ mod tests {
       .and(query_param("state", "closed"))
       .and(query_param("per_page", "5"))
       .and(query_param("page", "2"))
-      .and(header("Accept", "application/vnd.github.v3+json"))
-      .and(header("User-Agent", "twig-cli"))
-      .and(header("Authorization", "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
+      .and(header(header::ACCEPT, ACCEPT))
+      .and(header(header::USER_AGENT, USER_AGENT))
+      .and(header(header::AUTHORIZATION, "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
       .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
         {
           "id": 2,
@@ -405,9 +406,9 @@ mod tests {
     // Mock response for a specific pull request
     Mock::given(method("GET"))
       .and(path("/repos/octocat/Hello-World/pulls/1347"))
-      .and(header("Accept", "application/vnd.github.v3+json"))
-      .and(header("User-Agent", "twig-cli"))
-      .and(header("Authorization", "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
+      .and(header(header::ACCEPT, ACCEPT))
+      .and(header(header::USER_AGENT, USER_AGENT))
+      .and(header(header::AUTHORIZATION, "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
       .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
         "id": 1,
         "number": 1347,
@@ -468,9 +469,9 @@ mod tests {
       .and(query_param("state", "open"))
       .and(query_param("per_page", "30"))
       .and(query_param("page", "1"))
-      .and(header("Accept", "application/vnd.github.v3+json"))
-      .and(header("User-Agent", "twig-cli"))
-      .and(header("Authorization", "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
+      .and(header(header::ACCEPT, ACCEPT))
+      .and(header(header::USER_AGENT, USER_AGENT))
+      .and(header(header::AUTHORIZATION, "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
       .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
         {
           "id": 1,
@@ -554,9 +555,9 @@ mod tests {
     // Mock response for the pull request
     Mock::given(method("GET"))
       .and(path(format!("/repos/octocat/Hello-World/pulls/{}", pr_number)))
-      .and(header("Accept", "application/vnd.github.v3+json"))
-      .and(header("User-Agent", "twig-cli"))
-      .and(header("Authorization", "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
+      .and(header(header::ACCEPT, ACCEPT))
+      .and(header(header::USER_AGENT, USER_AGENT))
+      .and(header(header::AUTHORIZATION, "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
       .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
         "id": 1,
         "number": pr_number,
@@ -590,9 +591,9 @@ mod tests {
     // Mock response for PR reviews
     Mock::given(method("GET"))
       .and(path(format!("/repos/octocat/Hello-World/pulls/{}/reviews", pr_number)))
-      .and(header("Accept", "application/vnd.github.v3+json"))
-      .and(header("User-Agent", "twig-cli"))
-      .and(header("Authorization", "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
+      .and(header(header::ACCEPT, ACCEPT))
+      .and(header(header::USER_AGENT, USER_AGENT))
+      .and(header(header::AUTHORIZATION, "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
       .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
         {
           "id": 80,
@@ -624,9 +625,9 @@ mod tests {
         "/repos/octocat/Hello-World/commits/{}/check-runs",
         commit_sha
       )))
-      .and(header("Accept", "application/vnd.github.v3+json"))
-      .and(header("User-Agent", "twig-cli"))
-      .and(header("Authorization", "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
+      .and(header(header::ACCEPT, ACCEPT))
+      .and(header(header::USER_AGENT, USER_AGENT))
+      .and(header(header::AUTHORIZATION, "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
       .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
         "total_count": 2,
         "check_runs": [

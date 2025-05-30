@@ -5,9 +5,10 @@
 //! operations.
 
 use anyhow::{Context, Result};
-use reqwest::Client;
+use reqwest::{Client, header};
 use tracing::{debug, info, instrument, trace, warn};
 
+use crate::consts::{ACCEPT, API_BASE_URL, USER_AGENT};
 use crate::models::GitHubAuth;
 
 /// Represents a GitHub API client
@@ -25,7 +26,7 @@ impl GitHubClient {
     let client = Client::new();
     let instance = Self {
       client,
-      base_url: "https://api.github.com".to_string(),
+      base_url: API_BASE_URL.to_string(),
       auth,
     };
     debug!("GitHub client created with base URL: {}", instance.base_url);
@@ -42,8 +43,8 @@ impl GitHubClient {
     let response = self
       .client
       .get(&url)
-      .header("Accept", "application/vnd.github.v3+json")
-      .header("User-Agent", "twig-cli")
+      .header(header::ACCEPT, ACCEPT)
+      .header(header::USER_AGENT, USER_AGENT)
       .basic_auth(&self.auth.username, Some(&self.auth.token))
       .send()
       .await
@@ -94,7 +95,7 @@ mod tests {
     };
     let client = GitHubClient::new(auth);
 
-    assert_eq!(client.base_url, "https://api.github.com");
+    assert_eq!(client.base_url, API_BASE_URL);
     assert_eq!(client.auth.username, "test_user");
     assert_eq!(client.auth.token, "test_token");
 
@@ -115,7 +116,7 @@ mod tests {
     // Create a mock that expects an Authorization header
     Mock::given(method("GET"))
       .and(path("/user"))
-      .and(header("Authorization", "token test_token"))
+      .and(header(header::AUTHORIZATION, "token test_token"))
       .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
           "login": "testuser",
           "id": 1234,
@@ -128,7 +129,7 @@ mod tests {
     let response = client
       .client
       .get(&format!("{}/user", client.base_url))
-      .header("Authorization", format!("token {}", "test_token"))
+      .header(header::AUTHORIZATION, format!("token {}", "test_token"))
       .send()
       .await?;
 

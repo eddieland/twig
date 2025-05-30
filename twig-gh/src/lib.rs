@@ -4,10 +4,11 @@
 //! data, supporting authentication and common GitHub operations for twig
 //! workflows.
 
-mod client;
+pub mod client;
+pub mod consts;
 pub mod endpoints;
 pub mod models;
-mod utils;
+pub mod utils;
 
 // Re-export the client
 pub use client::{GitHubClient, create_github_client};

@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
-use reqwest::StatusCode;
+use reqwest::{StatusCode, header};
 use tracing::instrument;
 
 use crate::client::JiraClient;
+use crate::consts::USER_AGENT;
 use crate::models::{Transition, TransitionId, TransitionRequest, Transitions};
 
 impl JiraClient {
@@ -14,6 +15,7 @@ impl JiraClient {
     let response = self
       .client
       .get(&url)
+      .header(header::USER_AGENT, USER_AGENT)
       .basic_auth(&self.auth.username, Some(&self.auth.api_token))
       .send()
       .await
@@ -53,6 +55,7 @@ impl JiraClient {
     let response = self
       .client
       .post(&url)
+      .header(header::USER_AGENT, USER_AGENT)
       .basic_auth(&self.auth.username, Some(&self.auth.api_token))
       .json(&payload)
       .send()

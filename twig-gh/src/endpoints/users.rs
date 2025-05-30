@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
-use reqwest::StatusCode;
+use reqwest::{StatusCode, header};
 use tracing::instrument;
 
 use crate::client::GitHubClient;
+use crate::consts::{ACCEPT, USER_AGENT};
 use crate::models::GitHubUser;
 
 impl GitHubClient {
@@ -14,8 +15,8 @@ impl GitHubClient {
     let response = self
       .client
       .get(&url)
-      .header("Accept", "application/vnd.github.v3+json")
-      .header("User-Agent", "twig-cli")
+      .header(header::ACCEPT, ACCEPT)
+      .header(header::USER_AGENT, USER_AGENT)
       .basic_auth(&self.auth.username, Some(&self.auth.token))
       .send()
       .await
@@ -62,8 +63,8 @@ mod tests {
   use wiremock::matchers::{header, method, path};
   use wiremock::{Mock, MockServer, ResponseTemplate};
 
-  use crate::client::GitHubClient;
-  use crate::models::GitHubAuth;
+  use super::*;
+  use crate::GitHubAuth;
 
   #[tokio::test]
   async fn test_get_current_user() -> anyhow::Result<()> {
@@ -78,9 +79,9 @@ mod tests {
     // Mock response for current user
     Mock::given(method("GET"))
       .and(path("/user"))
-      .and(header("Accept", "application/vnd.github.v3+json"))
-      .and(header("User-Agent", "twig-cli"))
-      .and(header("Authorization", "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
+      .and(header(header::ACCEPT, ACCEPT))
+      .and(header(header::USER_AGENT, USER_AGENT))
+      .and(header(header::AUTHORIZATION, "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
       .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
           "login": "test_user",
           "id": 1,
@@ -113,8 +114,8 @@ mod tests {
     // Mock unauthorized response
     Mock::given(method("GET"))
       .and(path("/user"))
-      .and(header("Accept", "application/vnd.github.v3+json"))
-      .and(header("User-Agent", "twig-cli"))
+      .and(header(header::ACCEPT, ACCEPT))
+      .and(header(header::USER_AGENT, USER_AGENT))
       .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
           "message": "Bad credentials",
           "documentation_url": "https://docs.github.com/rest"

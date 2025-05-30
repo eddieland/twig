@@ -4,8 +4,9 @@
 //! project data, supporting authentication and common Jira operations for twig
 //! workflows.
 
-mod client;
-mod endpoints;
+pub mod client;
+pub mod consts;
+pub mod endpoints;
 pub mod models;
 
 // Re-export the client
