@@ -4,38 +4,67 @@ This document provides guidelines and instructions for contributing to the proje
 
 ## Development Setup
 
-1. Ensure you have Rust 1.87.0 or later installed
+### Installing Rustup
+
+[Rustup](https://rustup.rs/) is the official Rust toolchain installer that makes it easy to install Rust and switch between different versions.
+
+1. **Linux/macOS**:
+
    ```bash
-   rustup update
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    ```
 
-2. Clone the repository
+2. **Verify installation**:
+
    ```bash
-   git clone <repository-url>
-   cd twig
+   rustup --version
+   cargo --version
+   rustc --version
    ```
 
-3. Install development tools
-   ```bash
-   make install-dev-tools
-   ```
+### Setting Up the Right Toolchain
 
-4. Set up pre-commit hooks
-   ```bash
-   make pre-commit-setup
-   ```
+Twig requires Rust 1.87.0 or later and uses the **nightly** toolchain for unstable rustfmt features. The project includes a `rust-toolchain.toml` file that specifies the exact requirements.
 
-5. Build the project
-   ```bash
-   cargo build
-   ```
+```bash
+# Simply navigate to the project directory and Rustup will automatically detect the toolchain file
+cd twig
+rustup show
+```
 
-6. Run tests
-   ```bash
-   make test
-   # OR
-   cargo nextest run
-   ```
+The `rust-toolchain.toml` file in the repository will ensure the correct toolchain is used when building the project.
+
+### Building from Source
+
+Once you have Rustup installed:
+
+```bash
+# Clone the repository
+git clone https://github.com/eddieland/twig.git
+cd twig
+
+# Install development tools
+make install-dev-tools
+
+# Set up pre-commit hooks
+make pre-commit-setup
+
+# Build the project
+cargo build
+
+# Build in release mode
+cargo build --release
+
+# The binary will be available at target/release/twig
+```
+
+### Running Tests
+
+```bash
+make test
+# OR
+cargo nextest run
+```
 
 **Important**: This project uses [nextest](https://nexte.st/) for running tests instead of the standard `cargo test`. The test suite will only work correctly with nextest. Running `cargo test` directly will not execute tests properly.
 
@@ -72,7 +101,36 @@ make pre-commit-run
 
 To temporarily bypass the hooks (not recommended), use the `--no-verify` flag with git commit.
 
-## Workflow
+## Makefile
+
+The project includes a Makefile to simplify common development tasks. The Makefile is self-documenting and provides a helpful overview of available commands:
+
+```bash
+make help
+```
+
+Key Makefile targets include:
+
+- **Development**: `fmt`, `lint`, `test`, `check`, `doc`
+- **Build**: `build`, `release`, `clean`, `run`
+- **Installation**: `install`, `install-dev-tools`, `pre-commit-setup`
+- **Snapshot Testing**: `insta-review`, `insta-accept`, `insta-reject`, `update-snapshots`
+
+**Important**: All test-related targets use [nextest](https://nexte.st/) instead of the standard `cargo test`. This provides better performance and additional features for test execution.
+
+## Snapshot Testing
+
+Twig uses [Insta](https://insta.rs/) for snapshot testing, which helps ensure consistent output across changes. Snapshot tests capture the output of components and compare them against previously saved "snapshots" to detect unintended changes.
+
+### Workflow
+
+1. **Running Tests**: When you run tests with `make test`, any snapshot tests will be executed
+2. **Reviewing Changes**: If snapshots change or new ones are created, use `make insta-review` to interactively review them
+3. **Accepting Changes**: Accept all pending snapshots with `make insta-accept`
+4. **Rejecting Changes**: Reject all pending snapshots with `make insta-reject`
+5. **Updating Snapshots**: Run tests and automatically update snapshots with `make test-update-snapshots`
+
+## Development Workflow
 
 1. Create a feature branch (`git checkout -b feature/amazing-feature`)
 2. Make your changes

@@ -42,57 +42,16 @@ sudo mv twig /usr/local/bin/
 
 ### For Developers
 
-If you want to contribute to Twig or build it from source, you'll need to set up Rustup and the nightly toolchain.
+If you want to contribute to Twig or build it from source, please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file for detailed instructions on:
 
-#### Installing Rustup
+- Setting up the development environment
+- Installing Rustup and the required toolchain
+- Building from source
+- Running tests with nextest
+- Using the Makefile for common development tasks
+- Working with snapshot tests
 
-[Rustup](https://rustup.rs/) is the official Rust toolchain installer that makes it easy to install Rust and switch between different versions.
-
-1. **Linux/macOS**:
-
-   ```bash
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   ```
-
-2. **Verify installation**:
-
-   ```bash
-   rustup --version
-   cargo --version
-   rustc --version
-   ```
-
-#### Setting Up the Right Toolchain
-
-Twig requires Rust 1.87.0 or later and uses the **nightly** toolchain for unstable rustfmt features. The project includes a `rust-toolchain.toml` file that specifies the exact requirements.
-
-```bash
-# Simply navigate to the project directory and Rustup will automatically detect the toolchain file
-cd twig
-rustup show
-```
-
-The `rust-toolchain.toml` file in the repository will ensure the correct toolchain is used when building the project.
-
-#### Building from Source
-
-Once you have Rustup installed:
-
-```bash
-# Clone the repository
-git clone https://github.com/eddieland/twig.git
-cd twig
-
-# Install development dependencies (including nextest for testing)
-make install-dev-tools
-
-# Build in release mode
-cargo build --release
-
-# The binary will be available at target/release/twig
-```
-
-**Note**: This project uses [nextest](https://nexte.st/) for running tests. The standard `cargo test` command will not work correctly. Use `make test` or `cargo nextest run` to run the test suite.
+The project uses a specific nightly toolchain for development, which is automatically configured through the `rust-toolchain.toml` file.
 
 ## Basic Usage
 
@@ -158,31 +117,72 @@ twig
 └── version                # Version information
 ```
 
-## Makefile
+## Environment Variables
 
-The project includes a Makefile to simplify common development tasks. The Makefile is self-documenting and provides a helpful overview of available commands:
+Twig supports several environment variables to customize its behavior. For the best experience, we recommend setting these variables in your shell profile file (`.bashrc`, `.zshrc`, or equivalent).
+
+### Jira Integration
+
+#### JIRA_HOST
+
+Specifies the URL of your Jira instance.
+
+- **Default**: `https://eddieland.atlassian.net`
+- **Example**: `export JIRA_HOST="https://your-company.atlassian.net"`
+
+**How it affects workflow:**
+
+1. **Authentication**: When `JIRA_HOST` is set, Twig will look for credentials in your `.netrc` file matching this hostname first. If not found, it falls back to looking for `atlassian.net` credentials.
+
+2. **API Requests**: All Jira API requests will be sent to this host, allowing you to:
+   - View issues: `twig jira issue view PROJ-123`
+   - Create branches from issues: `twig jira branch create PROJ-123`
+   - Transition issues: `twig jira issue transition PROJ-123 "In Progress"`
+   - List issues: `twig jira issue list --project PROJ`
+
+3. **Multiple Jira Instances**: If you work with multiple Jira instances, you can switch between them by changing this variable:
+   ```bash
+   # For project A
+   export JIRA_HOST="https://projecta.atlassian.net"
+   twig jira issue view PROJA-123
+
+   # For project B
+   export JIRA_HOST="https://projectb.atlassian.net"
+   twig jira issue view PROJB-456
+   ```
+
+We recommend setting this in your shell profile to ensure it's always available:
 
 ```bash
-make help
+# Add to your .bashrc, .zshrc, or equivalent
+export JIRA_HOST="https://your-company.atlassian.net"
 ```
 
-Key Makefile targets include:
+### XDG Base Directory Specification
 
-- **Development**: `fmt`, `lint`, `test`, `check`, `doc`
-- **Build**: `build`, `release`, `clean`, `run`
-- **Installation**: `install`, `install-dev-tools`, `pre-commit-setup`
-- **Snapshot Testing**: `insta-review`, `insta-accept`, `insta-reject`, `update-snapshots`
+Twig follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html) for storing configuration and data files. You can customize these locations with the following variables:
 
-**Important**: All test-related targets use [nextest](https://nexte.st/) instead of the standard `cargo test`. This provides better performance and additional features for test execution.
+#### XDG_CONFIG_HOME
 
-## Snapshot Testing
+Specifies the base directory for configuration files.
 
-Twig uses [Insta](https://insta.rs/) for snapshot testing, which helps ensure consistent output across changes. Snapshot tests capture the output of components and compare them against previously saved "snapshots" to detect unintended changes.
+- **Default**: `$HOME/.config`
+- **Example**: `export XDG_CONFIG_HOME="$HOME/.my-config"`
 
-### Workflow
+#### XDG_DATA_HOME
 
-1. **Running Tests**: When you run tests with `make test`, any snapshot tests will be executed
-2. **Reviewing Changes**: If snapshots change or new ones are created, use `make insta-review` to interactively review them
-3. **Accepting Changes**: Accept all pending snapshots with `make insta-accept`
-4. **Rejecting Changes**: Reject all pending snapshots with `make insta-reject`
-5. **Updating Snapshots**: Run tests and automatically update snapshots with `make test-update-snapshots`
+Specifies the base directory for data files.
+
+- **Default**: `$HOME/.local/share`
+- **Example**: `export XDG_DATA_HOME="$HOME/.my-data"`
+
+#### XDG_CACHE_HOME
+
+Specifies the base directory for cache files.
+
+- **Default**: `$HOME/.cache`
+- **Example**: `export XDG_CACHE_HOME="$HOME/.my-cache"`
+
+## Development Resources
+
+For information about development workflows, Makefile usage, and snapshot testing, please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file.
