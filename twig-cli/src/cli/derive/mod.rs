@@ -11,7 +11,9 @@ pub use command::DeriveCommand;
 // Export submodules
 pub mod branch;
 pub mod git;
+pub mod github;
 pub mod init;
+pub mod jira;
 pub mod panic;
 pub mod switch;
 pub mod sync;
