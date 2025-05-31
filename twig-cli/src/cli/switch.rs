@@ -53,6 +53,23 @@ pub fn build_command() -> Command {
         .long("no-create")
         .action(clap::ArgAction::SetTrue),
     )
+    .arg(
+      Arg::new("parent")
+        .long("parent")
+        .short('p')
+        .help("Set parent dependency for the new branch")
+        .long_help(
+          "Specify a parent branch to create a dependency relationship.\n\
+                    Values can be:\n\
+                    • 'current' (default if flag used without value): Use current branch\n\
+                    • A branch name: Use the specified branch\n\
+                    • A Jira issue key (e.g., PROJ-123): Use branch associated with Jira issue\n\
+                    • 'none': Don't set any parent (use default root)",
+        )
+        .value_name("PARENT")
+        .num_args(0..=1)
+        .default_missing_value("current"),
+    )
 }
 
 /// Handle the switch command
@@ -60,17 +77,24 @@ pub fn handle_command(switch_matches: &clap::ArgMatches) -> Result<()> {
   let input = switch_matches.get_one::<String>("input").unwrap();
   let no_create = switch_matches.get_flag("no-create");
   let create_if_missing = !no_create; // Default is true, unless --no-create is specified
+  let parent_option = switch_matches.get_one::<String>("parent").map(|s| s.as_str());
 
   // Get the current repository
   let repo_path = detect_current_repository().context("Not in a git repository")?;
 
   // Detect input type and handle accordingly
   match detect_input_type(input) {
-    InputType::JiraIssueKey(issue_key) => handle_jira_switch(&repo_path, &issue_key, create_if_missing),
-    InputType::JiraIssueUrl(issue_key) => handle_jira_switch(&repo_path, &issue_key, create_if_missing),
-    InputType::GitHubPrId(pr_number) => handle_github_pr_switch(&repo_path, pr_number, create_if_missing),
-    InputType::GitHubPrUrl(pr_number) => handle_github_pr_switch(&repo_path, pr_number, create_if_missing),
-    InputType::BranchName(branch_name) => handle_branch_switch(&repo_path, &branch_name, create_if_missing),
+    InputType::JiraIssueKey(issue_key) => handle_jira_switch(&repo_path, &issue_key, create_if_missing, parent_option),
+    InputType::JiraIssueUrl(issue_key) => handle_jira_switch(&repo_path, &issue_key, create_if_missing, parent_option),
+    InputType::GitHubPrId(pr_number) => {
+      handle_github_pr_switch(&repo_path, pr_number, create_if_missing, parent_option)
+    }
+    InputType::GitHubPrUrl(pr_number) => {
+      handle_github_pr_switch(&repo_path, pr_number, create_if_missing, parent_option)
+    }
+    InputType::BranchName(branch_name) => {
+      handle_branch_switch(&repo_path, &branch_name, create_if_missing, parent_option)
+    }
   }
 }
 
@@ -146,8 +170,55 @@ fn extract_jira_issue_from_url(url: &str) -> Option<String> {
     .map(|m| m.as_str().to_string())
 }
 
+/// Resolve parent branch based on the provided option
+fn resolve_parent_branch(repo_path: &std::path::Path, parent_option: Option<&str>) -> Result<Option<String>> {
+  match parent_option {
+    None => Ok(None), // No parent specified
+    Some("current") => {
+      // Get the current branch name
+      let repo = Git2Repository::open(repo_path)?;
+      let head = repo.head()?;
+      if head.is_branch() {
+        let branch_name = head.shorthand().unwrap_or_default().to_string();
+        Ok(Some(branch_name))
+      } else {
+        print_warning("HEAD is not on a branch, cannot use as parent");
+        Ok(None)
+      }
+    }
+    Some("none") => Ok(None), // Explicitly no parent
+    Some(parent) => {
+      // Check if it's a Jira issue key
+      if is_jira_issue_key(parent) {
+        // Look up branch by Jira issue
+        let repo_state = RepoState::load(repo_path)?;
+        if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(parent) {
+          Ok(Some(branch_issue.branch.clone()))
+        } else {
+          print_warning(&format!("No branch found for Jira issue {parent}"));
+          Ok(None)
+        }
+      } else {
+        // Assume it's a branch name, verify it exists
+        let repo = Git2Repository::open(repo_path)?;
+        if repo.find_branch(parent, git2::BranchType::Local).is_ok() {
+          Ok(Some(parent.to_string()))
+        } else {
+          print_warning(&format!("Branch '{parent}' not found, cannot use as parent"));
+          Ok(None)
+        }
+      }
+    }
+  }
+}
+
 /// Handle switching to a branch based on Jira issue
-fn handle_jira_switch(repo_path: &std::path::Path, issue_key: &str, create_if_missing: bool) -> Result<()> {
+fn handle_jira_switch(
+  repo_path: &std::path::Path,
+  issue_key: &str,
+  create_if_missing: bool,
+  parent_option: Option<&str>,
+) -> Result<()> {
   print_info(&format!("Looking for branch associated with Jira issue: {issue_key}",));
 
   // Load repository state to find associated branch
@@ -163,7 +234,7 @@ fn handle_jira_switch(repo_path: &std::path::Path, issue_key: &str, create_if_mi
   // No existing association found
   if create_if_missing {
     print_info("No associated branch found. Creating new branch from Jira issue...");
-    create_branch_from_jira_issue(repo_path, issue_key)
+    create_branch_from_jira_issue(repo_path, issue_key, parent_option)
   } else {
     print_warning(&format!(
       "No branch found for Jira issue {issue_key}. Use --create to create a new branch.",
@@ -173,7 +244,12 @@ fn handle_jira_switch(repo_path: &std::path::Path, issue_key: &str, create_if_mi
 }
 
 /// Handle switching to a branch based on GitHub PR
-fn handle_github_pr_switch(repo_path: &std::path::Path, pr_number: u32, create_if_missing: bool) -> Result<()> {
+fn handle_github_pr_switch(
+  repo_path: &std::path::Path,
+  pr_number: u32,
+  create_if_missing: bool,
+  parent_option: Option<&str>,
+) -> Result<()> {
   print_info(&format!("Looking for branch associated with GitHub PR: #{pr_number}",));
 
   // Load repository state to find associated branch
@@ -193,7 +269,7 @@ fn handle_github_pr_switch(repo_path: &std::path::Path, pr_number: u32, create_i
   // No existing association found
   if create_if_missing {
     print_info("No associated branch found. Creating new branch from GitHub PR...");
-    create_branch_from_github_pr(repo_path, pr_number)
+    create_branch_from_github_pr(repo_path, pr_number, parent_option)
   } else {
     print_warning(&format!(
       "No branch found for GitHub PR #{pr_number}. Use --create to create a new branch.",
@@ -203,7 +279,12 @@ fn handle_github_pr_switch(repo_path: &std::path::Path, pr_number: u32, create_i
 }
 
 /// Handle switching to a branch by name
-fn handle_branch_switch(repo_path: &std::path::Path, branch_name: &str, create_if_missing: bool) -> Result<()> {
+fn handle_branch_switch(
+  repo_path: &std::path::Path,
+  branch_name: &str,
+  create_if_missing: bool,
+  parent_option: Option<&str>,
+) -> Result<()> {
   let repo = Git2Repository::open(repo_path)?;
 
   // Check if branch exists
@@ -215,7 +296,11 @@ fn handle_branch_switch(repo_path: &std::path::Path, branch_name: &str, create_i
   // Branch doesn't exist
   if create_if_missing {
     print_info(&format!("Branch '{branch_name}' doesn't exist. Creating it...",));
-    create_and_switch_to_branch(repo_path, branch_name)
+
+    // Resolve parent branch
+    let parent_branch = resolve_parent_branch(repo_path, parent_option)?;
+
+    create_and_switch_to_branch(repo_path, branch_name, parent_branch.as_deref())
   } else {
     print_warning(&format!(
       "Branch '{branch_name}' doesn't exist. Use --create to create it.",
@@ -255,7 +340,11 @@ fn switch_to_branch(repo_path: &std::path::Path, branch_name: &str) -> Result<()
 }
 
 /// Create a new branch and switch to it
-fn create_and_switch_to_branch(repo_path: &std::path::Path, branch_name: &str) -> Result<()> {
+fn create_and_switch_to_branch(
+  repo_path: &std::path::Path,
+  branch_name: &str,
+  parent_branch: Option<&str>,
+) -> Result<()> {
   let repo = Git2Repository::open(repo_path)?;
 
   // Get the HEAD commit to branch from
@@ -273,11 +362,39 @@ fn create_and_switch_to_branch(repo_path: &std::path::Path, branch_name: &str) -
   print_success(&format!("Created branch '{branch_name}'",));
 
   // Switch to the new branch
-  switch_to_branch(repo_path, branch_name)
+  switch_to_branch(repo_path, branch_name)?;
+
+  // Add dependency if parent is specified
+  if let Some(parent) = parent_branch {
+    add_branch_dependency(repo_path, branch_name, parent)?;
+  }
+
+  Ok(())
+}
+
+/// Add a branch dependency
+fn add_branch_dependency(repo_path: &std::path::Path, child: &str, parent: &str) -> Result<()> {
+  let mut repo_state = RepoState::load(repo_path)?;
+
+  match repo_state.add_dependency(child.to_string(), parent.to_string()) {
+    Ok(()) => {
+      repo_state.save(repo_path)?;
+      print_success(&format!("Added dependency: {child} -> {parent}"));
+      Ok(())
+    }
+    Err(e) => {
+      print_warning(&format!("Failed to add dependency: {e}"));
+      Ok(()) // Continue despite dependency error
+    }
+  }
 }
 
 /// Create a branch from a Jira issue
-fn create_branch_from_jira_issue(repo_path: &std::path::Path, issue_key: &str) -> Result<()> {
+fn create_branch_from_jira_issue(
+  repo_path: &std::path::Path,
+  issue_key: &str,
+  parent_option: Option<&str>,
+) -> Result<()> {
   // Create a runtime for async operations
   let rt = Runtime::new().context("Failed to create async runtime")?;
 
@@ -331,8 +448,11 @@ fn create_branch_from_jira_issue(repo_path: &std::path::Path, issue_key: &str) -
 
     print_info(&format!("Creating branch: {branch_name}",));
 
+    // Resolve parent branch
+    let parent_branch = resolve_parent_branch(repo_path, parent_option)?;
+
     // Create and switch to the branch
-    create_and_switch_to_branch(repo_path, &branch_name)?;
+    create_and_switch_to_branch(repo_path, &branch_name, parent_branch.as_deref())?;
 
     // Store the association
     store_jira_association(repo_path, &branch_name, issue_key)?;
@@ -345,7 +465,11 @@ fn create_branch_from_jira_issue(repo_path: &std::path::Path, issue_key: &str) -
 }
 
 /// Create a branch from a GitHub PR
-fn create_branch_from_github_pr(repo_path: &std::path::Path, pr_number: u32) -> Result<()> {
+fn create_branch_from_github_pr(
+  repo_path: &std::path::Path,
+  pr_number: u32,
+  parent_option: Option<&str>,
+) -> Result<()> {
   // Create a runtime for async operations
   let rt = Runtime::new().context("Failed to create async runtime")?;
 
@@ -386,8 +510,11 @@ fn create_branch_from_github_pr(repo_path: &std::path::Path, pr_number: u32) -> 
 
     print_info(&format!("Creating branch: {branch_name}",));
 
+    // Resolve parent branch
+    let parent_branch = resolve_parent_branch(repo_path, parent_option)?;
+
     // Create and switch to the branch
-    create_and_switch_to_branch(repo_path, &branch_name)?;
+    create_and_switch_to_branch(repo_path, &branch_name, parent_branch.as_deref())?;
 
     // Store the association
     store_github_pr_association(repo_path, &branch_name, pr_number)?;
@@ -521,5 +648,111 @@ mod tests {
     } else {
       panic!("Expected BranchName");
     }
+  }
+
+  #[test]
+  fn test_resolve_parent_branch_current() {
+    // Create a temporary directory for the test
+    let temp_dir = tempfile::tempdir().unwrap();
+    let repo_path = temp_dir.path();
+
+    // Initialize a git repository
+    let repo = Git2Repository::init(repo_path).unwrap();
+
+    // Create an initial commit
+    let signature = git2::Signature::now("Test User", "test@example.com").unwrap();
+    let tree_id = {
+      let mut index = repo.index().unwrap();
+      index.write_tree().unwrap()
+    };
+    let tree = repo.find_tree(tree_id).unwrap();
+    repo
+      .commit(Some("HEAD"), &signature, &signature, "Initial commit", &tree, &[])
+      .unwrap();
+
+    // Create a branch and check it out
+    let head = repo.head().unwrap();
+    let target = head.target().unwrap();
+    let commit = repo.find_commit(target).unwrap();
+    repo.branch("test-branch", &commit, false).unwrap();
+    repo.set_head("refs/heads/test-branch").unwrap();
+
+    // Test resolving current branch
+    let result = resolve_parent_branch(repo_path, Some("current")).unwrap();
+    assert_eq!(result, Some("test-branch".to_string()));
+  }
+
+  #[test]
+  fn test_resolve_parent_branch_specific() {
+    // Create a temporary directory for the test
+    let temp_dir = tempfile::tempdir().unwrap();
+    let repo_path = temp_dir.path();
+
+    // Initialize a git repository
+    let repo = Git2Repository::init(repo_path).unwrap();
+
+    // Create an initial commit
+    let signature = git2::Signature::now("Test User", "test@example.com").unwrap();
+    let tree_id = {
+      let mut index = repo.index().unwrap();
+      index.write_tree().unwrap()
+    };
+    let tree = repo.find_tree(tree_id).unwrap();
+    repo
+      .commit(Some("HEAD"), &signature, &signature, "Initial commit", &tree, &[])
+      .unwrap();
+
+    // Create a branch
+    let head = repo.head().unwrap();
+    let target = head.target().unwrap();
+    let commit = repo.find_commit(target).unwrap();
+    repo.branch("parent-branch", &commit, false).unwrap();
+
+    // Test resolving specific branch
+    let result = resolve_parent_branch(repo_path, Some("parent-branch")).unwrap();
+    assert_eq!(result, Some("parent-branch".to_string()));
+
+    // Test resolving non-existent branch
+    let result = resolve_parent_branch(repo_path, Some("non-existent")).unwrap();
+    assert_eq!(result, None);
+  }
+
+  #[test]
+  fn test_resolve_parent_branch_none() {
+    // Create a temporary directory for the test
+    let temp_dir = tempfile::tempdir().unwrap();
+    let repo_path = temp_dir.path();
+
+    // Test resolving "none" option
+    let result = resolve_parent_branch(repo_path, Some("none")).unwrap();
+    assert_eq!(result, None);
+
+    // Test resolving no option
+    let result = resolve_parent_branch(repo_path, None).unwrap();
+    assert_eq!(result, None);
+  }
+
+  #[test]
+  fn test_add_branch_dependency() {
+    // Create a temporary directory for the test
+    let temp_dir = tempfile::tempdir().unwrap();
+    let repo_path = temp_dir.path();
+
+    // Initialize a git repository
+    let _repo = Git2Repository::init(repo_path).unwrap();
+
+    // Create a RepoState
+    let repo_state = RepoState::default();
+    repo_state.save(repo_path).unwrap();
+
+    // Add a dependency
+    add_branch_dependency(repo_path, "child-branch", "parent-branch").unwrap();
+
+    // Verify the dependency was added
+    let repo_state = RepoState::load(repo_path).unwrap();
+    let dependencies = repo_state.list_dependencies();
+    assert_eq!(dependencies.len(), 1);
+    assert_eq!(dependencies[0].child, "child-branch");
+    assert_eq!(dependencies[0].parent, "parent-branch");
   }
 }

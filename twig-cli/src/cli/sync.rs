@@ -7,6 +7,7 @@
 use anyhow::{Context, Result};
 use clap::{Arg, Command};
 use git2::{BranchType, Repository as Git2Repository};
+use indicatif::{ProgressBar, ProgressStyle};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use tokio::runtime::Runtime;
@@ -108,6 +109,28 @@ fn sync_branches(
     .branches(Some(BranchType::Local))
     .context("Failed to get branches")?;
 
+  // Collect branch names to get total count for progress bar
+  let branch_names: Vec<String> = branches
+    .filter_map(|branch_result| {
+      if let Ok((branch, _)) = branch_result {
+        if let Ok(Some(name)) = branch.name() {
+          // Skip detached HEAD and remote tracking branches
+          if name != "HEAD" && !name.contains("origin/") {
+            return Some(name.to_string());
+          }
+        }
+      }
+      None
+    })
+    .collect();
+
+  let total_branches = branch_names.len();
+
+  if total_branches == 0 {
+    print_info("No local branches found to sync");
+    return Ok(());
+  }
+
   // Load current repository state
   let mut repo_state = RepoState::load(repo_path)?;
 
@@ -116,22 +139,22 @@ fn sync_branches(
   let mut conflicting_associations = Vec::new();
   let mut unlinked_branches = Vec::new();
 
-  println!("Scanning branches for Jira issues and GitHub PRs...");
+  // Create progress bar
+  let pb = ProgressBar::new(total_branches as u64);
+  pb.set_style(
+    ProgressStyle::default_bar()
+      .template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} {msg}")
+      .unwrap()
+      .progress_chars("#>-"),
+  );
+  pb.set_message("Scanning branches for Jira issues and GitHub PRs...");
 
   // Create runtime for async operations
   let rt = Runtime::new().context("Failed to create async runtime")?;
 
-  for branch_result in branches {
-    let (branch, _) = branch_result.context("Failed to get branch")?;
-    let branch_name = match branch.name()? {
-      Some(name) => name,
-      None => continue, // Skip branches without valid names
-    };
-
-    // Skip detached HEAD and remote tracking branches
-    if branch_name == "HEAD" || branch_name.contains("origin/") {
-      continue;
-    }
+  for (index, branch_name) in branch_names.iter().enumerate() {
+    pb.set_position(index as u64);
+    pb.set_message(format!("Processing: {branch_name}"));
 
     // Check if branch already has associations
     let existing_association = repo_state.get_branch_issue_by_branch(branch_name);
@@ -144,6 +167,8 @@ fn sync_branches(
     };
 
     let detected_pr = if !no_github {
+      // Update message for GitHub API call
+      pb.set_message(format!("Processing: {branch_name} (checking GitHub API...)",));
       rt.block_on(detect_github_pr_from_branch(branch_name, repo_path))
     } else {
       None
@@ -154,9 +179,8 @@ fn sync_branches(
       (None, None, None) => {
         unlinked_branches.push(branch_name.to_string());
       }
-      (None, None, Some(_)) => {
-        // Has existing association but no patterns detected - leave as is
-      }
+      // Has existing association but no patterns detected - leave as is
+      (None, None, Some(_)) => {}
       // New association to create
       (jira, pr, None) => {
         if jira.is_some() || pr.is_some() {
@@ -190,6 +214,11 @@ fn sync_branches(
       }
     }
   }
+
+  // Complete the progress bar
+  pb.set_position(total_branches as u64);
+  pb.set_message("Scanning complete");
+  pb.finish_and_clear();
 
   // Report findings
   print_sync_summary(
