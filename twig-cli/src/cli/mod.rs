@@ -12,6 +12,7 @@ mod commands;
 mod completion;
 mod creds;
 mod dashboard;
+mod derive;
 mod diagnostics;
 mod git;
 mod github;
