@@ -10,6 +10,7 @@ use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use git2::Repository as Git2Repository;
 
+use super::DeriveCommand;
 use crate::git::detect_current_repository;
 use crate::repo_state::RepoState;
 use crate::tree_renderer::TreeRenderer;
@@ -66,9 +67,10 @@ impl TreeCommand {
     // Execute the command
     cmd.execute()
   }
+}
 
-  /// Executes the tree command
-  pub fn execute(self) -> Result<()> {
+impl DeriveCommand for TreeCommand {
+  fn execute(self) -> Result<()> {
     // Get the repository path
     let repo_path = if let Some(repo_arg) = self.repo {
       PathBuf::from(repo_arg)

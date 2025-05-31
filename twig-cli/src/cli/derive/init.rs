@@ -6,6 +6,8 @@
 use anyhow::Result;
 use clap::{CommandFactory, Parser};
 
+use super::DeriveCommand;
+
 /// Command for initializing twig configuration
 #[derive(Parser)]
 #[command(name = "init")]
@@ -15,6 +17,12 @@ use clap::{CommandFactory, Parser};
             repositories and store settings. Run this command once before using other\n\
             twig features. No credentials are required for this operation.")]
 pub struct InitCommand {}
+
+impl DeriveCommand for InitCommand {
+  fn execute(self) -> Result<()> {
+    crate::config::init()
+  }
+}
 
 impl InitCommand {
   /// Creates a clap Command for this command (for backward compatibility)

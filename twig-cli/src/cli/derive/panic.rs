@@ -6,6 +6,8 @@
 use anyhow::Result;
 use clap::{CommandFactory, Parser};
 
+use super::DeriveCommand;
+
 /// Command for testing the panic handler
 #[derive(Parser)]
 #[command(name = "panic")]
@@ -16,6 +18,12 @@ use clap::{CommandFactory, Parser};
 )]
 #[command(hide = true)]
 pub struct PanicCommand {}
+
+impl DeriveCommand for PanicCommand {
+  fn execute(self) -> Result<()> {
+    panic!("This is an intentional test panic to verify no-worries integration");
+  }
+}
 
 impl PanicCommand {
   /// Creates a clap Command for this command (for backward compatibility)
