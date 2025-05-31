@@ -9,7 +9,9 @@ pub mod command;
 pub use command::DeriveCommand;
 
 // Export submodules
+pub mod git;
 pub mod init;
 pub mod panic;
 pub mod switch;
+pub mod sync;
 pub mod tree;
