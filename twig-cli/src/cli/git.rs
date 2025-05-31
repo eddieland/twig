@@ -180,7 +180,6 @@ pub fn handle_commands(git_matches: &clap::ArgMatches) -> Result<()> {
     _ => {
       use crate::utils::output::print_warning;
       print_warning("Unknown git command.");
-      // Print the help text directly instead of telling the user to use --help
       let mut cmd = build_command();
       cmd.print_help().expect("Failed to print help text");
       println!();

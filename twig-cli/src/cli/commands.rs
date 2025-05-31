@@ -1,8 +1,6 @@
 use anyhow::Result;
 use clap::Command;
 
-use crate::utils::output::print_info;
-
 /// Build the init subcommand
 pub fn build_init_command() -> Command {
   Command::new("init").about("Initialize twig configuration").long_about(
@@ -16,16 +14,6 @@ pub fn build_init_command() -> Command {
 /// Handle the init command
 pub fn handle_init_command() -> Result<()> {
   crate::config::init()
-}
-
-/// Handle unknown or missing commands
-pub fn handle_unknown_command() -> Result<()> {
-  print_info("No command specified.");
-  // Print the help text directly instead of telling the user to use --help
-  let mut cmd = crate::cli::build_cli();
-  cmd.print_help().expect("Failed to print help text");
-  println!();
-  Ok(())
 }
 
 /// Build the panic test subcommand

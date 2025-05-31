@@ -142,20 +142,12 @@ pub fn handle_commands(github_matches: &clap::ArgMatches) -> Result<()> {
         handle_pr_link_command(pr_url_or_id)
       }
       _ => {
-        print_error("Unknown PR command");
-        // Print the help text directly instead of telling the user to use --help
-        let mut cmd = Command::new("pr");
-        cmd.print_help().expect("Failed to print help text");
-        println!();
+        print_error("Unknown pr command");
         Ok(())
       }
     },
     _ => {
-      print_error("Unknown GitHub command");
-      // Print the help text directly instead of telling the user to use --help
-      let mut cmd = build_command();
-      cmd.print_help().expect("Failed to print help text");
-      println!();
+      print_error("Unknown github command");
       Ok(())
     }
   }

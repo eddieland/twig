@@ -159,10 +159,6 @@ pub fn handle_commands(branch_matches: &clap::ArgMatches) -> Result<()> {
     Some(("root", root_matches)) => handle_root_commands(root_matches),
     _ => {
       print_error("Unknown branch command");
-      // Print the help text directly instead of telling the user to use --help
-      let mut cmd = build_command();
-      cmd.print_help().expect("Failed to print help text");
-      println!();
       Ok(())
     }
   }
@@ -233,13 +229,6 @@ fn handle_root_commands(root_matches: &clap::ArgMatches) -> Result<()> {
     Some(("list", list_matches)) => handle_root_list_command(list_matches),
     _ => {
       print_error("Unknown root command");
-      // Print help for root subcommand
-      println!("Available root commands:");
-      println!("  add     Add a root branch");
-      println!("  remove  Remove a root branch");
-      println!("  list    List all root branches");
-      println!();
-      println!("Use 'twig branch root <command> --help' for more information about a command.");
       Ok(())
     }
   }

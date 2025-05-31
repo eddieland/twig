@@ -103,6 +103,10 @@ pub fn handle_commands(matches: &clap::ArgMatches) -> Result<()> {
     Some(("diagnose", _)) => diagnostics::handle_diagnostics_command(),
     Some(("completion", completion_matches)) => completion::handle_completion_command(completion_matches),
     Some(("dashboard", dashboard_matches)) => dashboard::handle_command(dashboard_matches),
-    _ => commands::handle_unknown_command(),
+    _ => {
+      use crate::utils::output::print_info;
+      print_info("No command specified.");
+      Ok(())
+    }
   }
 }

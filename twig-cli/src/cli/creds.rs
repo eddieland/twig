@@ -46,11 +46,7 @@ pub fn handle_commands(creds_matches: &clap::ArgMatches) -> Result<()> {
     Some(("check", _)) => handle_check_command(),
     Some(("setup", _)) => handle_setup_command(),
     _ => {
-      print_warning("Unknown credentials command.");
-      // Print the help text directly instead of telling the user to use --help
-      let mut cmd = build_command();
-      cmd.print_help().expect("Failed to print help text");
-      println!();
+      print_warning("Unknown creds command.");
       Ok(())
     }
   }
