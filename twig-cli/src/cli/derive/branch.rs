@@ -1,0 +1,378 @@
+//! # Branch Command
+//!
+//! Derive-based implementation of the branch command for managing branch
+//! dependencies and root branches, including adding, removing, and listing
+//! branch relationships.
+
+use anyhow::{Context, Result};
+use clap::{CommandFactory, Parser, Subcommand};
+
+use crate::cli::derive::DeriveCommand;
+use crate::git::detect_current_repository;
+use crate::repo_state::RepoState;
+use crate::utils::output::{print_error, print_info, print_success, print_warning};
+
+/// Command for branch dependency and root management
+#[derive(Parser)]
+#[command(name = "branch")]
+#[command(about = "Branch dependency and root management")]
+#[command(long_about = "Manage custom branch dependencies and root branches.\n\n\
+            This command group allows you to define custom parent-child relationships\n\
+            between branches beyond Git's automatic detection. You can also manage\n\
+            which branches should be treated as root branches in the tree view.")]
+#[command(alias = "br")]
+pub struct BranchCommand {
+  /// The subcommand to execute
+  #[command(subcommand)]
+  pub subcommand: BranchSubcommands,
+}
+
+/// Subcommands for the branch command
+#[derive(Subcommand)]
+pub enum BranchSubcommands {
+  /// Add a dependency between branches
+  #[command(long_about = "Create a parent-child relationship between two branches.\n\n\
+                     This allows you to define custom dependencies that will be used\n\
+                     in tree rendering. The child branch will appear as a child of\n\
+                     the parent branch in the tree view.")]
+  Depend(DependCommand),
+
+  /// Remove a dependency between branches
+  #[command(long_about = "Remove a previously defined parent-child relationship.\n\n\
+                     This removes the custom dependency between two branches,\n\
+                     allowing the tree view to fall back to Git's automatic\n\
+                     detection for these branches.")]
+  #[command(alias = "rm-dep")]
+  RemoveDep(RemoveDepCommand),
+
+  /// Root branch management
+  #[command(long_about = "Manage which branches are treated as root branches.\n\n\
+                     Root branches appear at the top level of the tree view\n\
+                     and serve as starting points for the dependency tree.")]
+  Root(RootCommand),
+}
+
+/// Add a dependency between branches
+#[derive(Parser)]
+pub struct DependCommand {
+  /// The child branch name
+  #[arg(required = true, index = 1)]
+  pub child: String,
+
+  /// The parent branch name
+  #[arg(required = true, index = 2)]
+  pub parent: String,
+
+  /// Path to a specific repository
+  #[arg(long, short = 'r', value_name = "PATH")]
+  pub repo: Option<String>,
+}
+
+/// Remove a dependency between branches
+#[derive(Parser)]
+pub struct RemoveDepCommand {
+  /// The child branch name
+  #[arg(required = true, index = 1)]
+  pub child: String,
+
+  /// The parent branch name
+  #[arg(required = true, index = 2)]
+  pub parent: String,
+
+  /// Path to a specific repository
+  #[arg(long, short = 'r', value_name = "PATH")]
+  pub repo: Option<String>,
+}
+
+/// Root branch management
+#[derive(Parser)]
+pub struct RootCommand {
+  /// The subcommand to execute
+  #[command(subcommand)]
+  pub subcommand: RootSubcommands,
+}
+
+/// Subcommands for the root command
+#[derive(Subcommand)]
+pub enum RootSubcommands {
+  /// Add a root branch
+  #[command(long_about = "Mark a branch as a root branch.\n\n\
+                         Root branches appear at the top level of the tree view.\n\
+                         You can optionally set a root branch as the default,\n\
+                         which will be used when no specific root is specified.")]
+  Add(RootAddCommand),
+
+  /// Remove a root branch
+  #[command(long_about = "Remove a branch from the list of root branches.\n\n\
+                         This will remove the branch from the root branch list.\n\
+                         If it was the default root, the default will be cleared.")]
+  #[command(alias = "rm")]
+  Remove(RootRemoveCommand),
+
+  /// List all root branches
+  #[command(long_about = "Display all branches currently marked as root branches.\n\n\
+                         Shows which branch (if any) is set as the default root.")]
+  #[command(alias = "ls")]
+  List(RootListCommand),
+}
+
+/// Add a root branch
+#[derive(Parser)]
+pub struct RootAddCommand {
+  /// The branch name to add as root
+  #[arg(required = true, index = 1)]
+  pub branch: String,
+
+  /// Set this as the default root branch
+  #[arg(long)]
+  pub default: bool,
+
+  /// Path to a specific repository
+  #[arg(long, short = 'r', value_name = "PATH")]
+  pub repo: Option<String>,
+}
+
+/// Remove a root branch
+#[derive(Parser)]
+pub struct RootRemoveCommand {
+  /// The branch name to remove from roots
+  #[arg(required = true, index = 1)]
+  pub branch: String,
+
+  /// Path to a specific repository
+  #[arg(long, short = 'r', value_name = "PATH")]
+  pub repo: Option<String>,
+}
+
+/// List all root branches
+#[derive(Parser)]
+pub struct RootListCommand {
+  /// Path to a specific repository
+  #[arg(long, short = 'r', value_name = "PATH")]
+  pub repo: Option<String>,
+}
+
+impl BranchCommand {
+  /// Creates a clap Command for this command (for backward compatibility)
+  pub fn command() -> clap::Command {
+    <Self as CommandFactory>::command()
+  }
+
+  /// Parses command line arguments and executes the command
+  pub fn parse_and_execute(matches: &clap::ArgMatches) -> Result<()> {
+    match matches.subcommand() {
+      Some(("depend", depend_matches)) => {
+        let child = depend_matches.get_one::<String>("child").unwrap().clone();
+        let parent = depend_matches.get_one::<String>("parent").unwrap().clone();
+        let repo = depend_matches.get_one::<String>("repo").cloned();
+
+        let cmd = Self {
+          subcommand: BranchSubcommands::Depend(DependCommand { child, parent, repo }),
+        };
+        cmd.execute()
+      }
+      Some(("remove-dep", remove_dep_matches)) => {
+        let child = remove_dep_matches.get_one::<String>("child").unwrap().clone();
+        let parent = remove_dep_matches.get_one::<String>("parent").unwrap().clone();
+        let repo = remove_dep_matches.get_one::<String>("repo").cloned();
+
+        let cmd = Self {
+          subcommand: BranchSubcommands::RemoveDep(RemoveDepCommand { child, parent, repo }),
+        };
+        cmd.execute()
+      }
+      Some(("root", root_matches)) => match root_matches.subcommand() {
+        Some(("add", add_matches)) => {
+          let branch = add_matches.get_one::<String>("branch").unwrap().clone();
+          let default = add_matches.get_flag("default");
+          let repo = add_matches.get_one::<String>("repo").cloned();
+
+          let cmd = Self {
+            subcommand: BranchSubcommands::Root(RootCommand {
+              subcommand: RootSubcommands::Add(RootAddCommand { branch, default, repo }),
+            }),
+          };
+          cmd.execute()
+        }
+        Some(("remove", remove_matches)) => {
+          let branch = remove_matches.get_one::<String>("branch").unwrap().clone();
+          let repo = remove_matches.get_one::<String>("repo").cloned();
+
+          let cmd = Self {
+            subcommand: BranchSubcommands::Root(RootCommand {
+              subcommand: RootSubcommands::Remove(RootRemoveCommand { branch, repo }),
+            }),
+          };
+          cmd.execute()
+        }
+        Some(("list", list_matches)) => {
+          let repo = list_matches.get_one::<String>("repo").cloned();
+
+          let cmd = Self {
+            subcommand: BranchSubcommands::Root(RootCommand {
+              subcommand: RootSubcommands::List(RootListCommand { repo }),
+            }),
+          };
+          cmd.execute()
+        }
+        _ => {
+          print_error("Unknown root command");
+          Ok(())
+        }
+      },
+      _ => {
+        print_error("Unknown branch command");
+        Ok(())
+      }
+    }
+  }
+}
+
+impl DeriveCommand for BranchCommand {
+  fn execute(self) -> Result<()> {
+    match self.subcommand {
+      BranchSubcommands::Depend(cmd) => {
+        // Get the repository path
+        let repo_path = if let Some(repo_arg) = cmd.repo {
+          crate::utils::resolve_repository_path(Some(&repo_arg))?
+        } else {
+          detect_current_repository().context("Not in a git repository")?
+        };
+
+        // Load repository state
+        let mut repo_state = RepoState::load(&repo_path)?;
+
+        // Add the dependency
+        match repo_state.add_dependency(cmd.child.clone(), cmd.parent.clone()) {
+          Ok(()) => {
+            // Save the state
+            repo_state.save(&repo_path)?;
+            print_success(&format!("Added dependency: {} -> {}", cmd.child, cmd.parent));
+            Ok(())
+          }
+          Err(e) => {
+            print_error(&format!("Failed to add dependency: {e}"));
+            Err(e)
+          }
+        }
+      }
+      BranchSubcommands::RemoveDep(cmd) => {
+        // Get the repository path
+        let repo_path = if let Some(repo_arg) = cmd.repo {
+          crate::utils::resolve_repository_path(Some(&repo_arg))?
+        } else {
+          detect_current_repository().context("Not in a git repository")?
+        };
+
+        // Load repository state
+        let mut repo_state = RepoState::load(&repo_path)?;
+
+        // Remove the dependency
+        if repo_state.remove_dependency(&cmd.child, &cmd.parent) {
+          // Save the state
+          repo_state.save(&repo_path)?;
+          print_success(&format!("Removed dependency: {} -> {}", cmd.child, cmd.parent));
+        } else {
+          print_warning(&format!("Dependency {} -> {} not found", cmd.child, cmd.parent));
+        }
+
+        Ok(())
+      }
+      BranchSubcommands::Root(root_cmd) => match root_cmd.subcommand {
+        RootSubcommands::Add(cmd) => {
+          // Get the repository path
+          let repo_path = if let Some(repo_arg) = cmd.repo {
+            crate::utils::resolve_repository_path(Some(&repo_arg))?
+          } else {
+            detect_current_repository().context("Not in a git repository")?
+          };
+
+          // Load repository state
+          let mut repo_state = RepoState::load(&repo_path)?;
+
+          // Add the root branch
+          match repo_state.add_root(cmd.branch.clone(), cmd.default) {
+            Ok(()) => {
+              // Save the state
+              repo_state.save(&repo_path)?;
+              if cmd.default {
+                print_success(&format!("Added {} as default root branch", cmd.branch));
+              } else {
+                print_success(&format!("Added {} as root branch", cmd.branch));
+              }
+              Ok(())
+            }
+            Err(e) => {
+              print_error(&format!("Failed to add root branch: {e}"));
+              Err(e)
+            }
+          }
+        }
+        RootSubcommands::Remove(cmd) => {
+          // Get the repository path
+          let repo_path = if let Some(repo_arg) = cmd.repo {
+            crate::utils::resolve_repository_path(Some(&repo_arg))?
+          } else {
+            detect_current_repository().context("Not in a git repository")?
+          };
+
+          // Load repository state
+          let mut repo_state = RepoState::load(&repo_path)?;
+
+          // Remove the root branch
+          if repo_state.remove_root(&cmd.branch) {
+            // Save the state
+            repo_state.save(&repo_path)?;
+            print_success(&format!("Removed {} from root branches", cmd.branch));
+          } else {
+            print_warning(&format!("Root branch {} not found", cmd.branch));
+          }
+
+          Ok(())
+        }
+        RootSubcommands::List(cmd) => {
+          // Get the repository path
+          let repo_path = if let Some(repo_arg) = cmd.repo {
+            crate::utils::resolve_repository_path(Some(&repo_arg))?
+          } else {
+            detect_current_repository().context("Not in a git repository")?
+          };
+
+          // Load repository state
+          let repo_state = RepoState::load(&repo_path)?;
+
+          // List all root branches
+          let roots = repo_state.list_roots();
+          let default_root = repo_state.get_default_root();
+
+          if roots.is_empty() {
+            print_info("No root branches defined");
+          } else {
+            print_info("Root branches:");
+            for root in roots {
+              if Some(root.branch.as_str()) == default_root {
+                print_info(&format!("  {} (default)", root.branch));
+              } else {
+                print_info(&format!("  {}", root.branch));
+              }
+            }
+          }
+
+          Ok(())
+        }
+      },
+    }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use clap::CommandFactory;
+
+  use super::*;
+
+  #[test]
+  fn verify_cli() {
+    BranchCommand::command().debug_assert();
+  }
+}
