@@ -193,16 +193,20 @@ pub fn fetch_all_repositories() -> Result<()> {
 /// Detect the current working directory repository
 pub fn detect_current_repository() -> Result<PathBuf> {
   let current_dir = std::env::current_dir().context("Failed to get current directory")?;
+  detect_repository(&current_dir)
+}
 
+/// Detect the current working directory repository
+pub fn detect_repository(path: &Path) -> Result<PathBuf> {
   // Try to find a git repository in the current directory or any parent
-  let mut path = current_dir.clone();
+  let mut current = path.to_path_buf();
   loop {
-    let git_dir = path.join(".git");
+    let git_dir = current.join(".git");
     if git_dir.exists() && git_dir.is_dir() {
-      return Ok(path);
+      return Ok(current);
     }
 
-    if !path.pop() {
+    if !current.pop() {
       break;
     }
   }
