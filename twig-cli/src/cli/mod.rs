@@ -46,6 +46,19 @@ pub fn build_cli() -> Command {
                  -vvv: Show trace level messages",
         ),
     )
+    .arg(
+      Arg::new("colors")
+        .long("colors")
+        .help("When to use colored output")
+        .long_help(
+          "Controls when colored output is used.\n\
+                 yes: Always use colors\n\
+                 auto: Use colors when outputting to a terminal (default)\n\
+                 no: Never use colors",
+        )
+        .value_parser(["yes", "auto", "no"])
+        .default_value("auto"),
+    )
     .subcommand(commands::build_init_command())
     .subcommand(commands::build_panic_command())
     .subcommand(branch::build_command())
@@ -64,6 +77,17 @@ pub fn build_cli() -> Command {
 
 /// Handle the CLI commands
 pub fn handle_commands(matches: &clap::ArgMatches) -> Result<()> {
+  // Set global color override based on --colors argument
+  match matches.get_one::<String>("colors").map(|s| s.as_str()) {
+    Some("yes") => owo_colors::set_override(true),
+    Some("no") => owo_colors::set_override(false),
+    None => {
+      // Let owo_colors use its default auto-detection
+      // Don't call set_override, allowing it to detect terminal automatically
+    }
+    _ => {} // Should not happen due to value_parser, but just in case
+  }
+
   match matches.subcommand() {
     Some(("init", _)) => commands::handle_init_command(),
     Some(("panic", _)) => commands::handle_panic_command(),

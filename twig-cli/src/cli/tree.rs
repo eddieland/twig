@@ -44,12 +44,6 @@ pub fn build_command() -> Command {
         .value_name("DEPTH")
         .value_parser(clap::value_parser!(u32)),
     )
-    .arg(
-      Arg::new("no-color")
-        .long("no-color")
-        .help("Disable colored output")
-        .action(clap::ArgAction::SetTrue),
-    )
 }
 
 /// Handle the tree command

@@ -110,8 +110,6 @@ pub struct Config {
   /// Whether to include the backtrace in the terminal output (not just the
   /// report file)
   pub show_backtrace_in_message: bool,
-  /// Enable colored output (automatically disabled when output is redirected)
-  pub use_colors: bool,
   /// Custom report file directory (defaults to system temp directory)
   pub report_directory: Option<PathBuf>,
   /// Whether to generate crash report files at all
@@ -126,7 +124,6 @@ impl Default for Config {
       metadata: Metadata::default(),
       custom_message: None,
       show_backtrace_in_message: true,
-      use_colors: true,
       report_directory: None,
       generate_reports: true,
       max_message_length: 500,
@@ -179,7 +176,6 @@ pub fn setup() -> Result<()> {
 
 /// Sets up the panic handler with custom configuration
 ///
-/// Allows full customization of panic messages, colors, and behavior.
 /// Only activates in release builds.
 pub fn setup_with_config(config: Config) -> Result<()> {
   // Only install in release mode - preserve developer experience in debug mode
@@ -221,39 +217,25 @@ fn handle_panic(info: &PanicHookInfo, config: &Config) {
 
 /// Display the human-friendly panic message with colors and formatting
 fn display_panic_message(info: &PanicHookInfo, report_path: Option<&PathBuf>, config: &Config) {
-  let use_colors = config.use_colors && is_terminal::is_terminal(std::io::stderr());
-
   // Opening message - playful theme
-  if use_colors {
-    eprintln!(
-      "{} {}",
-      config.metadata.name.bright_blue().bold(),
-      "just went off-script!".red()
-    );
-  } else {
-    eprintln!("{} just went off-script!", config.metadata.name);
-  }
+  eprintln!(
+    "{} {}",
+    config.metadata.name.bright_blue().bold(),
+    "just went off-script!".red()
+  );
 
   // Custom message with playful default
   if let Some(message) = &config.custom_message {
-    if use_colors {
-      eprintln!("\n{}", message.bright_cyan().bold());
-    } else {
-      eprintln!("\n{message}",);
-    }
+    eprintln!("\n{}", message.bright_cyan().bold());
   }
   // Show location where panic occurred
   if let Some(location) = info.location() {
-    if use_colors {
-      eprintln!(
-        "\n📍 {} {}:{}",
-        "Location:".bright_white(),
-        location.file().yellow(),
-        location.line().to_string().yellow().bold()
-      );
-    } else {
-      eprintln!("\n📍 Location: {}:{}", location.file(), location.line());
-    }
+    eprintln!(
+      "\n📍 {} {}:{}",
+      "Location:".bright_white(),
+      location.file().yellow(),
+      location.line().to_string().yellow().bold()
+    );
   }
 
   // Show panic message if available (with length limit)
@@ -264,80 +246,44 @@ fn display_panic_message(info: &PanicHookInfo, report_path: Option<&PathBuf>, co
       message
     };
 
-    if use_colors {
-      eprintln!("💬 {} {}", "Message:".bright_white(), truncated.white().italic());
-    } else {
-      eprintln!("💬 Message: {truncated}",);
-    }
+    eprintln!("💬 {} {}", "Message:".bright_white(), truncated.white().italic());
   }
 
   // Show backtrace in terminal if requested
   if config.show_backtrace_in_message {
-    if use_colors {
-      eprintln!("\n📚 {}", "Stack Trace:".bright_cyan().bold());
-    } else {
-      eprintln!("\n📚 Stack Trace:");
-    }
+    eprintln!("\n📚 {}", "Stack Trace:".bright_cyan().bold());
     let backtrace_str = format!("{:?}", Backtrace::new());
     eprintln!("{}", backtrace_str.trim_end());
   }
 
   // Help section
-  if use_colors {
-    eprintln!("\n🆘 {}", "How to Help:".bright_green().bold().underline());
-  } else {
-    eprintln!("\n🆘 How to Help:");
-  }
+  eprintln!("\n🆘 {}", "How to Help:".bright_green().bold().underline());
 
   // Report file information
   if let Some(path) = report_path {
-    if use_colors {
-      eprintln!(
-        "   📋 {} {}",
-        "Crash report saved:".bright_blue(),
-        path.display().to_string().yellow().underline()
-      );
-    } else {
-      eprintln!("   📋 Crash report saved: {}", path.display());
-    }
+    eprintln!(
+      "   📋 {} {}",
+      "Crash report saved:".bright_blue(),
+      path.display().to_string().yellow().underline()
+    );
   }
 
   // Contact information - prioritize the most direct contact method
   if let Some(email) = &config.metadata.support_email {
-    if use_colors {
-      eprintln!("   📧 {} {}", "Email:".bright_green(), email.cyan().underline());
-      eprintln!(
-        "   📌 {} {}",
-        "Subject:".bright_white(),
-        format!("\"[{}] Crash Report\"", config.metadata.name).yellow().bold()
-      );
-    } else {
-      eprintln!("   📧 Email: {email}",);
-      eprintln!("   📌 Subject: \"[{}] Crash Report\"", config.metadata.name);
-    }
+    eprintln!("   📧 {} {}", "Email:".bright_green(), email.cyan().underline());
+    eprintln!(
+      "   📌 {} {}",
+      "Subject:".bright_white(),
+      format!("\"[{}] Crash Report\"", config.metadata.name).yellow().bold()
+    );
   }
 
   if report_path.is_some() {
-    if use_colors {
-      eprintln!(
-        "   📎 {} {}",
-        "Please attach the report above".bright_white(),
-        "(contains debugging info)".bright_black()
-      );
-    } else {
-      eprintln!("   📎 Please attach the report above (contains debugging info)");
-    }
-  }
-
-  // Brief footer
-  if use_colors {
     eprintln!(
-      "\n{} {}",
-      "Thanks for helping us improve!".bright_blue().italic(),
-      "💙".bright_blue()
+      "   📎 {} {}",
+      "Please attach the report above".bright_white(),
+      "(contains debugging info)".bright_black()
     );
-  } else {
-    eprintln!("\nThanks for helping us improve! 💙");
   }
 }
 
@@ -460,7 +406,6 @@ mod tests {
   #[test]
   fn test_default_config() {
     let config = Config::default();
-    assert!(config.use_colors);
     assert!(config.show_backtrace_in_message);
     assert!(config.generate_reports);
     assert_eq!(config.max_message_length, 500);

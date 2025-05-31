@@ -27,7 +27,6 @@ use no_worries::PanicHandlerBuilder;
 fn main() {
     PanicHandlerBuilder::new()
         .with_app_name("my-awesome-app")
-        .with_colors(true)
         .with_timestamp(true)
         .with_backtrace_hint(true)
         .install();
