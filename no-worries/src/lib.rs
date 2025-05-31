@@ -46,7 +46,7 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use backtrace::Backtrace;
-use colored::*;
+use owo_colors::*;
 
 /// Errors that can occur during panic handler setup or execution
 #[derive(Debug)]

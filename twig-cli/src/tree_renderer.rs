@@ -6,7 +6,7 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
 
-use colored::Colorize;
+use owo_colors::OwoColorize;
 
 use crate::repo_state::BranchMetadata;
 

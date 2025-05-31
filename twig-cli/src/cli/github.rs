@@ -6,8 +6,8 @@
 
 use anyhow::Result;
 use clap::{Arg, Command};
-use colored::Colorize;
 use git2::Repository as Git2Repository;
+use owo_colors::OwoColorize;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
@@ -380,7 +380,7 @@ fn handle_checks_command(checks_matches: &clap::ArgMatches) -> Result<()> {
             "completed" => check.status.green().to_string(),
             "in_progress" => check.status.yellow().to_string(),
             "queued" => check.status.blue().to_string(),
-            _ => check.status.normal().to_string(),
+            _ => check.status.default_color().to_string(),
           };
 
           // Format conclusion with color
@@ -388,14 +388,14 @@ fn handle_checks_command(checks_matches: &clap::ArgMatches) -> Result<()> {
             Some(conclusion) => match conclusion.as_str() {
               "success" => conclusion.green().to_string(),
               "failure" => conclusion.red().to_string(),
-              "neutral" => conclusion.normal().to_string(),
+              "neutral" => conclusion.default_color().to_string(),
               "cancelled" => conclusion.yellow().to_string(),
               "skipped" => conclusion.blue().to_string(),
               "timed_out" => conclusion.red().to_string(),
               "action_required" => conclusion.yellow().to_string(),
-              _ => conclusion.normal().to_string(),
+              _ => conclusion.default_color().to_string(),
             },
-            None => "N/A".normal().to_string(),
+            None => "N/A".default_color().to_string(),
           };
 
           // Format date to be more readable
@@ -664,7 +664,7 @@ fn handle_pr_list_command(list_matches: &clap::ArgMatches) -> Result<()> {
           let state_colored = match pr.state.as_str() {
             "open" => pr.state.green().to_string(),
             "closed" => pr.state.red().to_string(),
-            _ => pr.state.normal().to_string(),
+            _ => pr.state.default_color().to_string(),
           };
 
           // Format date to be more readable

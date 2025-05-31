@@ -4,8 +4,8 @@
 
 use anyhow::Result;
 use clap::{Arg, Command};
-use colored::Colorize;
 use git2::{BranchType, Repository as Git2Repository};
+use owo_colors::OwoColorize;
 use serde::Serialize;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};

@@ -18,4 +18,4 @@ chrono = { workspace = true }
 is-terminal = "0.4.12"
 
 # UI dependencies
-colored = { workspace = true }
+owo-colors = { workspace = true }

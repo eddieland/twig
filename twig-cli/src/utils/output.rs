@@ -3,8 +3,8 @@
 //! Provides formatted output functions with colors, emojis, and consistent
 //! styling for user-facing messages and terminal output.
 
-use colored::Colorize;
 use emojis;
+use owo_colors::OwoColorize;
 
 // Helper function to safely get an emoji or fallback to a default character
 fn get_emoji_or_default(name: &str, default: &str) -> String {

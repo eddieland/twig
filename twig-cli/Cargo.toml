@@ -32,9 +32,9 @@ uuid.workspace = true
 # CLI and UI dependencies
 clap.workspace = true
 clap_complete.workspace = true
-colored.workspace = true
 console.workspace = true
 emojis.workspace = true
+owo-colors.workspace = true
 tabled.workspace = true
 
 # Tracing and logging

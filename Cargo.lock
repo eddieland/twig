@@ -276,15 +276,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
 
 [[package]]
-name = "colored"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
-dependencies = [
- "windows-sys 0.59.0",
-]
-
-[[package]]
 name = "console"
 version = "0.15.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1149,8 +1140,8 @@ version = "0.1.10"
 dependencies = [
  "backtrace",
  "chrono",
- "colored",
  "is-terminal",
+ "owo-colors",
 ]
 
 [[package]]
@@ -1258,6 +1249,12 @@ name = "overload"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
+
+[[package]]
+name = "owo-colors"
+version = "4.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26995317201fa17f3656c36716aed4a7c81743a9634ac4c99c0eeda495db0cec"
 
 [[package]]
 name = "papergrid"
@@ -2128,7 +2125,6 @@ dependencies = [
  "chrono",
  "clap",
  "clap_complete",
- "colored",
  "console",
  "directories",
  "dotenv",
@@ -2138,6 +2134,7 @@ dependencies = [
  "mockall",
  "no-worries",
  "once_cell",
+ "owo-colors",
  "regex",
  "reqwest",
  "serde",

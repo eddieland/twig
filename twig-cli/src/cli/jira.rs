@@ -5,7 +5,7 @@
 
 use anyhow::{Context, Result};
 use clap::{Arg, Command};
-use colored::Colorize;
+use owo_colors::OwoColorize;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
@@ -272,7 +272,7 @@ fn handle_issue_commands(issue_matches: &clap::ArgMatches) -> Result<()> {
 
 /// Handle the list issues command
 fn handle_list_issues_command(list_matches: &clap::ArgMatches) -> Result<()> {
-  use colored::Colorize;
+  use owo_colors::OwoColorize;
 
   // Create a tokio runtime for async operations
   let rt = Runtime::new().context("Failed to create async runtime")?;
@@ -367,7 +367,7 @@ fn handle_list_issues_command(list_matches: &clap::ArgMatches) -> Result<()> {
               "To Do" | "Open" | "New" => issue.fields.status.name.blue().to_string(),
               "In Progress" | "In Review" => issue.fields.status.name.yellow().to_string(),
               "Done" | "Closed" | "Resolved" => issue.fields.status.name.green().to_string(),
-              _ => issue.fields.status.name.normal().to_string(),
+              _ => issue.fields.status.name.default_color().to_string(),
             };
 
             // Get assignee
