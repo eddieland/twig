@@ -7,20 +7,7 @@
 use anyhow::Result;
 use clap::{Arg, ArgAction, Command};
 
-mod branch;
-mod commands;
-mod completion;
-mod creds;
-mod dashboard;
-mod derive;
-mod diagnostics;
-mod git;
-mod github;
-mod jira;
-mod switch;
-mod sync;
-mod tree;
-mod worktree;
+pub mod derive;
 
 /// Build the CLI command structure
 pub fn build_cli() -> Command {
@@ -60,20 +47,21 @@ pub fn build_cli() -> Command {
         .value_parser(["yes", "auto", "no"])
         .default_value("auto"),
     )
-    .subcommand(commands::build_init_command())
-    .subcommand(commands::build_panic_command())
-    .subcommand(branch::build_command())
-    .subcommand(creds::build_command())
-    .subcommand(git::build_command())
-    .subcommand(github::build_command())
-    .subcommand(jira::build_command())
-    .subcommand(switch::build_command())
-    .subcommand(sync::build_command())
-    .subcommand(tree::build_command())
-    .subcommand(worktree::build_command())
-    .subcommand(diagnostics::build_diagnostics_command())
-    .subcommand(completion::build_completion_command())
-    .subcommand(dashboard::build_command())
+    .subcommand(derive::init::InitCommand::command())
+    .subcommand(derive::panic::PanicCommand::command())
+    .subcommand(derive::branch::BranchCommand::command())
+    .subcommand(derive::creds::CredsCommand::command())
+    .subcommand(derive::git::GitCommand::command())
+    .subcommand(derive::github::GitHubCommand::command())
+    .subcommand(derive::jira::JiraCommand::command())
+    .subcommand(derive::switch::SwitchCommand::command())
+    .subcommand(derive::sync::SyncCommand::command())
+    .subcommand(derive::tree::TreeCommand::command())
+    .subcommand(derive::view::ViewCommand::command())
+    .subcommand(derive::worktree::WorktreeCommand::command())
+    .subcommand(derive::diagnostics::DiagnosticsCommand::command())
+    .subcommand(derive::completion::CompletionCommand::command())
+    .subcommand(derive::dashboard::DashboardCommand::command())
 }
 
 /// Handle the CLI commands
@@ -90,20 +78,23 @@ pub fn handle_commands(matches: &clap::ArgMatches) -> Result<()> {
   }
 
   match matches.subcommand() {
-    Some(("init", _)) => commands::handle_init_command(),
-    Some(("panic", _)) => commands::handle_panic_command(),
-    Some(("branch", branch_matches)) => branch::handle_commands(branch_matches),
-    Some(("creds", creds_matches)) => creds::handle_commands(creds_matches),
-    Some(("git", git_matches)) => git::handle_commands(git_matches),
-    Some(("github", github_matches)) => github::handle_commands(github_matches),
-    Some(("jira", jira_matches)) => jira::handle_commands(jira_matches),
-    Some(("switch", switch_matches)) => switch::handle_command(switch_matches),
-    Some(("sync", sync_matches)) => sync::handle_command(sync_matches),
-    Some(("tree", tree_matches)) => tree::handle_command(tree_matches),
-    Some(("worktree", worktree_matches)) => worktree::handle_commands(worktree_matches),
-    Some(("diagnose", _)) => diagnostics::handle_diagnostics_command(),
-    Some(("completion", completion_matches)) => completion::handle_completion_command(completion_matches),
-    Some(("dashboard", dashboard_matches)) => dashboard::handle_command(dashboard_matches),
+    Some(("init", _)) => derive::init::InitCommand::parse_and_execute(),
+    Some(("panic", _)) => derive::panic::PanicCommand::parse_and_execute(),
+    Some(("branch", branch_matches)) => derive::branch::BranchCommand::parse_and_execute(branch_matches),
+    Some(("creds", creds_matches)) => derive::creds::CredsCommand::parse_and_execute(creds_matches),
+    Some(("git", git_matches)) => derive::git::GitCommand::parse_and_execute(git_matches),
+    Some(("github", github_matches)) => derive::github::GitHubCommand::parse_and_execute(github_matches),
+    Some(("jira", jira_matches)) => derive::jira::JiraCommand::parse_and_execute(jira_matches),
+    Some(("switch", switch_matches)) => derive::switch::SwitchCommand::parse_and_execute(switch_matches),
+    Some(("sync", sync_matches)) => derive::sync::SyncCommand::parse_and_execute(sync_matches),
+    Some(("tree", tree_matches)) => derive::tree::TreeCommand::parse_and_execute(tree_matches),
+    Some(("view", view_matches)) => derive::view::ViewCommand::parse_and_execute(view_matches),
+    Some(("worktree", worktree_matches)) => derive::worktree::WorktreeCommand::parse_and_execute(worktree_matches),
+    Some(("diagnose", _)) => derive::diagnostics::DiagnosticsCommand::parse_and_execute(),
+    Some(("completion", completion_matches)) => {
+      derive::completion::CompletionCommand::parse_and_execute(completion_matches)
+    }
+    Some(("dashboard", dashboard_matches)) => derive::dashboard::DashboardCommand::parse_and_execute(dashboard_matches),
     _ => {
       use crate::utils::output::print_info;
       print_info("No command specified.");

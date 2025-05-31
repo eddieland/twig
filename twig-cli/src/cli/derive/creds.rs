@@ -1,53 +1,91 @@
+//! # Credentials Command
+//!
+//! Derive-based implementation of the credentials command for managing
+//! credentials for external services like Jira and GitHub.
+
 use std::fs::metadata;
+use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
 
 use anyhow::Result;
-use clap::Command;
+use clap::{CommandFactory, Parser, Subcommand};
+use tokio::runtime::Runtime;
+use twig_gh::create_github_client;
+use twig_jira::create_jira_client;
 
-use crate::creds::{check_github_credentials, check_jira_credentials, get_netrc_path};
+use crate::cli::derive::DeriveCommand;
+use crate::creds::{check_github_credentials, check_jira_credentials, get_netrc_path, write_netrc_entry};
 use crate::utils::output::{format_command, format_repo_path, print_error, print_info, print_success, print_warning};
 
-/// Build the credentials subcommand
-pub fn build_command() -> Command {
-  Command::new("creds")
-    .about("Credential management")
-    .long_about(
-      "Manage credentials for external services like Jira and GitHub.\n\n\
+/// Command for credential management
+#[derive(Parser)]
+#[command(name = "creds")]
+#[command(about = "Credential management")]
+#[command(long_about = "Manage credentials for external services like Jira and GitHub.\n\n\
             This command group helps you check and set up credentials for the\n\
             external services that twig integrates with. Credentials are stored\n\
-            in your .netrc file for security and compatibility with other tools.",
-    )
-    .arg_required_else_help(true)
-    .subcommand(
-      Command::new("check")
-        .about("Check if credentials are properly configured")
-        .long_about(
-          "Checks if credentials for Jira and GitHub are properly configured.\n\n\
-                    This command verifies that your .netrc file contains the necessary\n\
-                    credentials for the services that twig integrates with. It also checks\n\
-                    file permissions to ensure your credentials are secure.",
-        ),
-    )
-    .subcommand(
-      Command::new("setup")
-        .about("Set up credentials interactively")
-        .long_about(
-          "Interactive wizard to set up credentials for Jira and GitHub.\n\n\
-                    This command guides you through the process of setting up credentials\n\
-                    for the services that twig integrates with. It will create or update\n\
-                    your .netrc file with the provided credentials.",
-        ),
-    )
+            in your .netrc file for security and compatibility with other tools.")]
+#[command(arg_required_else_help = true)]
+pub struct CredsCommand {
+  /// The subcommand to execute
+  #[command(subcommand)]
+  pub subcommand: CredsSubcommands,
 }
 
-/// Handle credentials subcommands
-pub fn handle_commands(creds_matches: &clap::ArgMatches) -> Result<()> {
-  match creds_matches.subcommand() {
-    Some(("check", _)) => handle_check_command(),
-    Some(("setup", _)) => handle_setup_command(),
-    _ => {
-      print_warning("Unknown creds command.");
-      Ok(())
+/// Subcommands for the creds command
+#[derive(Subcommand)]
+pub enum CredsSubcommands {
+  /// Check if credentials are properly configured
+  #[command(
+    long_about = "Checks if credentials for Jira and GitHub are properly configured.\n\n\
+                      This command verifies that your .netrc file contains the necessary\n\
+                      credentials for the services that twig integrates with. It also checks\n\
+                      file permissions to ensure your credentials are secure."
+  )]
+  Check,
+
+  /// Set up credentials interactively
+  #[command(long_about = "Interactive wizard to set up credentials for Jira and GitHub.\n\n\
+                      This command guides you through the process of setting up credentials\n\
+                      for the services that twig integrates with. It will create or update\n\
+                      your .netrc file with the provided credentials.")]
+  Setup,
+}
+
+impl CredsCommand {
+  /// Creates a clap Command for this command
+  pub fn command() -> clap::Command {
+    <Self as CommandFactory>::command()
+  }
+
+  /// Parses command line arguments and executes the command
+  pub fn parse_and_execute(matches: &clap::ArgMatches) -> Result<()> {
+    match matches.subcommand() {
+      Some(("check", _)) => {
+        let cmd = Self {
+          subcommand: CredsSubcommands::Check,
+        };
+        cmd.execute()
+      }
+      Some(("setup", _)) => {
+        let cmd = Self {
+          subcommand: CredsSubcommands::Setup,
+        };
+        cmd.execute()
+      }
+      _ => {
+        print_warning("Unknown creds command.");
+        Ok(())
+      }
+    }
+  }
+}
+
+impl DeriveCommand for CredsCommand {
+  fn execute(self) -> Result<()> {
+    match self.subcommand {
+      CredsSubcommands::Check => handle_check_command(),
+      CredsSubcommands::Setup => handle_setup_command(),
     }
   }
 }
@@ -118,19 +156,11 @@ fn handle_check_command() -> Result<()> {
 
 /// Handle the setup command
 fn handle_setup_command() -> Result<()> {
-  use std::io::{self, Write};
-
-  use tokio::runtime::Runtime;
-  use twig_gh::create_github_client;
-  use twig_jira::create_jira_client;
-
-  use crate::creds::{get_netrc_path, write_netrc_entry};
-
   print_info("Welcome to the twig credential setup wizard!");
   println!("This wizard will help you configure credentials for Jira and GitHub.");
   println!();
 
-  println!("• Ccredentials will be stored in ~/.netrc");
+  println!("• Credentials will be stored in ~/.netrc");
   println!("• File permissions will be automatically set to 600 for security");
   println!();
 
@@ -310,4 +340,16 @@ fn handle_setup_command() -> Result<()> {
   ));
 
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use clap::CommandFactory;
+
+  use super::*;
+
+  #[test]
+  fn verify_cli() {
+    CredsCommand::command().debug_assert();
+  }
 }
