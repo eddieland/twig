@@ -1,6 +1,5 @@
-# CLI Reference
+# Twig CLI Reference
 
-## Main Command
 ```
 Twig helps developers manage multiple Git repositories and worktrees efficiently.
 
@@ -324,18 +323,30 @@ Arguments:
   <INPUT>
           Jira issue, GitHub PR, or branch name
           
-          Can be any of the following: • Jira issue key (PROJ-123) • Jira issue URL (https://company.atlassian.net/browse/PROJ-123) • GitHub PR ID (12345 or PR#12345) • GitHub PR URL (https://github.com/owner/repo/pull/123) • Branch name (feature/my-branch)
+          Can be any of the following:
+          • Jira issue key (PROJ-123)
+          • Jira issue URL (https://company.atlassian.net/browse/PROJ-123)
+          • GitHub PR ID (12345 or PR#12345)
+          • GitHub PR URL (https://github.com/owner/repo/pull/123)
+          • Branch name (feature/my-branch)
 
 Options:
       --no-create
           Don't create branch if it doesn't exist
           
-          Disable the default behavior of creating branches when they don't exist. By default, twig switch will create missing branches. Use this flag to only switch to existing branches.
+          Disable the default behavior of creating branches when they don't exist.
+          By default, twig switch will create missing branches. Use this flag
+          to only switch to existing branches.
 
   -p, --parent [<PARENT>]
           Set parent dependency for the new branch
           
-          Specify a parent branch to create a dependency relationship. Values can be: • 'current' (default if flag used without value): Use current branch • A branch name: Use the specified branch • A Jira issue key (e.g., PROJ-123): Use branch associated with Jira issue • 'none': Don't set any parent (use default root)
+          Specify a parent branch to create a dependency relationship.
+          Values can be:
+          • 'current' (default if flag used without value): Use current branch
+          • A branch name: Use the specified branch
+          • A Jira issue key (e.g., PROJ-123): Use branch associated with Jira issue
+          • 'none': Don't set any parent (use default root)
 
   -h, --help
           Print help (see a summary with '-h')
