@@ -147,3 +147,221 @@ Twig uses [Insta](https://insta.rs/) for snapshot testing, which helps ensure co
 - Update documentation as needed
 - Consider binary size implications when adding new dependencies
 - Only include necessary features for dependencies (especially for tokio and reqwest)
+
+## CLI Implementation Guidelines
+
+Twig uses [Clap](https://docs.rs/clap/latest/clap/) with the Derive-style approach for defining the command-line interface. This section explains how to work with the CLI structure when adding or modifying commands.
+
+### Benefits of Clap's Derive Pattern
+
+The Derive-style approach offers several advantages over other CLI definition methods:
+
+1. **Type Safety**: Command arguments are strongly typed, catching errors at compile time rather than runtime.
+
+2. **Maintainability**: Command structure is defined declaratively alongside the data structures that hold the parsed values, making the code more maintainable and self-documenting.
+
+3. **Automatic Help Generation**: Clap automatically generates comprehensive help text, usage information, and error messages based on the struct definitions and doc comments.
+
+4. **Reduced Boilerplate**: Compared to the Builder pattern, Derive requires less code to define commands and arguments, leading to cleaner, more readable code.
+
+5. **IDE Support**: The Derive approach works well with IDE features like code completion and refactoring tools.
+
+6. **Validation**: Argument validation is handled through Clap's attribute system, keeping validation logic close to the argument definition.
+
+7. **Extensibility**: The command structure can be easily extended with new subcommands or arguments without modifying existing code.
+
+This approach aligns well with Rust's emphasis on type safety and declarative programming, making it the preferred choice for Twig's CLI implementation.
+
+### CLI Architecture
+
+The CLI is structured as follows:
+
+1. The top-level `Cli` struct in `twig-cli/src/cli/mod.rs` defines global options and the command enum
+2. The `Commands` enum defines all top-level subcommands
+3. Each subcommand has its own module in `twig-cli/src/cli/` with argument structs and handler functions
+4. Some commands have their own subcommands, creating a nested command structure
+
+### Adding a New Command
+
+To add a new top-level command:
+
+1. Create a new module in `twig-cli/src/cli/` (e.g., `my_command.rs`)
+2. Define the command's arguments using a struct with `#[derive(Args)]`
+3. Add the command to the `Commands` enum in `twig-cli/src/cli/mod.rs`
+4. Implement a handler function in your module
+5. Add the handler to the match statement in `handle_cli()` in `twig-cli/src/cli/mod.rs`
+
+Example:
+
+```rust
+// In twig-cli/src/cli/my_command.rs
+use anyhow::Result;
+use clap::Args;
+
+#[derive(Args)]
+pub struct MyCommandArgs {
+    /// Description of the argument
+    #[arg(long, short)]
+    pub some_arg: String,
+}
+
+pub fn handle_my_command(args: MyCommandArgs) -> Result<()> {
+    // Implementation
+    Ok(())
+}
+
+// In twig-cli/src/cli/mod.rs
+#[derive(Subcommand)]
+pub enum Commands {
+    // ... existing commands ...
+
+    /// My new command description
+    #[command(long_about = "Detailed description of my command")]
+    MyCommand(my_command::MyCommandArgs),
+}
+
+// In handle_cli() function
+match cli.command {
+    // ... existing matches ...
+    Commands::MyCommand(args) => my_command::handle_my_command(args),
+}
+```
+
+### Adding Subcommands
+
+For commands with their own subcommands:
+
+1. Define a subcommand enum with `#[derive(Subcommand)]`
+2. Create argument structs for each subcommand
+3. Use a nested match statement in your handler function
+
+Example:
+
+```rust
+#[derive(Args)]
+pub struct MyCommandArgs {
+    #[command(subcommand)]
+    pub subcommand: MySubcommands,
+}
+
+#[derive(Subcommand)]
+pub enum MySubcommands {
+    /// Subcommand description
+    SubA(SubAArgs),
+
+    /// Another subcommand
+    SubB(SubBArgs),
+}
+
+#[derive(Args)]
+pub struct SubAArgs {
+    // Arguments for SubA
+}
+
+#[derive(Args)]
+pub struct SubBArgs {
+    // Arguments for SubB
+}
+
+pub fn handle_my_command(args: MyCommandArgs) -> Result<()> {
+    match args.subcommand {
+        MySubcommands::SubA(sub_args) => {
+            // Handle SubA
+        },
+        MySubcommands::SubB(sub_args) => {
+            // Handle SubB
+        },
+    }
+}
+```
+
+### Command Attributes
+
+Clap provides several attributes to customize commands:
+
+- `#[command(about = "...")]` - Short description
+- `#[command(long_about = "...")]` - Detailed description
+- `#[command(alias = "...")]` - Command alias
+- `#[arg(long, short)]` - Long and short option flags
+- `#[arg(required = true)]` - Required argument
+- `#[arg(default_value = "...")]` - Default value
+
+See the [Clap documentation](https://docs.rs/clap/latest/clap/derive/index.html) for more attributes.
+
+### Real-World Example: Branch Command
+
+The `branch` command in Twig demonstrates nested subcommands with multiple levels:
+
+```rust
+// Top-level branch command
+#[derive(Args)]
+pub struct BranchArgs {
+  #[command(subcommand)]
+  pub subcommand: BranchSubcommands,
+}
+
+// First level of subcommands
+#[derive(Subcommand)]
+pub enum BranchSubcommands {
+  Depend(DependCommand),
+  RemoveDep(RemoveDepCommand),
+  Root(RootCommand),
+}
+
+// Second level of subcommands (for Root)
+#[derive(Args)]
+pub struct RootCommand {
+  #[command(subcommand)]
+  pub subcommand: RootSubcommands,
+}
+
+#[derive(Subcommand)]
+pub enum RootSubcommands {
+  Add(RootAddCommand),
+  Remove(RootRemoveCommand),
+  List(RootListCommand),
+}
+```
+
+This creates a command structure like:
+- `twig branch depend <child> <parent>`
+- `twig branch remove-dep <child> <parent>`
+- `twig branch root add <branch>`
+- `twig branch root remove <branch>`
+- `twig branch root list`
+
+### Command Execution Flow
+
+The execution flow for commands follows this pattern:
+
+1. `main.rs` parses CLI arguments with `Cli::parse()`
+2. `handle_cli()` in `cli/mod.rs` matches the top-level command
+3. Command-specific handler functions process the arguments
+4. Handler functions return `Result<()>` with `anyhow` for error handling
+
+### Testing Commands
+
+When adding new commands, consider adding tests:
+
+1. Unit tests for command handler logic
+2. Integration tests for command execution
+3. Snapshot tests for command output using Insta
+
+For example, to test a new command:
+
+```rust
+#[test]
+fn test_my_command() {
+    // Set up test environment
+    let temp_dir = tempdir().unwrap();
+    let repo_path = temp_dir.path();
+
+    // Execute command logic
+    let args = MyCommandArgs { /* ... */ };
+    let result = handle_my_command(args);
+
+    // Assert expected outcomes
+    assert!(result.is_ok());
+    // Additional assertions...
+}
+```
