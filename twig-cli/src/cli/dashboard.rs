@@ -51,13 +51,25 @@ pub struct DashboardArgs {
   #[arg(long, short = 'p', value_name = "PATH")]
   pub repo: Option<String>,
 
-  /// Output format (text, json)
+  /// Output format
   #[arg(long, short = 'f', value_name = "FORMAT", value_parser = ["text", "json"], default_value = "text")]
   pub format: String,
 
   /// Include remote branches in the dashboard
   #[arg(long = "include-remote")]
   pub include_remote: bool,
+
+  /// Disable GitHub PR information (avoids GitHub API requests)
+  #[arg(long = "no-github")]
+  pub no_github: bool,
+
+  /// Disable Jira issue information (avoids Jira API requests)
+  #[arg(long = "no-jira")]
+  pub no_jira: bool,
+
+  /// Simple view (equivalent to --no-github --no-jira)
+  #[arg(long, short = 's')]
+  pub simple: bool,
 }
 
 /// Handle the dashboard command
@@ -167,34 +179,40 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
     });
   }
 
+  // Check if we should skip GitHub and Jira API calls
+  let skip_github = dashboard.no_github || dashboard.simple;
+  let skip_jira = dashboard.no_jira || dashboard.simple;
+
   // Collect GitHub PRs
   let mut pull_requests = Vec::new();
-  if let Ok(creds) = get_github_credentials() {
-    if let Ok(github_client) = create_github_client(&creds.username, &creds.password) {
-      if let Ok((owner, repo_name)) = github_client.extract_repo_info_from_url(remote_url) {
-        match rt.block_on(github_client.list_pull_requests(&owner, &repo_name, Some("open"), None)) {
-          Ok(prs) => {
-            for pr in prs {
-              // Skip if we're only showing PRs created by the current user
-              if dashboard.mine && pr.user.login != creds.username {
-                continue;
-              }
+  if !skip_github {
+    if let Ok(creds) = get_github_credentials() {
+      if let Ok(github_client) = create_github_client(&creds.username, &creds.password) {
+        if let Ok((owner, repo_name)) = github_client.extract_repo_info_from_url(remote_url) {
+          match rt.block_on(github_client.list_pull_requests(&owner, &repo_name, Some("open"), None)) {
+            Ok(prs) => {
+              for pr in prs {
+                // Skip if we're only showing PRs created by the current user
+                if dashboard.mine && pr.user.login != creds.username {
+                  continue;
+                }
 
-              // Skip if we're only showing recent PRs
-              if dashboard.recent {
-                if let Ok(created_date) = chrono::DateTime::parse_from_rfc3339(&pr.created_at) {
-                  let seven_days_ago = chrono::Utc::now() - chrono::Duration::days(7);
-                  if created_date < seven_days_ago {
-                    continue;
+                // Skip if we're only showing recent PRs
+                if dashboard.recent {
+                  if let Ok(created_date) = chrono::DateTime::parse_from_rfc3339(&pr.created_at) {
+                    let seven_days_ago = chrono::Utc::now() - chrono::Duration::days(7);
+                    if created_date < seven_days_ago {
+                      continue;
+                    }
                   }
                 }
-              }
 
-              pull_requests.push(pr);
+                pull_requests.push(pr);
+              }
             }
-          }
-          Err(e) => {
-            print_warning(&format!("Failed to fetch GitHub pull requests: {e}"));
+            Err(e) => {
+              print_warning(&format!("Failed to fetch GitHub pull requests: {e}"));
+            }
           }
         }
       }
@@ -203,36 +221,38 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
 
   // Collect Jira issues
   let mut issues = Vec::new();
-  if let Ok(creds) = get_jira_credentials() {
-    // Load environment variables from .env file
-    dotenv::dotenv().ok();
+  if !skip_jira {
+    if let Ok(creds) = get_jira_credentials() {
+      // Load environment variables from .env file
+      dotenv::dotenv().ok();
 
-    // Get Jira host from environment or use default
-    let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
+      // Get Jira host from environment or use default
+      let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
 
-    if let Ok(jira_client) = create_jira_client(&jira_host, &creds.username, &creds.password) {
-      // Set up JQL filters
-      let assignee = if dashboard.mine { Some("me") } else { None };
-      let pagination = Some((50, 0));
+      if let Ok(jira_client) = create_jira_client(&jira_host, &creds.username, &creds.password) {
+        // Set up JQL filters
+        let assignee = if dashboard.mine { Some("me") } else { None };
+        let pagination = Some((50, 0));
 
-      match rt.block_on(jira_client.list_issues(None, None, assignee, pagination)) {
-        Ok(jira_issues) => {
-          for issue in jira_issues {
-            // Skip if we're only showing recent issues
-            if dashboard.recent {
-              if let Ok(updated_date) = chrono::DateTime::parse_from_rfc3339(&issue.fields.updated) {
-                let seven_days_ago = chrono::Utc::now() - chrono::Duration::days(7);
-                if updated_date < seven_days_ago {
-                  continue;
+        match rt.block_on(jira_client.list_issues(None, None, assignee, pagination)) {
+          Ok(jira_issues) => {
+            for issue in jira_issues {
+              // Skip if we're only showing recent issues
+              if dashboard.recent {
+                if let Ok(updated_date) = chrono::DateTime::parse_from_rfc3339(&issue.fields.updated) {
+                  let seven_days_ago = chrono::Utc::now() - chrono::Duration::days(7);
+                  if updated_date < seven_days_ago {
+                    continue;
+                  }
                 }
               }
-            }
 
-            issues.push(issue);
+              issues.push(issue);
+            }
           }
-        }
-        Err(e) => {
-          print_warning(&format!("Failed to fetch Jira issues: {e}"));
+          Err(e) => {
+            print_warning(&format!("Failed to fetch Jira issues: {e}"));
+          }
         }
       }
     }
@@ -256,7 +276,9 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
     }
     _ => {
       // Output as text
-      display_text_dashboard(&dashboard_data, dashboard.include_remote);
+      let skip_github = dashboard.no_github || dashboard.simple;
+      let skip_jira = dashboard.no_jira || dashboard.simple;
+      display_text_dashboard(&dashboard_data, dashboard.include_remote, skip_github, skip_jira);
     }
   }
 
@@ -264,7 +286,7 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
 }
 
 /// Display the dashboard in text format
-fn display_text_dashboard(data: &DashboardData, include_remote: bool) {
+fn display_text_dashboard(data: &DashboardData, include_remote: bool, skip_github: bool, skip_jira: bool) {
   // Define a struct for branch data with Tabled trait
   #[derive(Tabled)]
   struct BranchRow {
@@ -345,73 +367,77 @@ fn display_text_dashboard(data: &DashboardData, include_remote: bool) {
     println!("\n{}", Table::new(branch_rows).with(Style::sharp()));
   }
 
-  // Display pull requests
-  println!("\n{}\n", "GitHub Pull Requests".bold().underline());
-  if data.pull_requests.is_empty() {
-    println!("  No pull requests found");
-  } else {
-    // Convert PRs to table rows
-    let pr_rows: Vec<PullRequestRow> = data
-      .pull_requests
-      .iter()
-      .map(|pr| {
-        // Truncate title if too long
-        let title = if pr.title.len() > 47 {
-          format!("{}...", &pr.title[0..44])
-        } else {
-          pr.title.clone()
-        };
+  // Display pull requests if not skipped
+  if !skip_github {
+    println!("\n{}\n", "GitHub Pull Requests".bold().underline());
+    if data.pull_requests.is_empty() {
+      println!("  No pull requests found");
+    } else {
+      // Convert PRs to table rows
+      let pr_rows: Vec<PullRequestRow> = data
+        .pull_requests
+        .iter()
+        .map(|pr| {
+          // Truncate title if too long
+          let title = if pr.title.len() > 47 {
+            format!("{}...", &pr.title[0..44])
+          } else {
+            pr.title.clone()
+          };
 
-        // Format date to be more readable
-        let created_date = pr.created_at.split('T').next().unwrap_or(&pr.created_at);
+          // Format date to be more readable
+          let created_date = pr.created_at.split('T').next().unwrap_or(&pr.created_at);
 
-        PullRequestRow {
-          number: pr.number,
-          title,
-          author: pr.user.login.clone(),
-          created: created_date.to_string(),
-        }
-      })
-      .collect();
+          PullRequestRow {
+            number: pr.number,
+            title,
+            author: pr.user.login.clone(),
+            created: created_date.to_string(),
+          }
+        })
+        .collect();
 
-    println!("{}", Table::new(pr_rows).with(Style::sharp()));
+      println!("{}", Table::new(pr_rows).with(Style::sharp()));
+    }
   }
 
-  // Display Jira issues
-  println!("\n{}\n", "Jira Issues".bold().underline());
-  if data.issues.is_empty() {
-    println!("  No issues found");
-  } else {
-    // Convert issues to table rows
-    let issue_rows: Vec<IssueRow> = data
-      .issues
-      .iter()
-      .map(|issue| {
-        // Truncate summary if too long
-        let summary = if issue.fields.summary.len() > 47 {
-          format!("{}...", &issue.fields.summary[0..44])
-        } else {
-          issue.fields.summary.clone()
-        };
+  // Display Jira issues if not skipped
+  if !skip_jira {
+    println!("\n{}\n", "Jira Issues".bold().underline());
+    if data.issues.is_empty() {
+      println!("  No issues found");
+    } else {
+      // Convert issues to table rows
+      let issue_rows: Vec<IssueRow> = data
+        .issues
+        .iter()
+        .map(|issue| {
+          // Truncate summary if too long
+          let summary = if issue.fields.summary.len() > 47 {
+            format!("{}...", &issue.fields.summary[0..44])
+          } else {
+            issue.fields.summary.clone()
+          };
 
-        // Get assignee
-        let assignee = issue
-          .fields
-          .assignee
-          .as_ref()
-          .map(|a| a.display_name.clone())
-          .unwrap_or_else(|| "Unassigned".to_string());
+          // Get assignee
+          let assignee = issue
+            .fields
+            .assignee
+            .as_ref()
+            .map(|a| a.display_name.clone())
+            .unwrap_or_else(|| "Unassigned".to_string());
 
-        IssueRow {
-          key: issue.key.clone(),
-          summary,
-          status: issue.fields.status.name.clone(),
-          assignee,
-        }
-      })
-      .collect();
+          IssueRow {
+            key: issue.key.clone(),
+            summary,
+            status: issue.fields.status.name.clone(),
+            assignee,
+          }
+        })
+        .collect();
 
-    println!("{}", Table::new(issue_rows).with(Style::sharp()));
+      println!("{}", Table::new(issue_rows).with(Style::sharp()));
+    }
   }
 
   println!();

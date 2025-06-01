@@ -98,12 +98,21 @@ impl ConfigDirsTestGuard {
 
   /// Verify that the configuration directories are in the expected location
   pub fn verify_in_test_env(&self, test_env: &EnvTestGuard) -> bool {
+    // Canonicalize paths to handle symlinks (especially on macOS)
+    let test_env_path =
+      std::fs::canonicalize(test_env.temp_dir.path()).unwrap_or_else(|_| test_env.temp_dir.path().to_path_buf());
+    let config_dir = std::fs::canonicalize(&self.config_dir).unwrap_or_else(|_| self.config_dir.clone());
+    let data_dir = std::fs::canonicalize(&self.data_dir).unwrap_or_else(|_| self.data_dir.clone());
+
     // Check if the directories are within the test environment
-    let config_in_test = self.config_dir.starts_with(test_env.temp_dir.path());
-    let data_in_test = self.data_dir.starts_with(test_env.temp_dir.path());
+    let config_in_test = config_dir.starts_with(&test_env_path);
+    let data_in_test = data_dir.starts_with(&test_env_path);
 
     let cache_in_test = match &self.cache_dir {
-      Some(cache_dir) => cache_dir.starts_with(test_env.temp_dir.path()),
+      Some(cache_dir) => {
+        let cache_dir = std::fs::canonicalize(cache_dir).unwrap_or_else(|_| cache_dir.clone());
+        cache_dir.starts_with(&test_env_path)
+      }
       None => true,
     };
 

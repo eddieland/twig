@@ -130,33 +130,45 @@ mod tests {
 
   #[test]
   fn test_new_and_change_dir() {
-    let original_dir = env::current_dir().unwrap();
+    let original_dir = std::fs::canonicalize(env::current_dir().unwrap()).unwrap();
 
     {
       let git_repo = GitRepoTestGuard::new_and_change_dir();
       assert!(git_repo.path().join(".git").exists());
 
       // Current directory should be the git repo
-      assert_eq!(env::current_dir().unwrap(), git_repo.path());
+      assert_eq!(
+        std::fs::canonicalize(env::current_dir().unwrap()).unwrap(),
+        std::fs::canonicalize(git_repo.path()).unwrap()
+      );
     }
 
     // After dropping, we should be back in the original directory
-    assert_eq!(env::current_dir().unwrap(), original_dir);
+    assert_eq!(
+      std::fs::canonicalize(env::current_dir().unwrap()).unwrap(),
+      original_dir
+    );
   }
 
   #[test]
   fn test_change_and_restore_dir() {
-    let original_dir = env::current_dir().unwrap();
+    let original_dir = std::fs::canonicalize(env::current_dir().unwrap()).unwrap();
 
     let mut git_repo = GitRepoTestGuard::new();
     assert!(git_repo.path().join(".git").exists());
 
     // Change directory
     git_repo.change_dir();
-    assert_eq!(env::current_dir().unwrap(), git_repo.path());
+    assert_eq!(
+      std::fs::canonicalize(env::current_dir().unwrap()).unwrap(),
+      std::fs::canonicalize(git_repo.path()).unwrap()
+    );
 
     // Restore directory
     git_repo.restore_dir();
-    assert_eq!(env::current_dir().unwrap(), original_dir);
+    assert_eq!(
+      std::fs::canonicalize(env::current_dir().unwrap()).unwrap(),
+      original_dir
+    );
   }
 }

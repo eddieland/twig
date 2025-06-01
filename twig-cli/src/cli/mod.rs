@@ -14,7 +14,6 @@ mod jira;
 mod switch;
 mod sync;
 mod tree;
-mod view;
 mod worktree;
 
 use anyhow::Result;
@@ -95,9 +94,12 @@ pub enum Commands {
             This command displays a unified view of your development context,\n\
             including local branches, associated pull requests, and related Jira issues.\n\
             It helps you keep track of your work across different systems.\n\n\
-            By default, only local branches are shown. Use --include-remote to include remote branches."
+            By default, only local branches are shown. Use --include-remote to include remote branches.\n\n\
+            Use --no-github or --no-jira to disable GitHub or Jira API requests respectively.\n\
+            Use --simple for a basic view that shows only branches without making any API requests."
   )]
   #[command(alias = "dash")]
+  #[command(alias = "v")]
   Dashboard(dashboard::DashboardArgs),
 
   /// Run system diagnostics
@@ -187,16 +189,6 @@ pub enum Commands {
   #[command(alias = "t")]
   Tree(tree::TreeArgs),
 
-  /// View branches with their associated issues and PRs
-  #[command(
-    long_about = "Display local branches and their associated Jira issues and GitHub PRs.\n\n\
-            This command shows all local branches in the current repository along with\n\
-            any associated Jira tickets and GitHub pull requests. This helps you track\n\
-            which branches are linked to specific issues and PRs for better workflow management."
-  )]
-  #[command(alias = "v")]
-  View(view::ViewArgs),
-
   /// Worktree management
   #[command(long_about = "Manage Git worktrees for efficient multi-branch development.\n\n\
             Worktrees allow you to check out multiple branches simultaneously in separate\n\
@@ -241,7 +233,6 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
     Commands::Switch(switch) => switch::handle_switch_command(switch),
     Commands::Sync(sync) => sync::handle_sync_command(sync),
     Commands::Tree(tree) => tree::handle_tree_command(tree),
-    Commands::View(view) => view::handle_view_command(view),
     Commands::Worktree(worktree) => worktree::handle_worktree_command(worktree),
   }
 }
