@@ -344,52 +344,55 @@ fn handle_checks_command(cmd: &ChecksCommand) -> Result<()> {
         started_at: String,
       }
 
-      // Convert check runs to table rows
+      // Convert check runs to table rows with plain text first (no colors)
       let rows: Vec<CheckRunRow> = check_runs
         .iter()
         .map(|check| {
-          // Format status with color
-          let status = match check.status.as_str() {
-            "completed" => check.status.green().to_string(),
-            "in_progress" => check.status.yellow().to_string(),
-            "queued" => check.status.blue().to_string(),
-            _ => check.status.default_color().to_string(),
-          };
-
-          // Format conclusion with color
-          let conclusion = match &check.conclusion {
-            Some(conclusion) => match conclusion.as_str() {
-              "success" => conclusion.green().to_string(),
-              "failure" => conclusion.red().to_string(),
-              "neutral" => conclusion.default_color().to_string(),
-              "cancelled" => conclusion.yellow().to_string(),
-              "skipped" => conclusion.blue().to_string(),
-              "timed_out" => conclusion.red().to_string(),
-              "action_required" => conclusion.yellow().to_string(),
-              _ => conclusion.default_color().to_string(),
-            },
-            None => "N/A".default_color().to_string(),
-          };
-
           // Format date to be more readable
           let started_date = check.started_at.split('T').next().unwrap_or(&check.started_at);
 
           CheckRunRow {
             name: check.name.clone(),
-            status,
-            conclusion,
+            status: check.status.clone(),
+            conclusion: check.conclusion.clone().unwrap_or_else(|| "N/A".to_string()),
             started_at: started_date.to_string(),
           }
         })
         .collect();
 
-      println!("\n{}", Table::new(rows).with(Style::sharp()));
+      // Create table with proper formatting
+      let mut table = Table::new(rows);
+
+      // Apply styling to the table
+      table
+        .with(Style::sharp())
+        .with(tabled::settings::Padding::new(1, 1, 0, 0))
+        .with(
+          tabled::settings::Modify::new(tabled::settings::object::Columns::new(..))
+            .with(tabled::settings::Alignment::center()),
+        );
+
+      // Let's use a simpler approach - create the table first, then format the output
+      let table_string = format!("{table}",);
+
+      // Now apply colors to the formatted table string
+      let colored_table = table_string
+        .replace("completed", &"completed".green().to_string())
+        .replace("in_progress", &"in_progress".yellow().to_string())
+        .replace("queued", &"queued".blue().to_string())
+        .replace("success", &"success".green().to_string())
+        .replace("failure", &"failure".red().to_string())
+        .replace("cancelled", &"cancelled".yellow().to_string())
+        .replace("timed_out", &"timed_out".red().to_string())
+        .replace("action_required", &"action_required".yellow().to_string());
+
+      println!("\n{colored_table}",);
 
       // Display details URLs
       println!("\nDetails:");
       for check in &check_runs {
         if let Some(url) = &check.details_url {
-          println!("  • {}: {}", check.name, url);
+          println!("  • {}: {url}", check.name,);
         }
       }
       println!();
