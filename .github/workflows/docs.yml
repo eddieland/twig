@@ -56,9 +56,8 @@ jobs:
           mkdir -p docs
 
           cat > docs/CLI-Reference.md << 'EOF'
-          # CLI Reference
+          # Twig CLI Reference
 
-          ## Main Command
           ```
           EOF
 
