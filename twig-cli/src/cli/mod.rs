@@ -231,7 +231,7 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
     Commands::Creds(creds) => creds::handle_creds_command(creds),
     Commands::Dashboard(dashboard) => dashboard::handle_dashboard_command(dashboard),
     Commands::Diagnostics => diagnostics::run_diagnostics(),
-    Commands::Git(git) => git::handle_git_comamnd(git),
+    Commands::Git(git) => git::handle_git_command(git),
     Commands::GitHub(github) => github::handle_github_command(github),
     Commands::Init => crate::config::init(),
     Commands::Jira(jira) => jira::handle_jira_command(jira),

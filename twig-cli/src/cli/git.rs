@@ -129,7 +129,7 @@ pub struct StaleBranchesCommand {
 /// This function processes the git subcommands and executes the
 /// corresponding actions such as adding, removing, listing repositories,
 /// fetching updates, executing commands, and finding stale branches.
-pub(crate) fn handle_git_comamnd(git: GitArgs) -> Result<()> {
+pub(crate) fn handle_git_command(git: GitArgs) -> Result<()> {
   match git.subcommand {
     GitSubcommands::Add(cmd) => crate::git::add_repository(&cmd.path),
     GitSubcommands::Remove(cmd) => crate::git::remove_repository(&cmd.path),
