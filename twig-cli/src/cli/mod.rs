@@ -5,14 +5,14 @@
 //! integrations.
 
 mod branch;
-mod cascade;
+pub mod cascade;
 mod completion;
 mod creds;
 mod dashboard;
 mod git;
 mod github;
 mod jira;
-mod rebase;
+pub mod rebase;
 mod switch;
 mod sync;
 mod tree;
