@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["WorktreeSubcommands"],"fn":["handle_worktree_command"],"struct":["CleanCommand","CreateCommand","ListCommand","WorktreeArgs"]};

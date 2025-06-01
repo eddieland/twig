@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["JiraSubcommands"],"fn":["handle_create_branch_command","handle_jira_command","handle_link_branch_command","handle_transition_issue_command","handle_view_issue_command"],"struct":["JiraArgs"]};

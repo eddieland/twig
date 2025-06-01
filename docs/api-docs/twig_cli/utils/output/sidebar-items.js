@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ColorMode"],"fn":["format_check_status","format_command","format_pr_review_status","format_repo_name","format_repo_path","format_timestamp","get_emoji_or_default","print_error","print_header","print_info","print_success","print_warning"]};

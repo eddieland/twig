@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["add_repository","detect_current_repository","detect_repository","execute_all_repositories","execute_repository","fetch_all_repositories","fetch_repository","find_stale_branches","find_stale_branches_all","list_repositories","remove_repository"]};
