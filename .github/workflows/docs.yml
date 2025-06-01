@@ -16,7 +16,19 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Cancel previous runs of this workflow
+  cancel-previous-runs:
+    name: Cancel Previous Runs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.12.1
+        with:
+          access_token: ${{ github.token }}
+          workflow_id: ${{ github.workflow }}
+
   generate-docs:
+    needs: cancel-previous-runs
     name: Generate Documentation
     runs-on: ubuntu-24.04
     steps:
@@ -33,7 +45,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Generate API docs
-        run: cargo doc --no-deps --document-private-items
+        run: cargo doc --workspace --no-deps --document-private-items
 
       - name: Generate CLI help docs
         run: |
