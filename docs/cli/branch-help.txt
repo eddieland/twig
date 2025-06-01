@@ -1,0 +1,19 @@
+Manage custom branch dependencies and root branches.
+
+This command group allows you to define custom parent-child relationships
+between branches beyond Git's automatic detection. You can also manage
+which branches should be treated as root branches in the tree view.
+
+Usage: twig branch <COMMAND>
+
+Commands:
+  depend      Add a dependency between branches
+  remove-dep  Remove a dependency between branches
+  root        Root branch management
+
+Options:
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version

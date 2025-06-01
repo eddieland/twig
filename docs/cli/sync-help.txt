@@ -1,0 +1,39 @@
+Scan local branches and automatically detect and link them to their corresponding
+Jira issues and GitHub PRs.
+
+For GitHub PRs, this command:
+• First searches GitHub's API for pull requests matching the branch name
+• Falls back to detecting patterns in branch names if API is unavailable
+
+For Jira issues, it looks for patterns in branch names like:
+• PROJ-123/feature-name, feature/PROJ-123-description
+
+GitHub PR branch naming patterns (fallback detection):
+• pr-123-description, github-pr-123, pull-123, pr/123
+
+It will automatically create associations for detected patterns and report
+any branches that couldn't be linked.
+
+Usage: twig sync [OPTIONS]
+
+Options:
+  -r, --repo <PATH>
+          Path to a specific repository
+
+      --dry-run
+          Show what would be synced without making changes
+
+      --force
+          Update existing associations that differ from detected patterns
+
+      --no-jira
+          Skip detection and linking of Jira issues
+
+      --no-github
+          Skip detection and linking of GitHub PRs
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version

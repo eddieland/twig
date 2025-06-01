@@ -1,0 +1,18 @@
+Manage credentials for external services like Jira and GitHub.
+
+This command group helps you check and set up credentials for the
+external services that twig integrates with. Credentials are stored
+in your .netrc file for security and compatibility with other tools.
+
+Usage: twig creds <COMMAND>
+
+Commands:
+  check  Check if credentials are properly configured
+  setup  Set up credentials interactively
+
+Options:
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version

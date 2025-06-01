@@ -1,0 +1,19 @@
+Generates shell completion scripts for twig commands.
+
+This command generates completion scripts that provide tab completion for twig
+commands and options in your shell. Supported shells include bash, zsh, and fish.
+
+Usage: twig completion <SHELL>
+
+Arguments:
+  <SHELL>
+          Shell to generate completions for
+          
+          [possible values: bash, zsh, fish]
+
+Options:
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version

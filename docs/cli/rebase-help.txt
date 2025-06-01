@@ -1,0 +1,25 @@
+Rebase the current branch on its parent(s).
+
+This command rebases the current branch on its parent(s) based on
+the dependency tree. It can optionally start from the root branch.
+
+Usage: twig rebase [OPTIONS]
+
+Options:
+      --force
+          Force rebase even if branches are up-to-date
+
+      --show-graph
+          Show dependency graph before rebasing
+
+      --autostash
+          Automatically stash and pop pending changes
+
+  -r, --repo <PATH>
+          Path to a specific repository
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
