@@ -169,11 +169,8 @@ mod tests {
 
     // The result should be Ok and contain our temporary directory path
     assert!(result.is_ok());
-    let repo_path = result.unwrap();
+    let repo_path = std::fs::canonicalize(result.unwrap()).unwrap();
     assert_eq!(repo_path, git_repo.path());
-
-    // GitRepoTestGuard will automatically restore the original directory when
-    // dropped
   }
 
   // Test the direct conversion logic for get_current_branch_jira_issue

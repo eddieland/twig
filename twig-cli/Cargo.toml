@@ -33,6 +33,7 @@ uuid.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
 console.workspace = true
+dialoguer.workspace = true
 emojis.workspace = true
 indicatif.workspace = true
 owo-colors.workspace = true

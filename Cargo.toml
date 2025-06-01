@@ -31,6 +31,9 @@ twig-cli = { path = "twig-cli" }
 
 [dev-dependencies]
 twig-test-utils = { path = "twig-test-utils" }
+anyhow = { workspace = true }
+git2 = { workspace = true }
+tempfile = { workspace = true }
 
 [workspace.dependencies]
 # Core dependencies
@@ -47,6 +50,7 @@ thiserror = "2.0"
 clap = { version = "4.5", features = ["derive"] }
 clap_complete = "4.5"
 console = "0.15.11"
+dialoguer = "0.11.0"
 emojis = "0.6"
 indicatif = "0.17"
 owo-colors = { version = "4.1", features = ["supports-colors"] }

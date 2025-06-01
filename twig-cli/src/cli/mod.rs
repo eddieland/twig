@@ -5,12 +5,14 @@
 //! integrations.
 
 mod branch;
+pub mod cascade;
 mod completion;
 mod creds;
 mod dashboard;
 mod git;
 mod github;
 mod jira;
+pub mod rebase;
 mod switch;
 mod sync;
 mod tree;
@@ -197,6 +199,22 @@ pub enum Commands {
             incomplete work.")]
   #[command(alias = "wt")]
   Worktree(worktree::WorktreeArgs),
+
+  /// Rebase the current branch on its parent(s)
+  #[command(long_about = "Rebase the current branch on its parent(s).\n\n\
+            This command rebases the current branch on its parent(s) based on\n\
+            the dependency tree. It can optionally start from the root branch.")]
+  #[command(alias = "rb")]
+  Rebase(rebase::RebaseArgs),
+
+  /// Perform a cascading rebase from the current branch to its children
+  #[command(
+    long_about = "Perform a cascading rebase from the current branch to its children.\n\n\
+            This command rebases all child branches on their parent(s) in a cascading manner,\n\
+            starting from the current branch and working down the dependency tree."
+  )]
+  #[command(alias = "casc")]
+  Cascade(cascade::CascadeArgs),
 }
 
 impl Cli {
@@ -234,6 +252,8 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
     Commands::Sync(sync) => sync::handle_sync_command(sync),
     Commands::Tree(tree) => tree::handle_tree_command(tree),
     Commands::Worktree(worktree) => worktree::handle_worktree_command(worktree),
+    Commands::Rebase(rebase) => rebase::handle_rebase_command(rebase),
+    Commands::Cascade(cascade) => cascade::handle_cascade_command(cascade),
   }
 }
 
