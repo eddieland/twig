@@ -4,13 +4,12 @@
 //! switching to branches based on various inputs.
 
 use anyhow::{Context, Result};
-use clap::{CommandFactory, Parser};
+use clap::Args;
 use git2::Repository as Git2Repository;
 use tokio::runtime::Runtime;
 use twig_gh::create_github_client;
 use twig_jira::create_jira_client;
 
-use crate::cli::derive::DeriveCommand;
 use crate::consts::{DEFAULT_JIRA_HOST, ENV_JIRA_HOST};
 use crate::creds::{get_github_credentials, get_jira_credentials};
 use crate::git::detect_current_repository;
@@ -18,21 +17,8 @@ use crate::repo_state::{BranchMetadata, RepoState};
 use crate::utils::output::{print_error, print_info, print_success, print_warning};
 
 /// Command for intelligently switching to branches based on various inputs
-#[derive(Parser)]
-#[command(name = "switch")]
-#[command(about = "Magic branch switching")]
-#[command(long_about = "Intelligently switch to branches based on various inputs.\n\n\
-            This command can switch branches based on:\n\
-            • Jira issue key (e.g., PROJ-123)\n\
-            • Jira issue URL\n\
-            • GitHub PR ID (e.g., 12345 or PR#12345)\n\
-            • GitHub PR URL\n\
-            • Branch name\n\n\
-            The command will automatically detect the input type and find the\n\
-            corresponding branch. By default, missing branches will be created\n\
-            automatically. Use --no-create to disable this behavior.")]
-#[command(alias = "sw")]
-pub struct SwitchCommand {
+#[derive(Args)]
+pub struct SwitchArgs {
   /// Jira issue, GitHub PR, or branch name
   ///
   /// Can be any of the following:
@@ -64,57 +50,26 @@ pub struct SwitchCommand {
   pub parent: Option<String>,
 }
 
-impl SwitchCommand {
-  /// Creates a clap Command for this command (for backward compatibility)
-  pub fn command() -> clap::Command {
-    Self::command_for_update()
-  }
+pub(crate) fn handle_switch_command(switch: SwitchArgs) -> Result<()> {
+  let input = &switch.input;
+  let create_if_missing = !switch.no_create;
+  let parent_option = switch.parent.as_deref();
 
-  /// Parses command line arguments and executes the command
-  pub fn parse_and_execute(matches: &clap::ArgMatches) -> Result<()> {
-    // Extract switch-specific arguments from the matches
-    let input = matches.get_one::<String>("input").unwrap().clone();
-    let no_create = matches.get_flag("no-create");
-    let parent = matches.get_one::<String>("parent").cloned();
+  // Get the current repository
+  let repo_path = detect_current_repository().context("Not in a git repository")?;
 
-    // Create the command instance
-    let cmd = Self {
-      input,
-      no_create,
-      parent,
-    };
-
-    // Execute the command
-    cmd.execute()
-  }
-}
-
-impl DeriveCommand for SwitchCommand {
-  fn execute(self) -> Result<()> {
-    let input = &self.input;
-    let create_if_missing = !self.no_create;
-    let parent_option = self.parent.as_deref();
-
-    // Get the current repository
-    let repo_path = detect_current_repository().context("Not in a git repository")?;
-
-    // Detect input type and handle accordingly
-    match detect_input_type(input) {
-      InputType::JiraIssueKey(issue_key) => {
-        handle_jira_switch(&repo_path, &issue_key, create_if_missing, parent_option)
-      }
-      InputType::JiraIssueUrl(issue_key) => {
-        handle_jira_switch(&repo_path, &issue_key, create_if_missing, parent_option)
-      }
-      InputType::GitHubPrId(pr_number) => {
-        handle_github_pr_switch(&repo_path, pr_number, create_if_missing, parent_option)
-      }
-      InputType::GitHubPrUrl(pr_number) => {
-        handle_github_pr_switch(&repo_path, pr_number, create_if_missing, parent_option)
-      }
-      InputType::BranchName(branch_name) => {
-        handle_branch_switch(&repo_path, &branch_name, create_if_missing, parent_option)
-      }
+  // Detect input type and handle accordingly
+  match detect_input_type(input) {
+    InputType::JiraIssueKey(issue_key) => handle_jira_switch(&repo_path, &issue_key, create_if_missing, parent_option),
+    InputType::JiraIssueUrl(issue_key) => handle_jira_switch(&repo_path, &issue_key, create_if_missing, parent_option),
+    InputType::GitHubPrId(pr_number) => {
+      handle_github_pr_switch(&repo_path, pr_number, create_if_missing, parent_option)
+    }
+    InputType::GitHubPrUrl(pr_number) => {
+      handle_github_pr_switch(&repo_path, pr_number, create_if_missing, parent_option)
+    }
+    InputType::BranchName(branch_name) => {
+      handle_branch_switch(&repo_path, &branch_name, create_if_missing, parent_option)
     }
   }
 }
@@ -591,14 +546,7 @@ fn store_github_pr_association(repo_path: &std::path::Path, branch_name: &str, p
 
 #[cfg(test)]
 mod tests {
-  use clap::CommandFactory;
-
   use super::*;
-
-  #[test]
-  fn verify_cli() {
-    SwitchCommand::command_for_update().debug_assert();
-  }
 
   #[test]
   fn test_is_jira_issue_key() {

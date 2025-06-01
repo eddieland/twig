@@ -5,7 +5,7 @@
 //! branch metadata for development workflows.
 
 use anyhow::Result;
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{Args, Subcommand};
 use git2::Repository as Git2Repository;
 use owo_colors::OwoColorize;
 use tabled::settings::Style;
@@ -13,7 +13,6 @@ use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
 use twig_gh::{PullRequestStatus, create_github_client};
 
-use crate::cli::derive::DeriveCommand;
 use crate::creds::get_github_credentials;
 use crate::git::detect_current_repository;
 use crate::repo_state::RepoState;
@@ -22,15 +21,8 @@ use crate::utils::output::{
 };
 
 /// Command for GitHub integration
-#[derive(Parser)]
-#[command(name = "github")]
-#[command(about = "GitHub integration")]
-#[command(long_about = "Interact with GitHub repositories and pull requests.\n\n\
-            This command group provides functionality for working with GitHub,\n\
-            including checking authentication, viewing pull request status,\n\
-            and linking branches to pull requests.")]
-#[command(alias = "gh")]
-pub struct GitHubCommand {
+#[derive(Args)]
+pub struct GitHubArgs {
   /// The subcommand to execute
   #[command(subcommand)]
   pub subcommand: GitHubSubcommands,
@@ -61,7 +53,7 @@ pub enum GitHubSubcommands {
 }
 
 /// View CI/CD checks for a PR
-#[derive(Parser)]
+#[derive(Args)]
 pub struct ChecksCommand {
   /// PR number (defaults to current branch's PR)
   #[arg(index = 1)]
@@ -73,7 +65,7 @@ pub struct ChecksCommand {
 }
 
 /// Pull request operations
-#[derive(Parser)]
+#[derive(Args)]
 pub struct PrCommand {
   /// The subcommand to execute
   #[command(subcommand)]
@@ -107,7 +99,7 @@ pub enum PrSubcommands {
 }
 
 /// List pull requests for a repository
-#[derive(Parser)]
+#[derive(Args)]
 pub struct ListCommand {
   /// Filter by PR state (open, closed, all)
   #[arg(long, short = 's', value_name = "STATE", default_value = "open")]
@@ -123,92 +115,22 @@ pub struct ListCommand {
 }
 
 /// Link a PR to the current branch
-#[derive(Parser)]
+#[derive(Args)]
 pub struct LinkCommand {
   /// URL or ID of the pull request to link (e.g., 'https://github.com/owner/repo/pull/123' or '123')
   #[arg(required = true, index = 1)]
   pub pr_url_or_id: String,
 }
 
-impl GitHubCommand {
-  /// Creates a clap Command for this command (for backward compatibility)
-  pub fn command() -> clap::Command {
-    <Self as CommandFactory>::command()
-  }
-
-  /// Parses command line arguments and executes the command
-  pub fn parse_and_execute(matches: &clap::ArgMatches) -> Result<()> {
-    match matches.subcommand() {
-      Some(("check", _)) => {
-        let cmd = Self {
-          subcommand: GitHubSubcommands::Check,
-        };
-        cmd.execute()
-      }
-      Some(("checks", checks_matches)) => {
-        let pr_number = checks_matches.get_one::<String>("pr_number").cloned();
-        let repo = checks_matches.get_one::<String>("repo").cloned();
-
-        let cmd = Self {
-          subcommand: GitHubSubcommands::Checks(ChecksCommand { pr_number, repo }),
-        };
-        cmd.execute()
-      }
-      Some(("pr", pr_matches)) => match pr_matches.subcommand() {
-        Some(("status", _)) => {
-          let cmd = Self {
-            subcommand: GitHubSubcommands::Pr(PrCommand {
-              subcommand: PrSubcommands::Status,
-            }),
-          };
-          cmd.execute()
-        }
-        Some(("list", list_matches)) => {
-          let state = list_matches.get_one::<String>("state").unwrap().clone();
-          let repo = list_matches.get_one::<String>("repo").cloned();
-          let limit = *list_matches.get_one::<u32>("limit").unwrap();
-
-          let cmd = Self {
-            subcommand: GitHubSubcommands::Pr(PrCommand {
-              subcommand: PrSubcommands::List(ListCommand { state, repo, limit }),
-            }),
-          };
-          cmd.execute()
-        }
-        Some(("link", link_matches)) => {
-          let pr_url_or_id = link_matches.get_one::<String>("pr_url_or_id").unwrap().clone();
-
-          let cmd = Self {
-            subcommand: GitHubSubcommands::Pr(PrCommand {
-              subcommand: PrSubcommands::Link(LinkCommand { pr_url_or_id }),
-            }),
-          };
-          cmd.execute()
-        }
-        _ => {
-          print_error("Unknown pr command");
-          Ok(())
-        }
-      },
-      _ => {
-        print_error("Unknown github command");
-        Ok(())
-      }
-    }
-  }
-}
-
-impl DeriveCommand for GitHubCommand {
-  fn execute(self) -> Result<()> {
-    match self.subcommand {
-      GitHubSubcommands::Check => handle_check_command(),
-      GitHubSubcommands::Checks(cmd) => handle_checks_command(&cmd),
-      GitHubSubcommands::Pr(pr_cmd) => match pr_cmd.subcommand {
-        PrSubcommands::Status => handle_pr_status_command(),
-        PrSubcommands::List(cmd) => handle_pr_list_command(&cmd),
-        PrSubcommands::Link(cmd) => handle_pr_link_command(&cmd.pr_url_or_id),
-      },
-    }
+pub(crate) fn handle_github_command(github: GitHubArgs) -> Result<()> {
+  match github.subcommand {
+    GitHubSubcommands::Check => handle_check_command(),
+    GitHubSubcommands::Checks(cmd) => handle_checks_command(&cmd),
+    GitHubSubcommands::Pr(pr_cmd) => match pr_cmd.subcommand {
+      PrSubcommands::Status => handle_pr_status_command(),
+      PrSubcommands::List(cmd) => handle_pr_list_command(&cmd),
+      PrSubcommands::Link(cmd) => handle_pr_link_command(&cmd.pr_url_or_id),
+    },
   }
 }
 
@@ -427,7 +349,7 @@ fn handle_checks_command(cmd: &ChecksCommand) -> Result<()> {
         .iter()
         .map(|check| {
           // Format status with color
-          let status_colored = match check.status.as_str() {
+          let status = match check.status.as_str() {
             "completed" => check.status.green().to_string(),
             "in_progress" => check.status.yellow().to_string(),
             "queued" => check.status.blue().to_string(),
@@ -454,7 +376,7 @@ fn handle_checks_command(cmd: &ChecksCommand) -> Result<()> {
 
           CheckRunRow {
             name: check.name.clone(),
-            status: status_colored,
+            status,
             conclusion,
             started_at: started_date.to_string(),
           }
@@ -961,17 +883,4 @@ fn display_pr_status(status: &PullRequestStatus) {
   }
 
   println!();
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn test_github_command_factory() {
-    let cmd = GitHubCommand::command();
-    assert_eq!(cmd.get_name(), "github");
-    let about = cmd.get_about().unwrap().to_string();
-    assert!(about.contains("GitHub integration"));
-  }
 }

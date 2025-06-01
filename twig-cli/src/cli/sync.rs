@@ -4,14 +4,13 @@
 //! branches to Jira issues and GitHub PRs.
 
 use anyhow::{Context, Result};
-use clap::{CommandFactory, Parser};
+use clap::Parser;
 use git2::{BranchType, Repository as Git2Repository};
 use indicatif::{ProgressBar, ProgressStyle};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use tokio::runtime::Runtime;
 
-use crate::cli::derive::DeriveCommand;
 use crate::creds::get_github_credentials;
 use crate::repo_state::{BranchMetadata, RepoState};
 use crate::utils::output::{print_info, print_success, print_warning};
@@ -28,22 +27,7 @@ static JIRA_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
 
 /// Command for automatically linking branches to Jira issues and GitHub PRs
 #[derive(Parser)]
-#[command(name = "sync")]
-#[command(about = "Automatically link branches to Jira issues and GitHub PRs")]
-#[command(
-  long_about = "Scan local branches and automatically detect and link them to their corresponding\n\
-            Jira issues and GitHub PRs.\n\n\
-            For GitHub PRs, this command:\n\
-            • First searches GitHub's API for pull requests matching the branch name\n\
-            • Falls back to detecting patterns in branch names if API is unavailable\n\n\
-            For Jira issues, it looks for patterns in branch names like:\n\
-            • PROJ-123/feature-name, feature/PROJ-123-description\n\n\
-            GitHub PR branch naming patterns (fallback detection):\n\
-            • pr-123-description, github-pr-123, pull-123, pr/123\n\n\
-            It will automatically create associations for detected patterns and report\n\
-            any branches that couldn't be linked."
-)]
-pub struct SyncCommand {
+pub struct SyncArgs {
   /// Path to a specific repository
   #[arg(long, short = 'r', value_name = "PATH")]
   pub repo: Option<String>,
@@ -65,45 +49,14 @@ pub struct SyncCommand {
   pub no_github: bool,
 }
 
-impl SyncCommand {
-  /// Creates a clap Command for this command (for backward compatibility)
-  pub fn command() -> clap::Command {
-    <Self as CommandFactory>::command()
+pub(crate) fn handle_sync_command(sync: SyncArgs) -> Result<()> {
+  let repo_path = crate::utils::resolve_repository_path(sync.repo.as_deref())?;
+
+  if sync.dry_run {
+    print_info("Running in dry-run mode - no changes will be made");
   }
 
-  /// Parses command line arguments and executes the command
-  pub fn parse_and_execute(matches: &clap::ArgMatches) -> Result<()> {
-    // Extract sync-specific arguments from the matches
-    let repo_arg = matches.get_one::<String>("repo").map(|s| s.as_str());
-    let dry_run = matches.get_flag("dry-run");
-    let force = matches.get_flag("force");
-    let no_jira = matches.get_flag("no-jira");
-    let no_github = matches.get_flag("no-github");
-
-    // Create the command instance
-    let cmd = Self {
-      repo: repo_arg.map(String::from),
-      dry_run,
-      force,
-      no_jira,
-      no_github,
-    };
-
-    // Execute the command
-    cmd.execute()
-  }
-}
-
-impl DeriveCommand for SyncCommand {
-  fn execute(self) -> Result<()> {
-    let repo_path = crate::utils::resolve_repository_path(self.repo.as_deref())?;
-
-    if self.dry_run {
-      print_info("Running in dry-run mode - no changes will be made");
-    }
-
-    sync_branches(&repo_path, self.dry_run, self.force, self.no_jira, self.no_github)
-  }
+  sync_branches(&repo_path, sync.dry_run, sync.force, sync.no_jira, sync.no_github)
 }
 
 /// Sync branches with their detected issues and PRs
@@ -448,11 +401,6 @@ fn apply_sync_changes(
 #[cfg(test)]
 mod tests {
   use super::*;
-
-  #[test]
-  fn verify_cli() {
-    SyncCommand::command().debug_assert();
-  }
 
   #[test]
   fn test_detect_jira_issue_from_branch() {

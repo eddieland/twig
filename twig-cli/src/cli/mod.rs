@@ -4,101 +4,261 @@
 //! including subcommands for branch management, Git operations, and
 //! integrations.
 
+mod branch;
+mod completion;
+mod creds;
+mod dashboard;
+mod diagnostics;
+mod git;
+mod github;
+mod init;
+mod jira;
+mod panic;
+mod switch;
+mod sync;
+mod tree;
+mod view;
+mod worktree;
+
 use anyhow::Result;
-use clap::{Arg, ArgAction, Command};
+use clap::{ArgAction, Args, CommandFactory, Parser, Subcommand};
 
-pub mod derive;
+/// Top-level CLI command for the twig tool
+#[derive(Parser)]
+#[command(name = "twig")]
+#[command(about = "A Git-based developer productivity tool")]
+#[command(
+  long_about = "Twig helps developers manage multiple Git repositories and worktrees efficiently.\n\n\
+        It provides commands for repository tracking, batch operations, and worktree\n\
+        management to streamline your development workflow."
+)]
+#[command(version = env!("CARGO_PKG_VERSION"))]
+#[command(subcommand_required(true))]
+#[command(propagate_version = true)]
+pub struct Cli {
+  /// Sets the level of verbosity (can be used multiple times)
+  #[arg(
+    short = 'v',
+    long = "verbose",
+    action = ArgAction::Count,
+    long_help = "Sets the level of verbosity for tracing and logging output.\n\
+             -v: Show info level messages\n\
+             -vv: Show debug level messages\n\
+             -vvv: Show trace level messages"
+  )]
+  pub verbose: u8,
 
-/// Build the CLI command structure
-pub fn build_cli() -> Command {
-  Command::new("twig")
-    .about("A Git-based developer productivity tool")
-    .long_about(
-      "Twig helps developers manage multiple Git repositories and worktrees efficiently.\n\n\
-            It provides commands for repository tracking, batch operations, and worktree\n\
-            management to streamline your development workflow.",
-    )
-    .version(env!("CARGO_PKG_VERSION"))
-    .subcommand_required(false)
-    .arg_required_else_help(true)
-    .arg(
-      Arg::new("verbose")
-        .short('v')
-        .long("verbose")
-        .action(ArgAction::Count)
-        .help("Sets the level of verbosity (can be used multiple times)")
-        .long_help(
-          "Sets the level of verbosity for tracing and logging output.\n\
-                 -v: Show info level messages\n\
-                 -vv: Show debug level messages\n\
-                 -vvv: Show trace level messages",
-        ),
-    )
-    .arg(
-      Arg::new("colors")
-        .long("colors")
-        .help("When to use colored output")
-        .long_help(
-          "Controls when colored output is used.\n\
-                 yes: Always use colors\n\
-                 auto: Use colors when outputting to a terminal (default)\n\
-                 no: Never use colors",
-        )
-        .value_parser(["yes", "auto", "no"])
-        .default_value("auto"),
-    )
-    .subcommand(derive::init::InitCommand::command())
-    .subcommand(derive::panic::PanicCommand::command())
-    .subcommand(derive::branch::BranchCommand::command())
-    .subcommand(derive::creds::CredsCommand::command())
-    .subcommand(derive::git::GitCommand::command())
-    .subcommand(derive::github::GitHubCommand::command())
-    .subcommand(derive::jira::JiraCommand::command())
-    .subcommand(derive::switch::SwitchCommand::command())
-    .subcommand(derive::sync::SyncCommand::command())
-    .subcommand(derive::tree::TreeCommand::command())
-    .subcommand(derive::view::ViewCommand::command())
-    .subcommand(derive::worktree::WorktreeCommand::command())
-    .subcommand(derive::diagnostics::DiagnosticsCommand::command())
-    .subcommand(derive::completion::CompletionCommand::command())
-    .subcommand(derive::dashboard::DashboardCommand::command())
+  /// When to use colored output
+  #[arg(
+    long = "colors",
+    long_help = "Controls when colored output is used.\n\
+             yes: Always use colors\n\
+             auto: Use colors when outputting to a terminal (default)\n\
+             no: Never use colors",
+    value_parser = ["yes", "auto", "no"],
+    default_value = "auto"
+  )]
+  pub colors: String,
+
+  /// Subcommands
+  #[command(subcommand)]
+  pub command: Commands,
 }
 
-/// Handle the CLI commands
-pub fn handle_commands(matches: &clap::ArgMatches) -> Result<()> {
+/// Arguments for the view command
+#[derive(Args)]
+pub struct ViewArgs {
+  /// Path to a specific repository
+  #[arg(long, short = 'r', value_name = "PATH")]
+  repo: Option<String>,
+}
+
+/// Subcommands for the twig tool
+#[derive(Subcommand)]
+pub enum Commands {
+  /// Branch dependency and root management
+  #[command(long_about = "Manage custom branch dependencies and root branches.\n\n\
+            This command group allows you to define custom parent-child relationships\n\
+            between branches beyond Git's automatic detection. You can also manage\n\
+            which branches should be treated as root branches in the tree view.")]
+  #[command(alias = "br")]
+  Branch(branch::BranchArgs),
+
+  /// Generate shell completions
+  #[command(long_about = "Generates shell completion scripts for twig commands.\n\n\
+            This command generates completion scripts that provide tab completion for twig\n\
+            commands and options in your shell. Supported shells include bash, zsh, and fish.")]
+  Completion(completion::CompletionArgs),
+
+  /// Credential management
+  #[command(long_about = "Manage credentials for external services like Jira and GitHub.\n\n\
+            This command group helps you check and set up credentials for the\n\
+            external services that twig integrates with. Credentials are stored\n\
+            in your .netrc file for security and compatibility with other tools.")]
+  #[command(arg_required_else_help = true)]
+  Creds(creds::CredsArgs),
+
+  /// Show a comprehensive dashboard of local branches, PRs, and issues
+  #[command(
+    long_about = "Show a comprehensive dashboard of local branches, PRs, and issues.\n\n\
+            This command displays a unified view of your development context,\n\
+            including local branches, associated pull requests, and related Jira issues.\n\
+            It helps you keep track of your work across different systems.\n\n\
+            By default, only local branches are shown. Use --include-remote to include remote branches."
+  )]
+  #[command(alias = "dash")]
+  Dashboard(dashboard::DashboardArgs),
+
+  /// Run system diagnostics
+  #[command(
+    long_about = "Runs comprehensive system diagnostics to check twig's configuration and dependencies.\n\n\
+            This command checks system information, configuration directories, credentials,\n\
+            git configuration, tracked repositories, and network connectivity. Use this\n\
+            command to troubleshoot issues or verify that twig is properly configured."
+  )]
+  #[command(alias = "diag")]
+  Diagnostics,
+
+  /// Git repository management
+  #[command(long_about = "Manage multiple Git repositories through twig.\n\n\
+            This command group allows you to register, track, and perform operations\n\
+            across multiple repositories. Repositories added to twig can be referenced\n\
+            in other commands and batch operations.")]
+  #[command(alias = "g")]
+  Git(git::GitArgs),
+
+  /// GitHub integration
+  #[command(name = "github")]
+  #[command(long_about = "Interact with GitHub repositories and pull requests.\n\n\
+            This command group provides functionality for working with GitHub,\n\
+            including checking authentication, viewing pull request status,\n\
+            and linking branches to pull requests.")]
+  #[command(alias = "gh")]
+  GitHub(github::GitHubArgs),
+
+  /// Initialize twig configuration
+  #[command(long_about = "Initializes the twig configuration for your environment.\n\n\
+            This creates necessary configuration files in your home directory to track\n\
+            repositories and store settings. Run this command once before using other\n\
+            twig features. No credentials are required for this operation.")]
+  Init,
+
+  /// Jira integration
+  #[command(long_about = "Interact with Jira issues and create branches from them.\n\n\
+            This command group provides functionality for working with Jira,\n\
+            including viewing issues, transitioning issues through workflows,\n\
+            and creating branches from issues.")]
+  Jira(jira::JiraArgs),
+
+  /// Intentionally panic (for testing error handling)
+  #[command(
+    long_about = "TEMPORARY COMMAND: Intentionally triggers a panic to test the no-worries panic handler.\n\n\
+            This command is for testing purposes only and will be removed in a future version."
+  )]
+  #[command(hide = true)]
+  Panic,
+
+  /// Magic branch switching
+  #[command(long_about = "Intelligently switch to branches based on various inputs.\n\n\
+            This command can switch branches based on:\n\
+            • Jira issue key (e.g., PROJ-123)\n\
+            • Jira issue URL\n\
+            • GitHub PR ID (e.g., 12345 or PR#12345)\n\
+            • GitHub PR URL\n\
+            • Branch name\n\n\
+            The command will automatically detect the input type and find the\n\
+            corresponding branch. By default, missing branches will be created\n\
+            automatically. Use --no-create to disable this behavior.")]
+  #[command(alias = "sw")]
+  Switch(switch::SwitchArgs),
+
+  /// Automatically link branches to Jira issues and GitHub PRs
+  #[command(
+    long_about = "Scan local branches and automatically detect and link them to their corresponding\n\
+            Jira issues and GitHub PRs.\n\n\
+            For GitHub PRs, this command:\n\
+            • First searches GitHub's API for pull requests matching the branch name\n\
+            • Falls back to detecting patterns in branch names if API is unavailable\n\n\
+            For Jira issues, it looks for patterns in branch names like:\n\
+            • PROJ-123/feature-name, feature/PROJ-123-description\n\n\
+            GitHub PR branch naming patterns (fallback detection):\n\
+            • pr-123-description, github-pr-123, pull-123, pr/123\n\n\
+            It will automatically create associations for detected patterns and report\n\
+            any branches that couldn't be linked."
+  )]
+  Sync(sync::SyncArgs),
+
+  /// Show your branch tree with user-defined dependencies
+  #[command(
+    long_about = "Display local branches in a tree-like view based on user-defined dependencies.\n\n\
+            This command shows branch relationships that you have explicitly defined using\n\
+            the 'twig branch depend' command. It also displays associated Jira issues and\n\
+            GitHub PRs. Branches without defined dependencies or root status will be shown\n\
+            as orphaned branches. Use 'twig branch depend' to create relationships and\n\
+            'twig branch root add' to designate root branches."
+  )]
+  #[command(alias = "t")]
+  Tree(tree::TreeArgs),
+
+  /// View branches with their associated issues and PRs
+  #[command(
+    long_about = "Display local branches and their associated Jira issues and GitHub PRs.\n\n\
+            This command shows all local branches in the current repository along with\n\
+            any associated Jira tickets and GitHub pull requests. This helps you track\n\
+            which branches are linked to specific issues and PRs for better workflow management."
+  )]
+  #[command(alias = "v")]
+  View(view::ViewArgs),
+
+  /// Worktree management
+  #[command(about = "Worktree management")]
+  #[command(long_about = "Manage Git worktrees for efficient multi-branch development.\n\n\
+            Worktrees allow you to check out multiple branches simultaneously in separate\n\
+            directories, all connected to the same repository. This enables working on\n\
+            different features or fixes concurrently without stashing or committing\n\
+            incomplete work.")]
+  #[command(alias = "wt")]
+  Worktree(worktree::WorktreeArgs),
+}
+
+impl Cli {
+  /// Creates a clap Command for this command
+  pub fn command() -> clap::Command {
+    <Self as CommandFactory>::command()
+  }
+}
+
+pub fn handle_cli(cli: Cli) -> Result<()> {
   // Set global color override based on --colors argument
-  match matches.get_one::<String>("colors").map(|s| s.as_str()) {
-    Some("yes") => owo_colors::set_override(true),
-    Some("no") => owo_colors::set_override(false),
-    None => {
+  match cli.colors.as_str() {
+    "yes" => owo_colors::set_override(true),
+    "no" => owo_colors::set_override(false),
+    _ => {
       // Let owo_colors use its default auto-detection
       // Don't call set_override, allowing it to detect terminal automatically
     }
-    _ => {} // Should not happen due to value_parser, but just in case
   }
 
-  match matches.subcommand() {
-    Some(("init", _)) => derive::init::InitCommand::parse_and_execute(),
-    Some(("panic", _)) => derive::panic::PanicCommand::parse_and_execute(),
-    Some(("branch", branch_matches)) => derive::branch::BranchCommand::parse_and_execute(branch_matches),
-    Some(("creds", creds_matches)) => derive::creds::CredsCommand::parse_and_execute(creds_matches),
-    Some(("git", git_matches)) => derive::git::GitCommand::parse_and_execute(git_matches),
-    Some(("github", github_matches)) => derive::github::GitHubCommand::parse_and_execute(github_matches),
-    Some(("jira", jira_matches)) => derive::jira::JiraCommand::parse_and_execute(jira_matches),
-    Some(("switch", switch_matches)) => derive::switch::SwitchCommand::parse_and_execute(switch_matches),
-    Some(("sync", sync_matches)) => derive::sync::SyncCommand::parse_and_execute(sync_matches),
-    Some(("tree", tree_matches)) => derive::tree::TreeCommand::parse_and_execute(tree_matches),
-    Some(("view", view_matches)) => derive::view::ViewCommand::parse_and_execute(view_matches),
-    Some(("worktree", worktree_matches)) => derive::worktree::WorktreeCommand::parse_and_execute(worktree_matches),
-    Some(("diagnose", _)) => derive::diagnostics::DiagnosticsCommand::parse_and_execute(),
-    Some(("completion", completion_matches)) => {
-      derive::completion::CompletionCommand::parse_and_execute(completion_matches)
-    }
-    Some(("dashboard", dashboard_matches)) => derive::dashboard::DashboardCommand::parse_and_execute(dashboard_matches),
-    _ => {
-      use crate::utils::output::print_info;
-      print_info("No command specified.");
-      Ok(())
-    }
+  match cli.command {
+    Commands::Branch(branch) => branch::handle_branch_command(branch),
+    Commands::Completion(completion) => completion::handle_completion_command(completion),
+    Commands::Creds(creds) => creds::handle_creds_command(creds),
+    Commands::Dashboard(dashboard) => dashboard::handle_dashboard_command(dashboard),
+    Commands::Diagnostics => diagnostics::handle_diagnostics_command(),
+    Commands::Git(git) => git::handle_git_comamnd(git),
+    Commands::GitHub(github) => github::handle_github_command(github),
+    Commands::Init => init::handle_init_command(),
+    Commands::Jira(jira) => jira::handle_jira_command(jira),
+    Commands::Panic => panic::handle_panic_command(),
+    Commands::Switch(switch) => switch::handle_switch_command(switch),
+    Commands::Sync(sync) => sync::handle_sync_command(sync),
+    Commands::Tree(tree) => tree::handle_tree_command(tree),
+    Commands::View(view) => view::handle_view_command(view),
+    Commands::Worktree(worktree) => worktree::handle_worktree_command(worktree),
   }
+}
+
+/// Build the CLI command structure
+pub fn build_cli() -> clap::Command {
+  Cli::command()
 }

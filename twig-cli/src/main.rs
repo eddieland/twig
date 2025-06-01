@@ -4,6 +4,8 @@
 //! productivity tool for managing branch dependencies and workflows.
 
 use anyhow::Result;
+use clap::Parser;
+use cli::handle_cli;
 use no_worries::{Config as NoWorriesConfig, Metadata as NoWorriesMetadata, no_worries};
 use tracing::debug;
 use tracing_subscriber::prelude::*;
@@ -36,10 +38,11 @@ fn main() -> Result<()> {
   };
   no_worries!(config).expect("Failed to set up panic handler");
 
-  let matches = cli::build_cli().get_matches();
+  // Parse CLI arguments using the derive-based implementation
+  let cmd = cli::Cli::parse();
 
   // Set up tracing based on verbosity level
-  let verbose_count = matches.get_count("verbose");
+  let verbose_count = cmd.verbose;
   let level = match verbose_count {
     0 => tracing::Level::WARN,  // Default: warnings and errors
     1 => tracing::Level::INFO,  // -v: info, warnings, and errors
@@ -55,5 +58,5 @@ fn main() -> Result<()> {
 
   debug!("Tracing initialized with level: {}", level);
 
-  cli::handle_commands(&matches)
+  handle_cli(cmd)
 }

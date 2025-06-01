@@ -4,13 +4,12 @@
 //! including issue viewing, transitioning, and branch creation.
 
 use anyhow::{Context, Result};
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{Args, Subcommand};
 use git2::Repository as Git2Repository;
 use owo_colors::OwoColorize;
 use tokio::runtime::Runtime;
 use twig_jira::create_jira_client;
 
-use crate::cli::derive::DeriveCommand;
 use crate::consts::{DEFAULT_JIRA_HOST, ENV_JIRA_HOST};
 use crate::creds::get_jira_credentials;
 use crate::git;
@@ -18,14 +17,8 @@ use crate::repo_state::{BranchMetadata, RepoState};
 use crate::utils::output::{print_error, print_info, print_success, print_warning};
 
 /// Command for Jira integration
-#[derive(Parser)]
-#[command(name = "jira")]
-#[command(about = "Jira integration")]
-#[command(long_about = "Interact with Jira issues and create branches from them.\n\n\
-            This command group provides functionality for working with Jira,\n\
-            including viewing issues, transitioning issues through workflows,\n\
-            and creating branches from issues.")]
-pub struct JiraCommand {
+#[derive(Args)]
+pub struct JiraArgs {
   /// The subcommand to execute
   #[command(subcommand)]
   pub subcommand: JiraSubcommands,
@@ -88,79 +81,18 @@ pub enum JiraSubcommands {
   },
 }
 
-impl JiraCommand {
-  /// Creates a clap Command for this command (for backward compatibility)
-  pub fn command() -> clap::Command {
-    <Self as CommandFactory>::command()
-  }
-
-  /// Parses command line arguments and executes the command
-  pub fn parse_and_execute(matches: &clap::ArgMatches) -> Result<()> {
-    match matches.subcommand() {
-      Some(("view", view_matches)) => {
-        let issue_key = view_matches.get_one::<String>("issue_key").unwrap();
-        let cmd = Self {
-          subcommand: JiraSubcommands::View {
-            issue_key: issue_key.clone(),
-          },
-        };
-        cmd.execute()
-      }
-      Some(("transition", transition_matches)) => {
-        let issue_key = transition_matches.get_one::<String>("issue_key").unwrap();
-        let transition = transition_matches.get_one::<String>("transition").cloned();
-        let cmd = Self {
-          subcommand: JiraSubcommands::Transition {
-            issue_key: issue_key.clone(),
-            transition,
-          },
-        };
-        cmd.execute()
-      }
-      Some(("create-branch", create_branch_matches)) => {
-        let issue_key = create_branch_matches.get_one::<String>("issue_key").unwrap();
-        let with_worktree = create_branch_matches.get_flag("with_worktree");
-        let cmd = Self {
-          subcommand: JiraSubcommands::CreateBranch {
-            issue_key: issue_key.clone(),
-            with_worktree,
-          },
-        };
-        cmd.execute()
-      }
-      Some(("link-branch", link_branch_matches)) => {
-        let issue_key = link_branch_matches.get_one::<String>("issue_key").unwrap();
-        let branch_name = link_branch_matches.get_one::<String>("branch_name").cloned();
-        let cmd = Self {
-          subcommand: JiraSubcommands::LinkBranch {
-            issue_key: issue_key.clone(),
-            branch_name,
-          },
-        };
-        cmd.execute()
-      }
-      _ => {
-        print_error("Unknown jira command");
-        Ok(())
-      }
+pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
+  match jira.subcommand {
+    JiraSubcommands::View { issue_key } => handle_view_issue_command(&issue_key),
+    JiraSubcommands::Transition { issue_key, transition } => {
+      handle_transition_issue_command(&issue_key, transition.as_deref())
     }
-  }
-}
-
-impl DeriveCommand for JiraCommand {
-  fn execute(self) -> Result<()> {
-    match self.subcommand {
-      JiraSubcommands::View { issue_key } => handle_view_issue_command(&issue_key),
-      JiraSubcommands::Transition { issue_key, transition } => {
-        handle_transition_issue_command(&issue_key, transition.as_deref())
-      }
-      JiraSubcommands::CreateBranch {
-        issue_key,
-        with_worktree,
-      } => handle_create_branch_command(&issue_key, with_worktree),
-      JiraSubcommands::LinkBranch { issue_key, branch_name } => {
-        handle_link_branch_command(&issue_key, branch_name.as_deref())
-      }
+    JiraSubcommands::CreateBranch {
+      issue_key,
+      with_worktree,
+    } => handle_create_branch_command(&issue_key, with_worktree),
+    JiraSubcommands::LinkBranch { issue_key, branch_name } => {
+      handle_link_branch_command(&issue_key, branch_name.as_deref())
     }
   }
 }
@@ -587,17 +519,4 @@ fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Res
 
     Ok(())
   })
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn test_jira_command_factory() {
-    let cmd = JiraCommand::command();
-    assert_eq!(cmd.get_name(), "jira");
-    let about = cmd.get_about().unwrap().to_string();
-    assert!(about.contains("Jira integration"));
-  }
 }

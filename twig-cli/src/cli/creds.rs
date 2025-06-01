@@ -8,25 +8,17 @@ use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
 
 use anyhow::Result;
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{Args, Subcommand};
 use tokio::runtime::Runtime;
 use twig_gh::create_github_client;
 use twig_jira::create_jira_client;
 
-use crate::cli::derive::DeriveCommand;
 use crate::creds::{check_github_credentials, check_jira_credentials, get_netrc_path, write_netrc_entry};
 use crate::utils::output::{format_command, format_repo_path, print_error, print_info, print_success, print_warning};
 
 /// Command for credential management
-#[derive(Parser)]
-#[command(name = "creds")]
-#[command(about = "Credential management")]
-#[command(long_about = "Manage credentials for external services like Jira and GitHub.\n\n\
-            This command group helps you check and set up credentials for the\n\
-            external services that twig integrates with. Credentials are stored\n\
-            in your .netrc file for security and compatibility with other tools.")]
-#[command(arg_required_else_help = true)]
-pub struct CredsCommand {
+#[derive(Args)]
+pub struct CredsArgs {
   /// The subcommand to execute
   #[command(subcommand)]
   pub subcommand: CredsSubcommands,
@@ -52,41 +44,10 @@ pub enum CredsSubcommands {
   Setup,
 }
 
-impl CredsCommand {
-  /// Creates a clap Command for this command
-  pub fn command() -> clap::Command {
-    <Self as CommandFactory>::command()
-  }
-
-  /// Parses command line arguments and executes the command
-  pub fn parse_and_execute(matches: &clap::ArgMatches) -> Result<()> {
-    match matches.subcommand() {
-      Some(("check", _)) => {
-        let cmd = Self {
-          subcommand: CredsSubcommands::Check,
-        };
-        cmd.execute()
-      }
-      Some(("setup", _)) => {
-        let cmd = Self {
-          subcommand: CredsSubcommands::Setup,
-        };
-        cmd.execute()
-      }
-      _ => {
-        print_warning("Unknown creds command.");
-        Ok(())
-      }
-    }
-  }
-}
-
-impl DeriveCommand for CredsCommand {
-  fn execute(self) -> Result<()> {
-    match self.subcommand {
-      CredsSubcommands::Check => handle_check_command(),
-      CredsSubcommands::Setup => handle_setup_command(),
-    }
+pub(crate) fn handle_creds_command(creds: CredsArgs) -> Result<()> {
+  match creds.subcommand {
+    CredsSubcommands::Check => handle_check_command(),
+    CredsSubcommands::Setup => handle_setup_command(),
   }
 }
 
@@ -340,16 +301,4 @@ fn handle_setup_command() -> Result<()> {
   ));
 
   Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-  use clap::CommandFactory;
-
-  use super::*;
-
-  #[test]
-  fn verify_cli() {
-    CredsCommand::command().debug_assert();
-  }
 }

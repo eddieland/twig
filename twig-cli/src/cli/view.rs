@@ -4,57 +4,30 @@
 //! with their associated issues and PRs.
 
 use anyhow::{Context, Result};
-use clap::{CommandFactory, Parser};
+use clap::Args;
 use git2::{BranchType, Repository as Git2Repository};
 
-use crate::cli::derive::DeriveCommand;
 use crate::git::detect_current_repository;
 use crate::repo_state::RepoState;
 use crate::utils::output::{format_command, format_repo_path, print_header, print_info, print_warning};
 
 /// Command for viewing branches with their associated issues and PRs
-#[derive(Parser)]
-#[command(name = "view")]
-#[command(about = "View branches with their associated issues and PRs")]
-#[command(
-  long_about = "Display local branches and their associated Jira issues and GitHub PRs.\n\n\
-            This command shows all local branches in the current repository along with\n\
-            any associated Jira tickets and GitHub pull requests. This helps you track\n\
-            which branches are linked to specific issues and PRs for better workflow management."
-)]
-#[command(alias = "v")]
-pub struct ViewCommand {
+#[derive(Args)]
+pub struct ViewArgs {
   /// Path to a specific repository
   #[arg(long, short = 'r', value_name = "PATH")]
   pub repo: Option<String>,
 }
 
-impl ViewCommand {
-  /// Creates a clap Command for this command
-  pub fn command() -> clap::Command {
-    <Self as CommandFactory>::command()
-  }
+pub(crate) fn handle_view_command(view: ViewArgs) -> Result<()> {
+  // Get the repository path
+  let repo_path = if let Some(repo_arg) = view.repo {
+    crate::utils::resolve_repository_path(Some(&repo_arg))?
+  } else {
+    detect_current_repository().context("Not in a git repository")?
+  };
 
-  /// Parses command line arguments and executes the command
-  pub fn parse_and_execute(matches: &clap::ArgMatches) -> Result<()> {
-    let repo = matches.get_one::<String>("repo").cloned();
-
-    let cmd = Self { repo };
-    cmd.execute()
-  }
-}
-
-impl DeriveCommand for ViewCommand {
-  fn execute(self) -> Result<()> {
-    // Get the repository path
-    let repo_path = if let Some(repo_arg) = self.repo {
-      crate::utils::resolve_repository_path(Some(&repo_arg))?
-    } else {
-      detect_current_repository().context("Not in a git repository")?
-    };
-
-    list_branches_with_associations(repo_path)
-  }
+  list_branches_with_associations(repo_path)
 }
 
 /// List all local branches with their associated Jira issues and GitHub PRs
@@ -162,16 +135,4 @@ fn list_branches_with_associations<P: AsRef<std::path::Path>>(repo_path: P) -> R
   }
 
   Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-  use clap::CommandFactory;
-
-  use super::*;
-
-  #[test]
-  fn verify_cli() {
-    ViewCommand::command().debug_assert();
-  }
 }
