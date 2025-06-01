@@ -122,14 +122,18 @@ pub struct LinkCommand {
   pub pr_url_or_id: String,
 }
 
+/// Handle the GitHub command
+///
+/// This function processes the GitHub subcommands and executes the appropriate
+/// actions
 pub(crate) fn handle_github_command(github: GitHubArgs) -> Result<()> {
   match github.subcommand {
     GitHubSubcommands::Check => handle_check_command(),
-    GitHubSubcommands::Checks(cmd) => handle_checks_command(&cmd),
-    GitHubSubcommands::Pr(pr_cmd) => match pr_cmd.subcommand {
+    GitHubSubcommands::Checks(checks) => handle_checks_command(&checks),
+    GitHubSubcommands::Pr(pr) => match pr.subcommand {
       PrSubcommands::Status => handle_pr_status_command(),
-      PrSubcommands::List(cmd) => handle_pr_list_command(&cmd),
-      PrSubcommands::Link(cmd) => handle_pr_link_command(&cmd.pr_url_or_id),
+      PrSubcommands::List(list) => handle_pr_list_command(&list),
+      PrSubcommands::Link(link) => handle_pr_link_command(&link.pr_url_or_id),
     },
   }
 }

@@ -60,6 +60,10 @@ pub struct DashboardArgs {
   pub include_remote: bool,
 }
 
+/// Handle the dashboard command
+///
+/// This function collects information about branches, GitHub pull requests,
+/// and Jira issues, and displays them in a formatted dashboard.
 pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
   // Create a runtime for async operations
   let rt = Runtime::new()?;

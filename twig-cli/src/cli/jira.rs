@@ -81,6 +81,10 @@ pub enum JiraSubcommands {
   },
 }
 
+/// Handle the Jira command
+///
+/// This function processes the Jira subcommands and executes the appropriate
+/// actions based on the subcommand provided.
 pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
   match jira.subcommand {
     JiraSubcommands::View { issue_key } => handle_view_issue_command(&issue_key),

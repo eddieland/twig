@@ -19,6 +19,12 @@ pub struct ViewArgs {
   pub repo: Option<String>,
 }
 
+/// Handle the view command
+///
+/// This function processes the `view` command, which lists all local branches
+/// along with their associated Jira issues and GitHub PRs. It retrieves the
+/// repository path, loads the repository state, and displays branch
+/// information.
 pub(crate) fn handle_view_command(view: ViewArgs) -> Result<()> {
   // Get the repository path
   let repo_path = if let Some(repo_arg) = view.repo {

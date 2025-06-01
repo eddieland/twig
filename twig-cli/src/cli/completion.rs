@@ -16,6 +16,10 @@ pub struct CompletionArgs {
   pub shell: String,
 }
 
+/// Handle the completion command
+///
+/// This function takes the shell type as an argument and generates the
+/// appropriate completion script for the specified shell.
 pub(crate) fn handle_completion_command(completion: CompletionArgs) -> Result<()> {
   let shell = parse_shell(&completion.shell)?;
   generate_completions(shell)

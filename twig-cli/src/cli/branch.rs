@@ -144,6 +144,10 @@ pub struct RootListCommand {
   pub repo: Option<String>,
 }
 
+/// Handle the branch command
+///
+/// This function processes the branch command and its subcommands,
+/// including adding and removing dependencies, and managing root branches.
 pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
   match branch.subcommand {
     BranchSubcommands::Depend(cmd) => {

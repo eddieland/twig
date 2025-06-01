@@ -49,6 +49,11 @@ pub struct SyncArgs {
   pub no_github: bool,
 }
 
+/// Handle the sync command
+///
+/// This function resolves the repository path, checks if it's in dry-run mode,
+/// and then calls the `sync_branches` function to perform the actual syncing
+/// of branches with their detected issues and PRs.
 pub(crate) fn handle_sync_command(sync: SyncArgs) -> Result<()> {
   let repo_path = crate::utils::resolve_repository_path(sync.repo.as_deref())?;
 

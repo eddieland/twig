@@ -32,6 +32,12 @@ pub struct TreeArgs {
   pub no_color: bool,
 }
 
+/// Handle the tree command
+///
+/// This function processes the `tree` command, which visualizes branch
+/// dependencies in a tree structure. It retrieves the repository path,
+/// loads the repository state, resolves user-defined dependencies, and
+/// renders the branch tree.
 pub(crate) fn handle_tree_command(tree: TreeArgs) -> Result<()> {
   // Get the repository path
   let repo_path = if let Some(repo_arg) = tree.repo {

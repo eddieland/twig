@@ -8,7 +8,6 @@ mod branch;
 mod completion;
 mod creds;
 mod dashboard;
-mod diagnostics;
 mod git;
 mod github;
 mod jira;
@@ -20,6 +19,8 @@ mod worktree;
 
 use anyhow::Result;
 use clap::{ArgAction, CommandFactory, Parser, Subcommand};
+
+use crate::diagnostics;
 
 /// Top-level CLI command for the twig tool
 #[derive(Parser)]
@@ -141,10 +142,6 @@ pub enum Commands {
   Jira(jira::JiraArgs),
 
   /// Intentionally panic (for testing error handling)
-  #[command(
-    long_about = "TEMPORARY COMMAND: Intentionally triggers a panic to test the no-worries panic handler.\n\n\
-            This command is for testing purposes only and will be removed in a future version."
-  )]
   #[command(hide = true)]
   Panic,
 
@@ -201,7 +198,6 @@ pub enum Commands {
   View(view::ViewArgs),
 
   /// Worktree management
-  #[command(about = "Worktree management")]
   #[command(long_about = "Manage Git worktrees for efficient multi-branch development.\n\n\
             Worktrees allow you to check out multiple branches simultaneously in separate\n\
             directories, all connected to the same repository. This enables working on\n\
@@ -234,7 +230,7 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
     Commands::Completion(completion) => completion::handle_completion_command(completion),
     Commands::Creds(creds) => creds::handle_creds_command(creds),
     Commands::Dashboard(dashboard) => dashboard::handle_dashboard_command(dashboard),
-    Commands::Diagnostics => diagnostics::handle_diagnostics_command(),
+    Commands::Diagnostics => diagnostics::run_diagnostics(),
     Commands::Git(git) => git::handle_git_comamnd(git),
     Commands::GitHub(github) => github::handle_github_command(github),
     Commands::Init => crate::config::init(),

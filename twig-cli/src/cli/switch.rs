@@ -50,6 +50,10 @@ pub struct SwitchArgs {
   pub parent: Option<String>,
 }
 
+/// Handle the switch command
+///
+/// This function detects the type of input provided (Jira issue, GitHub PR, or
+/// branch name) and switches to the appropriate branch.
 pub(crate) fn handle_switch_command(switch: SwitchArgs) -> Result<()> {
   let input = &switch.input;
   let create_if_missing = !switch.no_create;

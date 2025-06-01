@@ -44,6 +44,11 @@ pub enum CredsSubcommands {
   Setup,
 }
 
+/// Handle the creds command
+///
+/// This function dispatches to the appropriate subcommand handler based on
+/// the user's choice. It currently supports checking credentials and setting
+/// them up interactively.
 pub(crate) fn handle_creds_command(creds: CredsArgs) -> Result<()> {
   match creds.subcommand {
     CredsSubcommands::Check => handle_check_command(),
@@ -52,6 +57,10 @@ pub(crate) fn handle_creds_command(creds: CredsArgs) -> Result<()> {
 }
 
 /// Handle the check command
+///
+/// This function checks if the .netrc file exists, verifies its permissions,
+/// and checks for Jira and GitHub credentials. It also prints an example
+/// .netrc format for user reference.
 fn handle_check_command() -> Result<()> {
   let netrc_path = get_netrc_path();
 
