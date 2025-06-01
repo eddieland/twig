@@ -19,34 +19,42 @@ use crate::utils::output::{print_error, print_info, print_success, print_warning
 /// Command for intelligently switching to branches based on various inputs
 #[derive(Args)]
 pub struct SwitchArgs {
-  /// Jira issue, GitHub PR, or branch name
-  ///
-  /// Can be any of the following:
-  /// • Jira issue key (PROJ-123)
-  /// • Jira issue URL (https://company.atlassian.net/browse/PROJ-123)
-  /// • GitHub PR ID (12345 or PR#12345)
-  /// • GitHub PR URL (https://github.com/owner/repo/pull/123)
-  /// • Branch name (feature/my-branch)
-  #[arg(required = true, index = 1)]
+  #[arg(
+    required = true,
+    index = 1,
+    long_help = "Jira issue, GitHub PR, or branch name\n\n\
+               Can be any of the following:\n\
+               • Jira issue key (PROJ-123)\n\
+               • Jira issue URL (https://company.atlassian.net/browse/PROJ-123)\n\
+               • GitHub PR ID (12345 or PR#12345)\n\
+               • GitHub PR URL (https://github.com/owner/repo/pull/123)\n\
+               • Branch name (feature/my-branch)"
+  )]
   pub input: String,
 
-  /// Don't create branch if it doesn't exist
-  ///
-  /// Disable the default behavior of creating branches when they don't exist.
-  /// By default, twig switch will create missing branches. Use this flag
-  /// to only switch to existing branches.
-  #[arg(long = "no-create")]
+  #[arg(
+    long = "no-create",
+    long_help = "Don't create branch if it doesn't exist\n\n\
+               Disable the default behavior of creating branches when they don't exist.\n\
+               By default, twig switch will create missing branches. Use this flag\n\
+               to only switch to existing branches."
+  )]
   pub no_create: bool,
 
-  /// Set parent dependency for the new branch
-  ///
-  /// Specify a parent branch to create a dependency relationship.
-  /// Values can be:
-  /// • 'current' (default if flag used without value): Use current branch
-  /// • A branch name: Use the specified branch
-  /// • A Jira issue key (e.g., PROJ-123): Use branch associated with Jira issue
-  /// • 'none': Don't set any parent (use default root)
-  #[arg(short, long, value_name = "PARENT", num_args = 0..=1, default_missing_value = "current")]
+  #[arg(
+    short,
+    long,
+    value_name = "PARENT",
+    num_args = 0..=1,
+    default_missing_value = "current",
+    long_help = "Set parent dependency for the new branch\n\n\
+               Specify a parent branch to create a dependency relationship.\n\
+               Values can be:\n\
+               • 'current' (default if flag used without value): Use current branch\n\
+               • A branch name: Use the specified branch\n\
+               • A Jira issue key (e.g., PROJ-123): Use branch associated with Jira issue\n\
+               • 'none': Don't set any parent (use default root)"
+  )]
   pub parent: Option<String>,
 }
 

@@ -46,9 +46,11 @@ pub enum JiraSubcommands {
                        This command associates a branch with a Jira issue in the repository state,\n\
                        allowing you to track which branches correspond to which issues.")]
   LinkBranch {
-    /// The Jira issue key (e.g., PROJ-123)
-    /// If not provided, uses the current branch's associated Jira issue
-    #[arg(index = 1)]
+    #[arg(
+      index = 1,
+      long_help = "The Jira issue key (e.g., PROJ-123)\n\
+                 If not provided, uses the current branch's associated Jira issue"
+    )]
     issue_key: Option<String>,
 
     /// The branch name (if not provided, the current branch will be used)
@@ -61,14 +63,17 @@ pub enum JiraSubcommands {
                        This command allows you to move a Jira issue through its workflow.\n\
                        If no transition is specified, it will list available transitions.")]
   Transition {
-    /// The Jira issue key (e.g., PROJ-123)
-    /// If not provided, uses the current branch's associated Jira issue
-    #[arg(index = 1)]
+    #[arg(
+      index = 1,
+      long_help = "The Jira issue key (e.g., PROJ-123)\n\
+                 If not provided, uses the current branch's associated Jira issue"
+    )]
     issue_key: Option<String>,
 
-    /// The transition name or ID (if not provided, available transitions will
-    /// be listed)
-    #[arg(index = 2)]
+    #[arg(
+      index = 2,
+      long_help = "The transition name or ID (if not provided, available transitions will be listed)"
+    )]
     transition: Option<String>,
   },
 
@@ -77,9 +82,11 @@ pub enum JiraSubcommands {
                    This command displays information about a specific Jira issue,\n\
                    including its key, summary, status, and description.")]
   View {
-    /// The Jira issue key (e.g., PROJ-123)
-    /// If not provided, uses the current branch's associated Jira issue
-    #[arg(index = 1)]
+    #[arg(
+      index = 1,
+      long_help = "The Jira issue key (e.g., PROJ-123)\n\
+                 If not provided, uses the current branch's associated Jira issue"
+    )]
     issue_key: Option<String>,
   },
 }

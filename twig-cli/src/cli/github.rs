@@ -117,9 +117,11 @@ pub struct ListCommand {
 /// Link a PR to the current branch
 #[derive(Args)]
 pub struct LinkCommand {
-  /// URL or ID of the pull request to link (e.g., 'https://github.com/owner/repo/pull/123' or '123')
-  /// If not provided, uses the current branch's associated PR
-  #[arg(index = 1)]
+  #[arg(
+    index = 1,
+    long_help = "URL or ID of the pull request to link (e.g., 'https://github.com/owner/repo/pull/123' or '123')\n\
+               If not provided, uses the current branch's associated PR"
+  )]
   pub pr_url_or_id: Option<String>,
 }
 
