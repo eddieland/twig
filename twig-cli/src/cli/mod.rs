@@ -11,9 +11,7 @@ mod dashboard;
 mod diagnostics;
 mod git;
 mod github;
-mod init;
 mod jira;
-mod panic;
 mod switch;
 mod sync;
 mod tree;
@@ -21,7 +19,7 @@ mod view;
 mod worktree;
 
 use anyhow::Result;
-use clap::{ArgAction, Args, CommandFactory, Parser, Subcommand};
+use clap::{ArgAction, CommandFactory, Parser, Subcommand};
 
 /// Top-level CLI command for the twig tool
 #[derive(Parser)]
@@ -63,14 +61,6 @@ pub struct Cli {
   /// Subcommands
   #[command(subcommand)]
   pub command: Commands,
-}
-
-/// Arguments for the view command
-#[derive(Args)]
-pub struct ViewArgs {
-  /// Path to a specific repository
-  #[arg(long, short = 'r', value_name = "PATH")]
-  repo: Option<String>,
 }
 
 /// Subcommands for the twig tool
@@ -247,9 +237,11 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
     Commands::Diagnostics => diagnostics::handle_diagnostics_command(),
     Commands::Git(git) => git::handle_git_comamnd(git),
     Commands::GitHub(github) => github::handle_github_command(github),
-    Commands::Init => init::handle_init_command(),
+    Commands::Init => crate::config::init(),
     Commands::Jira(jira) => jira::handle_jira_command(jira),
-    Commands::Panic => panic::handle_panic_command(),
+    Commands::Panic => {
+      panic!("This is an intentional test panic to verify no-worries integration");
+    }
     Commands::Switch(switch) => switch::handle_switch_command(switch),
     Commands::Sync(sync) => sync::handle_sync_command(sync),
     Commands::Tree(tree) => tree::handle_tree_command(tree),
