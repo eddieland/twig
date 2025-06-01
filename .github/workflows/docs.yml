@@ -1,34 +1,14 @@
 name: Generate Documentation
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "docs/**"  # Don't trigger on doc changes
-      - "*.md"
-  pull_request:
-    branches: [main]
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
+  release:
+    types: [published]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Cancel previous runs of this workflow
-  cancel-previous-runs:
-    name: Cancel Previous Runs
-    runs-on: ubuntu-latest
-    steps:
-      - name: Cancel Previous Runs
-        uses: styfle/cancel-workflow-action@0.12.1
-        with:
-          access_token: ${{ github.token }}
-          workflow_id: ${{ github.workflow }}
-
   generate-docs:
-    needs: cancel-previous-runs
     name: Generate Documentation
     runs-on: ubuntu-24.04
     steps:
