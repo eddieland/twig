@@ -105,6 +105,12 @@ impl GitRepoTestGuard {
   }
 }
 
+impl Default for GitRepoTestGuard {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl Drop for GitRepoTestGuard {
   fn drop(&mut self) {
     // Restore the original working directory if it was changed

@@ -103,7 +103,6 @@ pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
             Ok(Some(key)) => handle_link_branch_command(&key, branch_name.as_deref()),
             Ok(None) => {
               print_error("No Jira issue key provided and current branch has no associated Jira issue");
-              print_info("Provide a Jira issue key or use a branch with an associated Jira issue");
               Ok(())
             }
             Err(e) => {
@@ -123,7 +122,6 @@ pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
             Ok(Some(key)) => handle_transition_issue_command(&key, transition.as_deref()),
             Ok(None) => {
               print_error("No Jira issue key provided and current branch has no associated Jira issue");
-              print_info("Provide a Jira issue key or use a branch with an associated Jira issue");
               Ok(())
             }
             Err(e) => {
@@ -144,7 +142,6 @@ pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
             Ok(Some(key)) => handle_view_issue_command(&key),
             Ok(None) => {
               print_error("No Jira issue key provided and current branch has no associated Jira issue");
-              print_info("Provide a Jira issue key or use a branch with an associated Jira issue");
               Ok(())
             }
             Err(e) => {
