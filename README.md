@@ -130,26 +130,14 @@ Specifies the URL of your Jira instance.
 - **Default**: `https://eddieland.atlassian.net`
 - **Example**: `export JIRA_HOST="https://your-company.atlassian.net"`
 
-**How it affects workflow:**
+**Authentication**: When `JIRA_HOST` is set, Twig will look for credentials in your `.netrc` file matching this hostname first. If not found, it falls back to looking for `atlassian.net` credentials.
 
-1. **Authentication**: When `JIRA_HOST` is set, Twig will look for credentials in your `.netrc` file matching this hostname first. If not found, it falls back to looking for `atlassian.net` credentials.
+**API Requests**: All Jira API requests will be sent to this host, allowing you to:
 
-2. **API Requests**: All Jira API requests will be sent to this host, allowing you to:
-   - View issues: `twig jira issue view PROJ-123`
-   - Create branches from issues: `twig jira branch create PROJ-123`
-   - Transition issues: `twig jira issue transition PROJ-123 "In Progress"`
-   - List issues: `twig jira issue list --project PROJ`
-
-3. **Multiple Jira Instances**: If you work with multiple Jira instances, you can switch between them by changing this variable:
-   ```bash
-   # For project A
-   export JIRA_HOST="https://projecta.atlassian.net"
-   twig jira issue view PROJA-123
-
-   # For project B
-   export JIRA_HOST="https://projectb.atlassian.net"
-   twig jira issue view PROJB-456
-   ```
+- View issues: `twig jira issue view PROJ-123`
+- Create branches from issues: `twig jira branch create PROJ-123`
+- Transition issues: `twig jira issue transition PROJ-123 "In Progress"`
+- List issues: `twig jira issue list --project PROJ`
 
 We recommend setting this in your shell profile to ensure it's always available:
 
