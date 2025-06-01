@@ -144,7 +144,6 @@ pub(crate) fn handle_github_command(github: GitHubArgs) -> Result<()> {
               }
               Ok(None) => {
                 print_error("No PR URL or ID provided and current branch has no associated PR");
-                print_info("Provide a PR URL or ID to link with the current branch");
                 Ok(())
               }
               Err(e) => {
