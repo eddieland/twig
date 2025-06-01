@@ -8,10 +8,10 @@ use std::{env, fs};
 
 use anyhow;
 
-use crate::env::TestEnv;
+use crate::env::EnvTestGuard;
 
 /// A reusable configuration directory structure for testing
-pub struct TestConfigDirs {
+pub struct ConfigDirsTestGuard {
   /// The configuration directory
   pub config_dir: PathBuf,
   /// The data directory
@@ -24,7 +24,7 @@ pub struct TestConfigDirs {
   pub application: String,
 }
 
-impl TestConfigDirs {
+impl ConfigDirsTestGuard {
   /// Create a new TestConfigDirs instance with default organization and
   /// application names
   pub fn new() -> anyhow::Result<Self> {
@@ -35,11 +35,12 @@ impl TestConfigDirs {
   /// application names
   pub fn with_names(organization: &str, _qualifier: &str, application: &str) -> anyhow::Result<Self> {
     // Get the XDG environment variables
-    let config_home = env::var(TestEnv::XDG_CONFIG_HOME).map_err(|_| anyhow::anyhow!("XDG_CONFIG_HOME not set"))?;
+    let config_home =
+      env::var(EnvTestGuard::XDG_CONFIG_HOME).map_err(|_| anyhow::anyhow!("XDG_CONFIG_HOME not set"))?;
 
-    let data_home = env::var(TestEnv::XDG_DATA_HOME).map_err(|_| anyhow::anyhow!("XDG_DATA_HOME not set"))?;
+    let data_home = env::var(EnvTestGuard::XDG_DATA_HOME).map_err(|_| anyhow::anyhow!("XDG_DATA_HOME not set"))?;
 
-    let cache_home = env::var(TestEnv::XDG_CACHE_HOME).ok();
+    let cache_home = env::var(EnvTestGuard::XDG_CACHE_HOME).ok();
 
     // Construct the application-specific paths
     let config_dir = PathBuf::from(config_home).join(format!("{organization}/{application}"));
@@ -96,7 +97,7 @@ impl TestConfigDirs {
   }
 
   /// Verify that the configuration directories are in the expected location
-  pub fn verify_in_test_env(&self, test_env: &TestEnv) -> bool {
+  pub fn verify_in_test_env(&self, test_env: &EnvTestGuard) -> bool {
     // Check if the directories are within the test environment
     let config_in_test = self.config_dir.starts_with(test_env.temp_dir.path());
     let data_in_test = self.data_dir.starts_with(test_env.temp_dir.path());
@@ -124,29 +125,29 @@ impl TestConfigDirs {
 }
 
 /// A helper function to set up a test environment with TestConfigDirs
-pub fn setup_test_env() -> anyhow::Result<(TestEnv, TestConfigDirs)> {
+pub fn setup_test_env() -> anyhow::Result<(EnvTestGuard, ConfigDirsTestGuard)> {
   // Set up the test environment with overridden XDG directories
-  let test_env = TestEnv::new();
+  let test_env = EnvTestGuard::new();
 
   // Create a TestConfigDirs instance, which should use our overridden XDG
   // directories
-  let config_dirs = TestConfigDirs::new()?;
+  let config_dirs = ConfigDirsTestGuard::new()?;
 
   Ok((test_env, config_dirs))
 }
 
 /// A helper function to set up a test environment with TestConfigDirs and
 /// initialize it
-pub fn setup_test_env_with_init() -> anyhow::Result<(TestEnv, TestConfigDirs)> {
+pub fn setup_test_env_with_init() -> anyhow::Result<(EnvTestGuard, ConfigDirsTestGuard)> {
   // Set up the test environment with overridden XDG directories
-  let test_env = TestEnv::new();
+  let test_env = EnvTestGuard::new();
 
   // Create a TestConfigDirs instance with paths directly in the test environment
   let config_dir = test_env.temp_dir.path().join("config/ai/twig");
   let data_dir = test_env.temp_dir.path().join("data/ai/twig");
   let cache_dir = Some(test_env.temp_dir.path().join("cache/ai/twig"));
 
-  let config_dirs = TestConfigDirs {
+  let config_dirs = ConfigDirsTestGuard {
     config_dir,
     data_dir,
     cache_dir,
@@ -162,16 +163,16 @@ pub fn setup_test_env_with_init() -> anyhow::Result<(TestEnv, TestConfigDirs)> {
 
 /// A helper function to set up a test environment with TestConfigDirs and
 /// initialize it with a registry
-pub fn setup_test_env_with_registry() -> anyhow::Result<(TestEnv, TestConfigDirs)> {
+pub fn setup_test_env_with_registry() -> anyhow::Result<(EnvTestGuard, ConfigDirsTestGuard)> {
   // Set up the test environment with overridden XDG directories
-  let test_env = TestEnv::new();
+  let test_env = EnvTestGuard::new();
 
   // Create a TestConfigDirs instance with paths directly in the test environment
   let config_dir = test_env.temp_dir.path().join("config/ai/twig");
   let data_dir = test_env.temp_dir.path().join("data/ai/twig");
   let cache_dir = Some(test_env.temp_dir.path().join("cache/ai/twig"));
 
-  let config_dirs = TestConfigDirs {
+  let config_dirs = ConfigDirsTestGuard {
     config_dir,
     data_dir,
     cache_dir,

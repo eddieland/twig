@@ -13,9 +13,11 @@
 
 pub mod config;
 pub mod env;
+pub mod git;
 pub mod home;
 
 // Re-export commonly used items
-pub use config::{TestConfigDirs, setup_test_env, setup_test_env_with_init, setup_test_env_with_registry};
-pub use env::TestEnv;
-pub use home::TestHomeEnv;
+pub use config::{ConfigDirsTestGuard, setup_test_env, setup_test_env_with_init, setup_test_env_with_registry};
+pub use env::EnvTestGuard;
+pub use git::GitRepoTestGuard;
+pub use home::HomeEnvTestGuard;

@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use twig_test_utils::{TestConfigDirs, TestEnv, setup_test_env_with_registry};
+use twig_test_utils::{ConfigDirsTestGuard, EnvTestGuard, setup_test_env_with_registry};
 
 #[test]
 fn test_xdg_override() {
@@ -24,11 +24,11 @@ fn test_xdg_override() {
 #[test]
 fn test_xdg_override_custom_names() {
   // Set up the test environment with overridden XDG directories
-  let test_env = TestEnv::new();
+  let test_env = EnvTestGuard::new();
 
   // Create a TestConfigDirs instance with custom organization and application
   // names This should use the environment variables set by TestEnv
-  let config_dirs = TestConfigDirs::with_names("custom-org", "custom-qualifier", "custom-app")
+  let config_dirs = ConfigDirsTestGuard::with_names("custom-org", "custom-qualifier", "custom-app")
     .expect("Failed to create TestConfigDirs");
 
   // Initialize the config directories with registry

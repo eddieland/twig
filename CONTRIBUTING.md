@@ -365,3 +365,72 @@ fn test_my_command() {
     // Additional assertions...
 }
 ```
+
+## Test Utilities
+
+Twig provides several test utilities in the `twig-test-utils` crate to simplify common testing patterns:
+
+### Environment Utilities
+
+- **`EnvTestGuard`**: Overrides XDG directories to use a temporary directory for testing
+- **`HomeEnvTestGuard`**: Overrides the HOME directory to use a temporary directory
+- **`ConfigDirsTestGuard`**: Provides a reusable configuration directory structure
+
+### Git Repository Utilities
+
+- **`GitRepoTestGuard`**: Creates a temporary git repository for testing
+  - `GitRepoTestGuard::new()`: Creates a new git repository without changing the current directory
+  - `GitRepoTestGuard::new_and_change_dir()`: Creates a new git repository and changes the current directory to it
+  - `GitRepoTestGuard::change_dir()`: Changes the current directory to the git repository
+  - `GitRepoTestGuard::restore_dir()`: Restores the original working directory
+
+### Helper Functions
+
+- **`setup_test_env()`**: Sets up a test environment with `TestEnv` and `TestConfigDirs`
+- **`setup_test_env_with_init()`**: Sets up and initializes a test environment
+- **`setup_test_env_with_registry()`**: Sets up a test environment with an empty registry
+
+### Example: Testing with a Git Repository
+
+```rust
+#[test]
+fn test_git_functionality() {
+    // Create a temporary git repository and change to its directory
+    let git_repo = GitRepoTestGuard::new_and_change_dir();
+
+    // Test code that depends on being in a git repository
+    let result = some_function_that_uses_git();
+
+    // Assert expected outcomes
+    assert!(result.is_ok());
+
+    // GitRepoTestGuard will automatically restore the original directory when dropped
+}
+```
+
+These utilities help ensure tests are isolated, deterministic, and don't interfere with the user's actual environment.
+
+### RAII Pattern for Test Resource Management
+
+The test utilities in Twig follow the RAII (Resource Acquisition Is Initialization) pattern, which is particularly well-suited for Rust's ownership model:
+
+- **Resource management through ownership**: Resources (like temporary directories and environment variables) are acquired during initialization and automatically cleaned up when the guard object is dropped.
+- **Automatic cleanup**: The `Drop` trait implementation ensures resources are properly released even if tests panic.
+- **Scope-based lifetime**: Test resources exist precisely for the scope where they're needed and are automatically cleaned up when they go out of scope.
+
+For example, when using `HomeEnvTestGuard`:
+
+```rust
+{
+    // Create a guard that sets up a temporary HOME directory
+    let home_guard = HomeEnvTestGuard::new();
+
+    // Test code that uses HOME directory
+    // ...
+
+    // When home_guard goes out of scope, the Drop implementation
+    // automatically restores the original HOME environment variable
+}
+```
+
+This pattern eliminates the need for explicit cleanup code and ensures resources are properly managed even in the presence of errors or early returns.

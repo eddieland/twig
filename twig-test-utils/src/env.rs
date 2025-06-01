@@ -10,7 +10,7 @@ use tempfile::TempDir;
 
 /// A test environment that overrides XDG directories to use a per-test
 /// temporary directory
-pub struct TestEnv {
+pub struct EnvTestGuard {
   /// The temporary directory that will be used for XDG directories
   pub temp_dir: TempDir,
   /// The original XDG_CONFIG_HOME value, if any
@@ -21,13 +21,13 @@ pub struct TestEnv {
   original_cache_home: Option<String>,
 }
 
-impl Default for TestEnv {
+impl Default for EnvTestGuard {
   fn default() -> Self {
     Self::new()
   }
 }
 
-impl TestEnv {
+impl EnvTestGuard {
   /// XDG environment variable names
   pub const XDG_CONFIG_HOME: &'static str = "XDG_CONFIG_HOME";
   pub const XDG_DATA_HOME: &'static str = "XDG_DATA_HOME";
@@ -79,33 +79,33 @@ impl TestEnv {
   }
 }
 
-impl Drop for TestEnv {
+impl Drop for EnvTestGuard {
   fn drop(&mut self) {
     // Restore original XDG environment variables
     match &self.original_config_home {
       Some(val) => unsafe {
-        env::set_var(TestEnv::XDG_CONFIG_HOME, val);
+        env::set_var(EnvTestGuard::XDG_CONFIG_HOME, val);
       },
       None => unsafe {
-        env::remove_var(TestEnv::XDG_CONFIG_HOME);
+        env::remove_var(EnvTestGuard::XDG_CONFIG_HOME);
       },
     }
 
     match &self.original_data_home {
       Some(val) => unsafe {
-        env::set_var(TestEnv::XDG_DATA_HOME, val);
+        env::set_var(EnvTestGuard::XDG_DATA_HOME, val);
       },
       None => unsafe {
-        env::remove_var(TestEnv::XDG_DATA_HOME);
+        env::remove_var(EnvTestGuard::XDG_DATA_HOME);
       },
     }
 
     match &self.original_cache_home {
       Some(val) => unsafe {
-        env::set_var(TestEnv::XDG_CACHE_HOME, val);
+        env::set_var(EnvTestGuard::XDG_CACHE_HOME, val);
       },
       None => unsafe {
-        env::remove_var(TestEnv::XDG_CACHE_HOME);
+        env::remove_var(EnvTestGuard::XDG_CACHE_HOME);
       },
     }
   }

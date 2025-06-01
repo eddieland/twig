@@ -105,14 +105,14 @@ pub fn get_config_dirs() -> Result<ConfigDirs> {
 #[cfg(test)]
 mod tests {
   use tempfile::TempDir;
-  use twig_test_utils::TestEnv;
+  use twig_test_utils::EnvTestGuard;
 
   use super::*;
 
   #[test]
   fn test_config_dirs_creation() {
     // Use TestEnv from twig-test-utils to properly manage environment variables
-    let _test_env = TestEnv::new();
+    let _test_env = EnvTestGuard::new();
 
     let config_dirs = ConfigDirs::new().unwrap();
     let _ = config_dirs.init();
@@ -124,7 +124,7 @@ mod tests {
 
   #[test]
   fn test_registry_path() {
-    let _test_env = TestEnv::new();
+    let _test_env = EnvTestGuard::new();
 
     let config_dirs = ConfigDirs::new().unwrap();
     let registry_path = config_dirs.registry_path();
@@ -135,7 +135,7 @@ mod tests {
 
   #[test]
   fn test_repo_state_paths() {
-    let _test_env = TestEnv::new();
+    let _test_env = EnvTestGuard::new();
 
     let temp_dir = TempDir::new().unwrap();
     let repo_path = temp_dir.path();
@@ -150,7 +150,7 @@ mod tests {
 
   #[test]
   fn test_init_creates_directories() {
-    let _test_env = TestEnv::new();
+    let _test_env = EnvTestGuard::new();
 
     let config_dirs = ConfigDirs::new().unwrap();
     config_dirs.init().unwrap();

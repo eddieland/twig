@@ -43,12 +43,13 @@ pub enum JiraSubcommands {
 
   /// Link a branch to a Jira issue
   #[command(long_about = "Link an existing Git branch to a Jira issue.\n\n\
-                      This command associates a branch with a Jira issue in the repository state,\n\
-                      allowing you to track which branches correspond to which issues.")]
+                       This command associates a branch with a Jira issue in the repository state,\n\
+                       allowing you to track which branches correspond to which issues.")]
   LinkBranch {
     /// The Jira issue key (e.g., PROJ-123)
-    #[arg(required = true, index = 1)]
-    issue_key: String,
+    /// If not provided, uses the current branch's associated Jira issue
+    #[arg(index = 1)]
+    issue_key: Option<String>,
 
     /// The branch name (if not provided, the current branch will be used)
     #[arg(index = 2)]
@@ -57,12 +58,13 @@ pub enum JiraSubcommands {
 
   /// Transition a Jira issue
   #[command(long_about = "Transition a Jira issue to a different status.\n\n\
-                      This command allows you to move a Jira issue through its workflow.\n\
-                      If no transition is specified, it will list available transitions.")]
+                       This command allows you to move a Jira issue through its workflow.\n\
+                       If no transition is specified, it will list available transitions.")]
   Transition {
     /// The Jira issue key (e.g., PROJ-123)
-    #[arg(required = true, index = 1)]
-    issue_key: String,
+    /// If not provided, uses the current branch's associated Jira issue
+    #[arg(index = 1)]
+    issue_key: Option<String>,
 
     /// The transition name or ID (if not provided, available transitions will
     /// be listed)
@@ -76,8 +78,9 @@ pub enum JiraSubcommands {
                    including its key, summary, status, and description.")]
   View {
     /// The Jira issue key (e.g., PROJ-123)
-    #[arg(required = true, index = 1)]
-    issue_key: String,
+    /// If not provided, uses the current branch's associated Jira issue
+    #[arg(index = 1)]
+    issue_key: Option<String>,
   },
 }
 
@@ -92,12 +95,66 @@ pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
       with_worktree,
     } => handle_create_branch_command(&issue_key, with_worktree),
     JiraSubcommands::LinkBranch { issue_key, branch_name } => {
-      handle_link_branch_command(&issue_key, branch_name.as_deref())
+      match issue_key {
+        Some(key) => handle_link_branch_command(&key, branch_name.as_deref()),
+        None => {
+          // Try to get the Jira issue from the current branch
+          match crate::utils::get_current_branch_jira_issue() {
+            Ok(Some(key)) => handle_link_branch_command(&key, branch_name.as_deref()),
+            Ok(None) => {
+              print_error("No Jira issue key provided and current branch has no associated Jira issue");
+              print_info("Provide a Jira issue key or use a branch with an associated Jira issue");
+              Ok(())
+            }
+            Err(e) => {
+              print_error(&format!("Failed to get associated Jira issue: {e}"));
+              Ok(())
+            }
+          }
+        }
+      }
     }
     JiraSubcommands::Transition { issue_key, transition } => {
-      handle_transition_issue_command(&issue_key, transition.as_deref())
+      match issue_key {
+        Some(key) => handle_transition_issue_command(&key, transition.as_deref()),
+        None => {
+          // Try to get the Jira issue from the current branch
+          match crate::utils::get_current_branch_jira_issue() {
+            Ok(Some(key)) => handle_transition_issue_command(&key, transition.as_deref()),
+            Ok(None) => {
+              print_error("No Jira issue key provided and current branch has no associated Jira issue");
+              print_info("Provide a Jira issue key or use a branch with an associated Jira issue");
+              Ok(())
+            }
+            Err(e) => {
+              print_error(&format!("Failed to get associated Jira issue: {e}"));
+              Ok(())
+            }
+          }
+        }
+      }
     }
-    JiraSubcommands::View { issue_key } => handle_view_issue_command(&issue_key),
+    JiraSubcommands::View { issue_key } => {
+      // If issue_key is None, try to get it from the current branch
+      match issue_key {
+        Some(key) => handle_view_issue_command(&key),
+        None => {
+          // Try to get the Jira issue from the current branch
+          match crate::utils::get_current_branch_jira_issue() {
+            Ok(Some(key)) => handle_view_issue_command(&key),
+            Ok(None) => {
+              print_error("No Jira issue key provided and current branch has no associated Jira issue");
+              print_info("Provide a Jira issue key or use a branch with an associated Jira issue");
+              Ok(())
+            }
+            Err(e) => {
+              print_error(&format!("Failed to get associated Jira issue: {e}"));
+              Ok(())
+            }
+          }
+        }
+      }
+    }
   }
 }
 

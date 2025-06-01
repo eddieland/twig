@@ -118,8 +118,9 @@ pub struct ListCommand {
 #[derive(Args)]
 pub struct LinkCommand {
   /// URL or ID of the pull request to link (e.g., 'https://github.com/owner/repo/pull/123' or '123')
-  #[arg(required = true, index = 1)]
-  pub pr_url_or_id: String,
+  /// If not provided, uses the current branch's associated PR
+  #[arg(index = 1)]
+  pub pr_url_or_id: Option<String>,
 }
 
 /// Handle the GitHub command
@@ -131,7 +132,29 @@ pub(crate) fn handle_github_command(github: GitHubArgs) -> Result<()> {
     GitHubSubcommands::Check => handle_check_command(),
     GitHubSubcommands::Checks(checks) => handle_checks_command(&checks),
     GitHubSubcommands::Pr(pr) => match pr.subcommand {
-      PrSubcommands::Link(link) => handle_pr_link_command(&link.pr_url_or_id),
+      PrSubcommands::Link(link) => {
+        match &link.pr_url_or_id {
+          Some(pr_url_or_id) => handle_pr_link_command(pr_url_or_id),
+          None => {
+            // Try to get the PR from the current branch
+            match crate::utils::get_current_branch_github_pr() {
+              Ok(Some(pr_number)) => {
+                // Convert PR number to string and handle it
+                handle_pr_link_command(&pr_number.to_string())
+              }
+              Ok(None) => {
+                print_error("No PR URL or ID provided and current branch has no associated PR");
+                print_info("Provide a PR URL or ID to link with the current branch");
+                Ok(())
+              }
+              Err(e) => {
+                print_error(&format!("Failed to get associated PR: {e}"));
+                Ok(())
+              }
+            }
+          }
+        }
+      }
       PrSubcommands::List(list) => handle_pr_list_command(&list),
       PrSubcommands::Status => handle_pr_status_command(),
     },
@@ -189,6 +212,8 @@ fn handle_check_command() -> Result<()> {
 /// Handle the checks command
 fn handle_checks_command(cmd: &ChecksCommand) -> Result<()> {
   use std::path::PathBuf;
+
+  use crate::utils::get_current_branch_github_pr;
 
   // Create a runtime for async operations
   let rt = Runtime::new()?;
@@ -265,38 +290,26 @@ fn handle_checks_command(cmd: &ChecksCommand) -> Result<()> {
     }
   } else {
     // Try to get PR number from current branch
-    let head = match repo.head() {
-      Ok(head) => head,
-      Err(e) => {
-        print_error(&format!("Failed to get repository HEAD: {e}"));
-        return Ok(());
-      }
-    };
+    match get_current_branch_github_pr() {
+      Ok(Some(pr_number)) => pr_number,
+      Ok(None) => {
+        // Get the current branch name for the error message
+        let head = match repo.head() {
+          Ok(head) => head,
+          Err(e) => {
+            print_error(&format!("Failed to get repository HEAD: {e}"));
+            return Ok(());
+          }
+        };
 
-    let branch_name = match head.shorthand() {
-      Some(name) => name,
-      None => {
-        print_error("Failed to get branch name");
-        return Ok(());
-      }
-    };
+        let branch_name = match head.shorthand() {
+          Some(name) => name,
+          None => {
+            print_error("Failed to get branch name");
+            return Ok(());
+          }
+        };
 
-    // Load the repository state
-    let repo_state = match RepoState::load(&repo_path) {
-      Ok(state) => state,
-      Err(e) => {
-        print_error(&format!("Failed to load repository state: {e}"));
-        return Ok(());
-      }
-    };
-
-    // Check if the branch has an associated PR
-    let branch_issue = repo_state.get_branch_issue_by_branch(branch_name);
-
-    if let Some(branch_issue) = branch_issue {
-      if let Some(pr_number) = branch_issue.github_pr {
-        pr_number
-      } else {
         print_error(&format!("Branch '{branch_name}' has no associated PR"));
         print_info(&format!(
           "Link a PR with {} or specify a PR number",
@@ -304,13 +317,10 @@ fn handle_checks_command(cmd: &ChecksCommand) -> Result<()> {
         ));
         return Ok(());
       }
-    } else {
-      print_error(&format!("Branch '{branch_name}' has no associated PR"));
-      print_info(&format!(
-        "Link a PR with {} or specify a PR number",
-        format_command("twig github pr link <pr-url>")
-      ));
-      return Ok(());
+      Err(e) => {
+        print_error(&format!("Failed to get associated PR: {e}"));
+        return Ok(());
+      }
     }
   };
 
@@ -411,6 +421,8 @@ fn handle_checks_command(cmd: &ChecksCommand) -> Result<()> {
 
 /// Handle the PR status command
 fn handle_pr_status_command() -> Result<()> {
+  use crate::utils::get_current_branch_github_pr;
+
   // Create a runtime for async operations
   let rt = Runtime::new()?;
 
@@ -444,7 +456,7 @@ fn handle_pr_status_command() -> Result<()> {
     }
   };
 
-  // Get the current branch
+  // Get the current branch name for error messages
   let head = match repo.head() {
     Ok(head) => head,
     Err(e) => {
@@ -461,70 +473,59 @@ fn handle_pr_status_command() -> Result<()> {
     }
   };
 
-  // Load the repository state
-  let repo_state = match RepoState::load(&repo_path) {
-    Ok(state) => state,
-    Err(e) => {
-      print_error(&format!("Failed to load repository state: {e}"));
-      return Ok(());
-    }
-  };
-
-  // Check if the branch has an associated PR
-  let branch_issue = repo_state.get_branch_issue_by_branch(branch_name);
-
-  if let Some(branch_issue) = branch_issue {
-    if let Some(pr_number) = branch_issue.github_pr {
-      // Get the remote URL to extract owner and repo
-      let remote = match repo.find_remote("origin") {
-        Ok(remote) => remote,
-        Err(e) => {
-          print_error(&format!("Failed to find remote 'origin': {e}"));
-          return Ok(());
-        }
-      };
-
-      let remote_url = match remote.url() {
-        Some(url) => url,
-        None => {
-          print_error("Failed to get remote URL");
-          return Ok(());
-        }
-      };
-
-      // Extract owner and repo from remote URL
-      let (owner, repo_name) = match github_client.extract_repo_info_from_url(remote_url) {
-        Ok((owner, repo)) => (owner, repo),
-        Err(e) => {
-          print_error(&format!("Failed to extract repository info from URL: {e}"));
-          return Ok(());
-        }
-      };
-
-      // Get PR status
-      print_info(&format!("Fetching PR status for #{pr_number}..."));
-
-      match rt.block_on(github_client.get_pr_status(&owner, &repo_name, pr_number)) {
-        Ok(status) => {
-          display_pr_status(&status);
-        }
-        Err(e) => {
-          print_error(&format!("Failed to get PR status: {e}"));
-        }
-      }
-    } else {
+  // Get the PR number from the current branch
+  let pr_number = match get_current_branch_github_pr() {
+    Ok(Some(pr_number)) => pr_number,
+    Ok(None) => {
       print_warning(&format!("Branch '{branch_name}' has no associated PR"));
       print_info(&format!(
         "Link a PR with {}",
         format_command("twig github pr link <pr-url>")
       ));
+      return Ok(());
     }
-  } else {
-    print_warning(&format!("Branch '{branch_name}' has no associated PR"));
-    print_info(&format!(
-      "Link a PR with {}",
-      format_command("twig github pr link <pr-url>")
-    ));
+    Err(e) => {
+      print_error(&format!("Failed to get associated PR: {e}"));
+      return Ok(());
+    }
+  };
+
+  // Get the remote URL to extract owner and repo
+  let remote = match repo.find_remote("origin") {
+    Ok(remote) => remote,
+    Err(e) => {
+      print_error(&format!("Failed to find remote 'origin': {e}"));
+      return Ok(());
+    }
+  };
+
+  let remote_url = match remote.url() {
+    Some(url) => url,
+    None => {
+      print_error("Failed to get remote URL");
+      return Ok(());
+    }
+  };
+
+  // Extract owner and repo from remote URL
+  let (owner, repo_name) = match github_client.extract_repo_info_from_url(remote_url) {
+    Ok((owner, repo)) => (owner, repo),
+    Err(e) => {
+      print_error(&format!("Failed to extract repository info from URL: {e}"));
+      return Ok(());
+    }
+  };
+
+  // Get PR status
+  print_info(&format!("Fetching PR status for #{pr_number}..."));
+
+  match rt.block_on(github_client.get_pr_status(&owner, &repo_name, pr_number)) {
+    Ok(status) => {
+      display_pr_status(&status);
+    }
+    Err(e) => {
+      print_error(&format!("Failed to get PR status: {e}"));
+    }
   }
 
   Ok(())

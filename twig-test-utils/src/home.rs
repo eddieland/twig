@@ -11,20 +11,20 @@ use tempfile::TempDir;
 /// A test environment that overrides the HOME directory to use a temporary
 /// directory This is useful for testing credential management and other
 /// home directory dependent functionality
-pub struct TestHomeEnv {
+pub struct HomeEnvTestGuard {
   /// The temporary directory that will be used as HOME
   pub temp_dir: TempDir,
   /// The original HOME value
   original_home: String,
 }
 
-impl Default for TestHomeEnv {
+impl Default for HomeEnvTestGuard {
   fn default() -> Self {
     Self::new()
   }
 }
 
-impl TestHomeEnv {
+impl HomeEnvTestGuard {
   /// Create a new test environment with a temporary HOME directory
   pub fn new() -> Self {
     let temp_dir = TempDir::new().expect("Failed to create temporary directory");
@@ -54,7 +54,7 @@ impl TestHomeEnv {
   }
 }
 
-impl Drop for TestHomeEnv {
+impl Drop for HomeEnvTestGuard {
   fn drop(&mut self) {
     // Restore original HOME environment variable
     unsafe {
