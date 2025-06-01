@@ -5,27 +5,32 @@
 //! integrations.
 
 mod branch;
-pub mod cascade;
+mod cascade;
 mod completion;
 mod creds;
 mod dashboard;
 mod git;
 mod github;
 mod jira;
-pub mod rebase;
+mod rebase;
 mod switch;
 mod sync;
 mod tree;
 mod worktree;
 
 use anyhow::Result;
+use clap::builder::Styles;
+use clap::builder::styling::AnsiColor;
 use clap::{ArgAction, Parser, Subcommand};
 
 use crate::diagnostics;
+use crate::utils::output::ColorMode;
 
 /// Top-level CLI command for the twig tool
 #[derive(Parser)]
 #[command(name = "twig")]
+#[command(display_name = "🌿 Twig")]
+#[command(author = env!("CARGO_PKG_AUTHORS"))]
 #[command(about = "A Git-based developer productivity tool")]
 #[command(
   long_about = "Twig helps developers manage multiple Git repositories and worktrees efficiently.\n\n\
@@ -33,32 +38,39 @@ use crate::diagnostics;
         management to streamline your development workflow."
 )]
 #[command(version = env!("CARGO_PKG_VERSION"))]
-#[command(subcommand_required(true))]
 #[command(propagate_version = true)]
+#[command(subcommand_required(true))]
+#[command(disable_help_subcommand = true)]
+#[command(max_term_width = 120)]
+#[command(styles = Styles::styled()
+    .header(AnsiColor::BrightGreen.on_default().bold().underline())
+    .usage(AnsiColor::Green.on_default().bold())  // Make usage line stand out
+    .literal(AnsiColor::BrightGreen.on_default().bold())  // Command names, flags bold
+    .placeholder(AnsiColor::BrightWhite.on_default().italic())
+    .valid(AnsiColor::Green.on_default())
+    .invalid(AnsiColor::BrightRed.on_default().bold())
+)]
 pub struct Cli {
   /// Sets the level of verbosity (can be used multiple times)
   #[arg(
     short = 'v',
     long = "verbose",
     action = ArgAction::Count,
-    long_help = "Sets the level of verbosity for tracing and logging output.\n\
+    long_help = "Sets the level of verbosity for tracing and logging output.\n\n\
              -v: Show info level messages\n\
              -vv: Show debug level messages\n\
              -vvv: Show trace level messages"
   )]
   pub verbose: u8,
 
-  /// When to use colored output
+  /// Controls when colored output is used
   #[arg(
-    long = "colors",
-    long_help = "Controls when colored output is used.\n\
-             yes: Always use colors\n\
-             auto: Use colors when outputting to a terminal (default)\n\
-             no: Never use colors",
-    value_parser = ["yes", "auto", "no"],
-    default_value = "auto"
+    long,
+    value_enum,
+    ignore_case = true,
+    default_value_t = ColorMode::Auto,
   )]
-  pub colors: String,
+  pub colors: ColorMode,
 
   /// Subcommands
   #[command(subcommand)]
@@ -75,6 +87,15 @@ pub enum Commands {
             which branches should be treated as root branches in the tree view.")]
   #[command(alias = "br")]
   Branch(branch::BranchArgs),
+
+  /// Perform a cascading rebase from the current branch to its children
+  #[command(
+    long_about = "Perform a cascading rebase from the current branch to its children.\n\n\
+            This command rebases all child branches on their parent(s) in a cascading manner,\n\
+            starting from the current branch and working down the dependency tree."
+  )]
+  #[command(alias = "casc")]
+  Cascade(cascade::CascadeArgs),
 
   /// Generate shell completions
   #[command(long_about = "Generates shell completion scripts for twig commands.\n\n\
@@ -149,6 +170,13 @@ pub enum Commands {
   #[command(hide = true)]
   Panic,
 
+  /// Rebase the current branch on its parent(s)
+  #[command(long_about = "Rebase the current branch on its parent(s).\n\n\
+            This command rebases the current branch on its parent(s) based on\n\
+            the dependency tree. It can optionally start from the root branch.")]
+  #[command(alias = "rb")]
+  Rebase(rebase::RebaseArgs),
+
   /// Magic branch switching
   #[command(long_about = "Intelligently switch to branches based on various inputs.\n\n\
             This command can switch branches based on:\n\
@@ -199,30 +227,14 @@ pub enum Commands {
             incomplete work.")]
   #[command(alias = "wt")]
   Worktree(worktree::WorktreeArgs),
-
-  /// Rebase the current branch on its parent(s)
-  #[command(long_about = "Rebase the current branch on its parent(s).\n\n\
-            This command rebases the current branch on its parent(s) based on\n\
-            the dependency tree. It can optionally start from the root branch.")]
-  #[command(alias = "rb")]
-  Rebase(rebase::RebaseArgs),
-
-  /// Perform a cascading rebase from the current branch to its children
-  #[command(
-    long_about = "Perform a cascading rebase from the current branch to its children.\n\n\
-            This command rebases all child branches on their parent(s) in a cascading manner,\n\
-            starting from the current branch and working down the dependency tree."
-  )]
-  #[command(alias = "casc")]
-  Cascade(cascade::CascadeArgs),
 }
 
 pub fn handle_cli(cli: Cli) -> Result<()> {
   // Set global color override based on --colors argument
-  match cli.colors.as_str() {
-    "yes" => owo_colors::set_override(true),
-    "no" => owo_colors::set_override(false),
-    _ => {
+  match cli.colors {
+    ColorMode::Always | ColorMode::Yes => owo_colors::set_override(true),
+    ColorMode::Never | ColorMode::No => owo_colors::set_override(false),
+    ColorMode::Auto => {
       // Let owo_colors use its default auto-detection
       // Don't call set_override, allowing it to detect terminal automatically
     }
@@ -230,6 +242,7 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
 
   match cli.command {
     Commands::Branch(branch) => branch::handle_branch_command(branch),
+    Commands::Cascade(cascade) => cascade::handle_cascade_command(cascade),
     Commands::Completion(completion) => completion::handle_completion_command(completion),
     Commands::Creds(creds) => creds::handle_creds_command(creds),
     Commands::Dashboard(dashboard) => dashboard::handle_dashboard_command(dashboard),
@@ -241,11 +254,10 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
     Commands::Panic => {
       panic!("This is an intentional test panic to verify no-worries integration");
     }
+    Commands::Rebase(rebase) => rebase::handle_rebase_command(rebase),
     Commands::Switch(switch) => switch::handle_switch_command(switch),
     Commands::Sync(sync) => sync::handle_sync_command(sync),
     Commands::Tree(tree) => tree::handle_tree_command(tree),
     Commands::Worktree(worktree) => worktree::handle_worktree_command(worktree),
-    Commands::Rebase(rebase) => rebase::handle_rebase_command(rebase),
-    Commands::Cascade(cascade) => cascade::handle_cascade_command(cascade),
   }
 }

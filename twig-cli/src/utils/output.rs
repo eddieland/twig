@@ -6,6 +6,25 @@
 use emojis;
 use owo_colors::OwoColorize;
 
+/// Enum representing different color modes for output
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+
+pub enum ColorMode {
+  /// Enable colored output
+  Yes,
+  /// Enable colored output (alias for Yes)
+  #[value(hide = true)]
+  Always,
+  /// Automatically detect if colors should be used based on terminal
+  /// capabilities
+  Auto,
+  /// Disable colored output
+  No,
+  /// Disable colored output (alias for No)
+  #[value(hide = true)]
+  Never,
+}
+
 // Helper function to safely get an emoji or fallback to a default character
 fn get_emoji_or_default(name: &str, default: &str) -> String {
   match emojis::get_by_shortcode(name) {
