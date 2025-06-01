@@ -24,21 +24,13 @@ pub enum GitSubcommands {
                      with proper credentials configured if needed for remote operations.")]
   Add(AddCommand),
 
-  /// Remove a repository from the registry
-  #[command(
-    long_about = "Removes a previously registered Git repository from twig's tracking.\n\n\
-                     This only affects twig's registry and does not delete or modify the\n\
-                     actual repository files."
-  )]
-  #[command(alias = "rm")]
-  Remove(RemoveCommand),
-
-  /// List all repositories in the registry
-  #[command(long_about = "Displays all Git repositories currently registered with twig.\n\n\
-                     Shows the repository paths and any additional tracking information\n\
-                     to help you manage your repositories.")]
-  #[command(alias = "ls")]
-  List,
+  /// Execute a git command in repositories
+  #[command(long_about = "Executes a Git command in one or all registered repositories.\n\n\
+                     This powerful feature allows you to run the same Git operation across\n\
+                     multiple repositories simultaneously. The command is executed as-is,\n\
+                     so ensure it's a valid Git command. Credentials may be required\n\
+                     depending on the Git operation being performed.")]
+  Exec(ExecCommand),
 
   /// Fetch updates for repositories
   #[command(long_about = "Fetches updates from remote repositories.\n\n\
@@ -47,13 +39,21 @@ pub enum GitSubcommands {
                      repositories with private remotes.")]
   Fetch(FetchCommand),
 
-  /// Execute a git command in repositories
-  #[command(long_about = "Executes a Git command in one or all registered repositories.\n\n\
-                     This powerful feature allows you to run the same Git operation across\n\
-                     multiple repositories simultaneously. The command is executed as-is,\n\
-                     so ensure it's a valid Git command. Credentials may be required\n\
-                     depending on the Git operation being performed.")]
-  Exec(ExecCommand),
+  /// List all repositories in the registry
+  #[command(long_about = "Displays all Git repositories currently registered with twig.\n\n\
+                     Shows the repository paths and any additional tracking information\n\
+                     to help you manage your repositories.")]
+  #[command(alias = "ls")]
+  List,
+
+  /// Remove a repository from the registry
+  #[command(
+    long_about = "Removes a previously registered Git repository from twig's tracking.\n\n\
+                     This only affects twig's registry and does not delete or modify the\n\
+                     actual repository files."
+  )]
+  #[command(alias = "rm")]
+  Remove(RemoveCommand),
 
   /// List stale branches in repositories
   #[command(long_about = "Identifies and lists branches that haven't been updated recently.\n\n\
@@ -132,17 +132,6 @@ pub struct StaleBranchesCommand {
 pub(crate) fn handle_git_command(git: GitArgs) -> Result<()> {
   match git.subcommand {
     GitSubcommands::Add(cmd) => crate::git::add_repository(&cmd.path),
-    GitSubcommands::Remove(cmd) => crate::git::remove_repository(&cmd.path),
-    GitSubcommands::List => crate::git::list_repositories(),
-    GitSubcommands::Fetch(cmd) => {
-      if cmd.all {
-        crate::git::fetch_all_repositories()
-      } else {
-        let repo_arg = cmd.repo.as_deref();
-        let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
-        crate::git::fetch_repository(repo_path, true)
-      }
-    }
     GitSubcommands::Exec(cmd) => {
       if cmd.all {
         crate::git::execute_all_repositories(&cmd.command)
@@ -152,6 +141,17 @@ pub(crate) fn handle_git_command(git: GitArgs) -> Result<()> {
         crate::git::execute_repository(repo_path, &cmd.command)
       }
     }
+    GitSubcommands::Fetch(cmd) => {
+      if cmd.all {
+        crate::git::fetch_all_repositories()
+      } else {
+        let repo_arg = cmd.repo.as_deref();
+        let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
+        crate::git::fetch_repository(repo_path, true)
+      }
+    }
+    GitSubcommands::List => crate::git::list_repositories(),
+    GitSubcommands::Remove(cmd) => crate::git::remove_repository(&cmd.path),
     GitSubcommands::StaleBranches(cmd) => {
       let days = cmd
         .days

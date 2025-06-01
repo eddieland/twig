@@ -17,6 +17,16 @@ pub struct WorktreeArgs {
 /// Subcommands for the worktree command
 #[derive(Subcommand)]
 pub enum WorktreeSubcommands {
+  /// Clean up stale worktrees
+  #[command(
+    long_about = "Removes worktrees that are no longer needed or have been abandoned.\n\n\
+                     This helps keep your workspace clean and organized. The command checks for\n\
+                     worktrees with branches that have been merged or deleted and offers to\n\
+                     remove them. This operation only removes the worktree directories and\n\
+                     doesn't affect the main repository."
+  )]
+  Clean(CleanCommand),
+
   /// Create a new worktree for a branch
   #[command(long_about = "Creates a new Git worktree for a specific branch.\n\n\
                      This allows you to work on multiple branches simultaneously without switching\n\
@@ -32,16 +42,6 @@ pub enum WorktreeSubcommands {
                      to help you track your active development environments.")]
   #[command(alias = "ls")]
   List(ListCommand),
-
-  /// Clean up stale worktrees
-  #[command(
-    long_about = "Removes worktrees that are no longer needed or have been abandoned.\n\n\
-                     This helps keep your workspace clean and organized. The command checks for\n\
-                     worktrees with branches that have been merged or deleted and offers to\n\
-                     remove them. This operation only removes the worktree directories and\n\
-                     doesn't affect the main repository."
-  )]
-  Clean(CleanCommand),
 }
 
 /// Create a new worktree for a branch
@@ -74,6 +74,10 @@ pub struct CleanCommand {
 
 pub(crate) fn handle_worktree_command(worktree: WorktreeArgs) -> Result<()> {
   match worktree.subcommand {
+    WorktreeSubcommands::Clean(clean) => {
+      let repo_path = crate::utils::resolve_repository_path(clean.repo.as_deref())?;
+      crate::repo_state::clean_worktrees(repo_path)
+    }
     WorktreeSubcommands::Create(create) => {
       let repo_path = crate::utils::resolve_repository_path(create.repo.as_deref())?;
       crate::repo_state::create_worktree(repo_path, &create.branch)?;
@@ -82,10 +86,6 @@ pub(crate) fn handle_worktree_command(worktree: WorktreeArgs) -> Result<()> {
     WorktreeSubcommands::List(list) => {
       let repo_path = crate::utils::resolve_repository_path(list.repo.as_deref())?;
       crate::repo_state::list_worktrees(repo_path)
-    }
-    WorktreeSubcommands::Clean(clean) => {
-      let repo_path = crate::utils::resolve_repository_path(clean.repo.as_deref())?;
-      crate::repo_state::clean_worktrees(repo_path)
     }
   }
 }

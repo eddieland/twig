@@ -75,6 +75,12 @@ pub struct PrCommand {
 /// Subcommands for the PR command
 #[derive(Subcommand)]
 pub enum PrSubcommands {
+  /// Link a PR to the current branch
+  #[command(long_about = "Link a GitHub pull request to the current branch.\n\n\
+                           This command associates a GitHub pull request with the current branch,\n\
+                           allowing you to easily check its status later.")]
+  Link(LinkCommand),
+
   /// List pull requests for a repository
   #[command(long_about = "List pull requests for a repository with filtering options.\n\n\
                            This command displays a table of pull requests with key information\n\
@@ -90,12 +96,6 @@ pub enum PrSubcommands {
   )]
   #[command(alias = "st")]
   Status,
-
-  /// Link a PR to the current branch
-  #[command(long_about = "Link a GitHub pull request to the current branch.\n\n\
-                           This command associates a GitHub pull request with the current branch,\n\
-                           allowing you to easily check its status later.")]
-  Link(LinkCommand),
 }
 
 /// List pull requests for a repository
@@ -131,9 +131,9 @@ pub(crate) fn handle_github_command(github: GitHubArgs) -> Result<()> {
     GitHubSubcommands::Check => handle_check_command(),
     GitHubSubcommands::Checks(checks) => handle_checks_command(&checks),
     GitHubSubcommands::Pr(pr) => match pr.subcommand {
-      PrSubcommands::Status => handle_pr_status_command(),
-      PrSubcommands::List(list) => handle_pr_list_command(&list),
       PrSubcommands::Link(link) => handle_pr_link_command(&link.pr_url_or_id),
+      PrSubcommands::List(list) => handle_pr_list_command(&list),
+      PrSubcommands::Status => handle_pr_status_command(),
     },
   }
 }

@@ -27,31 +27,6 @@ pub struct JiraArgs {
 /// Subcommands for the Jira command
 #[derive(Subcommand)]
 pub enum JiraSubcommands {
-  /// View a Jira issue
-  #[command(long_about = "View details of a Jira issue.\n\n\
-                   This command displays information about a specific Jira issue,\n\
-                   including its key, summary, status, and description.")]
-  View {
-    /// The Jira issue key (e.g., PROJ-123)
-    #[arg(required = true, index = 1)]
-    issue_key: String,
-  },
-
-  /// Transition a Jira issue
-  #[command(long_about = "Transition a Jira issue to a different status.\n\n\
-                      This command allows you to move a Jira issue through its workflow.\n\
-                      If no transition is specified, it will list available transitions.")]
-  Transition {
-    /// The Jira issue key (e.g., PROJ-123)
-    #[arg(required = true, index = 1)]
-    issue_key: String,
-
-    /// The transition name or ID (if not provided, available transitions will
-    /// be listed)
-    #[arg(index = 2)]
-    transition: Option<String>,
-  },
-
   /// Create a branch from a Jira issue
   #[command(long_about = "Create a Git branch from a Jira issue.\n\n\
                       This command creates a branch with a name derived from the Jira issue key\n\
@@ -79,6 +54,31 @@ pub enum JiraSubcommands {
     #[arg(index = 2)]
     branch_name: Option<String>,
   },
+
+  /// Transition a Jira issue
+  #[command(long_about = "Transition a Jira issue to a different status.\n\n\
+                      This command allows you to move a Jira issue through its workflow.\n\
+                      If no transition is specified, it will list available transitions.")]
+  Transition {
+    /// The Jira issue key (e.g., PROJ-123)
+    #[arg(required = true, index = 1)]
+    issue_key: String,
+
+    /// The transition name or ID (if not provided, available transitions will
+    /// be listed)
+    #[arg(index = 2)]
+    transition: Option<String>,
+  },
+
+  /// View a Jira issue
+  #[command(long_about = "View details of a Jira issue.\n\n\
+                   This command displays information about a specific Jira issue,\n\
+                   including its key, summary, status, and description.")]
+  View {
+    /// The Jira issue key (e.g., PROJ-123)
+    #[arg(required = true, index = 1)]
+    issue_key: String,
+  },
 }
 
 /// Handle the Jira command
@@ -87,10 +87,6 @@ pub enum JiraSubcommands {
 /// actions based on the subcommand provided.
 pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
   match jira.subcommand {
-    JiraSubcommands::View { issue_key } => handle_view_issue_command(&issue_key),
-    JiraSubcommands::Transition { issue_key, transition } => {
-      handle_transition_issue_command(&issue_key, transition.as_deref())
-    }
     JiraSubcommands::CreateBranch {
       issue_key,
       with_worktree,
@@ -98,6 +94,10 @@ pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
     JiraSubcommands::LinkBranch { issue_key, branch_name } => {
       handle_link_branch_command(&issue_key, branch_name.as_deref())
     }
+    JiraSubcommands::Transition { issue_key, transition } => {
+      handle_transition_issue_command(&issue_key, transition.as_deref())
+    }
+    JiraSubcommands::View { issue_key } => handle_view_issue_command(&issue_key),
   }
 }
 

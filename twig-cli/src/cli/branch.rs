@@ -94,18 +94,18 @@ pub enum RootSubcommands {
                          which will be used when no specific root is specified.")]
   Add(RootAddCommand),
 
+  /// List all root branches
+  #[command(long_about = "Display all branches currently marked as root branches.\n\n\
+                         Shows which branch (if any) is set as the default root.")]
+  #[command(alias = "ls")]
+  List(RootListCommand),
+
   /// Remove a root branch
   #[command(long_about = "Remove a branch from the list of root branches.\n\n\
                          This will remove the branch from the root branch list.\n\
                          If it was the default root, the default will be cleared.")]
   #[command(alias = "rm")]
   Remove(RootRemoveCommand),
-
-  /// List all root branches
-  #[command(long_about = "Display all branches currently marked as root branches.\n\n\
-                         Shows which branch (if any) is set as the default root.")]
-  #[command(alias = "ls")]
-  List(RootListCommand),
 }
 
 /// Add a root branch
@@ -227,28 +227,6 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
           }
         }
       }
-      RootSubcommands::Remove(cmd) => {
-        // Get the repository path
-        let repo_path = if let Some(repo_arg) = cmd.repo {
-          crate::utils::resolve_repository_path(Some(&repo_arg))?
-        } else {
-          detect_current_repository().context("Not in a git repository")?
-        };
-
-        // Load repository state
-        let mut repo_state = RepoState::load(&repo_path)?;
-
-        // Remove the root branch
-        if repo_state.remove_root(&cmd.branch) {
-          // Save the state
-          repo_state.save(&repo_path)?;
-          print_success(&format!("Removed {} from root branches", cmd.branch));
-        } else {
-          print_warning(&format!("Root branch {} not found", cmd.branch));
-        }
-
-        Ok(())
-      }
       RootSubcommands::List(cmd) => {
         // Get the repository path
         let repo_path = if let Some(repo_arg) = cmd.repo {
@@ -275,6 +253,28 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
               print_info(&format!("  {}", root.branch));
             }
           }
+        }
+
+        Ok(())
+      }
+      RootSubcommands::Remove(cmd) => {
+        // Get the repository path
+        let repo_path = if let Some(repo_arg) = cmd.repo {
+          crate::utils::resolve_repository_path(Some(&repo_arg))?
+        } else {
+          detect_current_repository().context("Not in a git repository")?
+        };
+
+        // Load repository state
+        let mut repo_state = RepoState::load(&repo_path)?;
+
+        // Remove the root branch
+        if repo_state.remove_root(&cmd.branch) {
+          // Save the state
+          repo_state.save(&repo_path)?;
+          print_success(&format!("Removed {} from root branches", cmd.branch));
+        } else {
+          print_warning(&format!("Root branch {} not found", cmd.branch));
         }
 
         Ok(())
