@@ -19,7 +19,7 @@ mod tree;
 mod worktree;
 
 use anyhow::Result;
-use clap::{ArgAction, CommandFactory, Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand};
 
 use crate::diagnostics;
 
@@ -217,13 +217,6 @@ pub enum Commands {
   Cascade(cascade::CascadeArgs),
 }
 
-impl Cli {
-  /// Creates a clap Command for this command
-  pub fn command() -> clap::Command {
-    <Self as CommandFactory>::command()
-  }
-}
-
 pub fn handle_cli(cli: Cli) -> Result<()> {
   // Set global color override based on --colors argument
   match cli.colors.as_str() {
@@ -255,9 +248,4 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
     Commands::Rebase(rebase) => rebase::handle_rebase_command(rebase),
     Commands::Cascade(cascade) => cascade::handle_cascade_command(cascade),
   }
-}
-
-/// Build the CLI command structure
-pub fn build_cli() -> clap::Command {
-  Cli::command()
 }

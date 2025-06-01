@@ -6,13 +6,15 @@
 use std::io;
 
 use anyhow::Result;
+use clap::CommandFactory;
 use clap_complete::{Shell, generate};
 
+use crate::cli::Cli;
 use crate::utils::output::print_error;
 
 /// Generate shell completions for the specified shell
 pub fn generate_completions(shell: Shell) -> Result<()> {
-  let mut cmd = crate::cli::build_cli();
+  let mut cmd = Cli::command();
   let app_name = cmd.get_name().to_string();
 
   generate(shell, &mut cmd, app_name, &mut io::stdout());
