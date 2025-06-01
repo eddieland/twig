@@ -163,6 +163,7 @@ mod tests {
   fn test_resolve_repository_path_with_none() {
     // Create a temporary git repository and change to its directory
     let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let git_repo_path = std::fs::canonicalize(git_repo.path()).unwrap();
 
     // Now test the function with None
     let result = resolve_repository_path(None);
@@ -170,7 +171,7 @@ mod tests {
     // The result should be Ok and contain our temporary directory path
     assert!(result.is_ok());
     let repo_path = std::fs::canonicalize(result.unwrap()).unwrap();
-    assert_eq!(repo_path, git_repo.path());
+    assert_eq!(repo_path, git_repo_path);
   }
 
   // Test the direct conversion logic for get_current_branch_jira_issue
