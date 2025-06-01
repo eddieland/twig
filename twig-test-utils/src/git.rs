@@ -32,6 +32,15 @@ impl GitRepoTestGuard {
     // Initialize a git repository in the temporary directory
     let repo = Git2Repository::init(temp_path).expect("Failed to initialize git repository");
 
+    // Set test user configuration
+    let mut config = repo.config().expect("Failed to get repository config");
+    config
+      .set_str("user.name", "Twig Test User")
+      .expect("Failed to set user.name");
+    config
+      .set_str("user.email", "twig-test@example.com")
+      .expect("Failed to set user.email");
+
     // Verify that the .git directory was created
     assert!(
       temp_path.join(".git").exists(),
@@ -54,6 +63,15 @@ impl GitRepoTestGuard {
 
     // Initialize a git repository in the temporary directory
     let repo = Git2Repository::init(temp_path).expect("Failed to initialize git repository");
+
+    // Set test user configuration
+    let mut config = repo.config().expect("Failed to get repository config");
+    config
+      .set_str("user.name", "Twig Test User")
+      .expect("Failed to set user.name");
+    config
+      .set_str("user.email", "twig-test@example.com")
+      .expect("Failed to set user.email");
 
     // Verify that the .git directory was created
     assert!(
