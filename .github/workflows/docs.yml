@@ -27,25 +27,99 @@ jobs:
       - name: Generate API docs
         run: cargo doc --workspace --no-deps --document-private-items
 
-      - name: Generate CLI help docs
+      - name: Generate unified CLI docs
         run: |
           cargo build --release
-          mkdir -p docs/cli
-          ./target/release/twig --help > docs/cli/help.txt
-          # Generate help for subcommands
-          ./target/release/twig branch --help > docs/cli/branch-help.txt
-          ./target/release/twig cascade --help > docs/cli/cascade-help.txt
-          ./target/release/twig completion --help > docs/cli/completion-help.txt
-          ./target/release/twig creds --help > docs/cli/creds-help.txt
-          ./target/release/twig dashboard --help > docs/cli/dashboard-help.txt
-          ./target/release/twig git --help > docs/cli/git-help.txt
-          ./target/release/twig github --help > docs/cli/github-help.txt
-          ./target/release/twig jira --help > docs/cli/jira-help.txt
-          ./target/release/twig rebase --help > docs/cli/rebase-help.txt
-          ./target/release/twig switch --help > docs/cli/switch-help.txt
-          ./target/release/twig sync --help > docs/cli/sync-help.txt
-          ./target/release/twig tree --help > docs/cli/tree-help.txt
-          ./target/release/twig worktree --help > docs/cli/worktree-help.txt
+          mkdir -p docs
+
+          cat > docs/CLI-Reference.md << 'EOF'
+          # CLI Reference
+
+          ## Main Command
+          ```
+          EOF
+
+          ./target/release/twig --help >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+
+          # Add each subcommand as a section
+          echo "" >> docs/CLI-Reference.md
+          echo "## branch" >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+          ./target/release/twig branch --help >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+
+          echo "" >> docs/CLI-Reference.md
+          echo "## cascade" >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+          ./target/release/twig cascade --help >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+
+          echo "" >> docs/CLI-Reference.md
+          echo "## completion" >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+          ./target/release/twig completion --help >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+
+          echo "" >> docs/CLI-Reference.md
+          echo "## creds" >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+          ./target/release/twig creds --help >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+
+          echo "" >> docs/CLI-Reference.md
+          echo "## dashboard" >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+          ./target/release/twig dashboard --help >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+
+          echo "" >> docs/CLI-Reference.md
+          echo "## git" >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+          ./target/release/twig git --help >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+
+          echo "" >> docs/CLI-Reference.md
+          echo "## github" >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+          ./target/release/twig github --help >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+
+          echo "" >> docs/CLI-Reference.md
+          echo "## jira" >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+          ./target/release/twig jira --help >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+
+          echo "" >> docs/CLI-Reference.md
+          echo "## rebase" >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+          ./target/release/twig rebase --help >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+
+          echo "" >> docs/CLI-Reference.md
+          echo "## switch" >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+          ./target/release/twig switch --help >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+
+          echo "" >> docs/CLI-Reference.md
+          echo "## sync" >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+          ./target/release/twig sync --help >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+
+          echo "" >> docs/CLI-Reference.md
+          echo "## tree" >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+          ./target/release/twig tree --help >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+
+          echo "" >> docs/CLI-Reference.md
+          echo "## worktree" >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
+          ./target/release/twig worktree --help >> docs/CLI-Reference.md
+          echo '```' >> docs/CLI-Reference.md
 
       - name: Check for changes
         id: verify-changed-files
