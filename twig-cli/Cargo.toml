@@ -21,7 +21,6 @@ test = false
 anyhow.workspace = true
 chrono.workspace = true
 directories.workspace = true
-dotenv.workspace = true
 git2.workspace = true
 once_cell.workspace = true
 regex.workspace = true

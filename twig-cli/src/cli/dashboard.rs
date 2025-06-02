@@ -223,9 +223,6 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
   let mut issues = Vec::new();
   if !skip_jira {
     if let Ok(creds) = get_jira_credentials() {
-      // Load environment variables from .env file
-      dotenv::dotenv().ok();
-
       // Get Jira host from environment or use default
       let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
 

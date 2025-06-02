@@ -178,9 +178,6 @@ fn handle_view_issue_command(issue_key: &str) -> Result<()> {
       }
     };
 
-    // Load environment variables from .env file
-    dotenv::dotenv().ok();
-
     // Get Jira host from environment or use default
     let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
 
@@ -266,9 +263,6 @@ fn handle_transition_issue_command(issue_key: &str, transition: Option<&str>) ->
         return Ok(());
       }
     };
-
-    // Load environment variables from .env file
-    dotenv::dotenv().ok();
 
     // Get Jira host from environment or use default
     let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
@@ -360,9 +354,6 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
         return Ok(());
       }
     };
-
-    // Load environment variables from .env file
-    dotenv::dotenv().ok();
 
     // Get Jira host from environment or use default
     let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
@@ -490,9 +481,6 @@ fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Res
         return Ok(());
       }
     };
-
-    // Load environment variables from .env file
-    dotenv::dotenv().ok();
 
     // Get Jira host from environment or use default
     let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());

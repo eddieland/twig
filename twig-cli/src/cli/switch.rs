@@ -397,9 +397,6 @@ fn create_branch_from_jira_issue(
       }
     };
 
-    // Load environment variables from .env file
-    dotenv::dotenv().ok();
-
     // Get Jira host from environment or use default
     let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
 

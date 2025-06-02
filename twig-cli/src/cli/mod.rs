@@ -6,6 +6,7 @@
 
 mod branch;
 pub mod cascade;
+mod commit;
 mod completion;
 mod creds;
 mod dashboard;
@@ -227,6 +228,17 @@ pub enum Commands {
             incomplete work.")]
   #[command(alias = "wt")]
   Worktree(worktree::WorktreeArgs),
+
+  /// Create a commit using Jira issue information
+  #[command(
+    long_about = "Create a commit using Jira issue information for the current branch.\n\n\
+            This command uses the Jira issue associated with the current branch to generate\n\
+            a commit message in the format 'ISSUE-KEY: Issue summary'. You can customize the\n\
+            message with --message, --prefix, and --suffix options. If a commit with the same\n\
+            message already exists in recent commits, it will offer to create a fix-up commit instead.\n\
+            Use --no-fixup to disable this behavior and always create a normal commit."
+  )]
+  Commit(commit::CommitArgs),
 }
 
 pub fn handle_cli(cli: Cli) -> Result<()> {
@@ -259,5 +271,6 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
     Commands::Sync(sync) => sync::handle_sync_command(sync),
     Commands::Tree(tree) => tree::handle_tree_command(tree),
     Commands::Worktree(worktree) => worktree::handle_worktree_command(worktree),
+    Commands::Commit(args) => commit::handle_commit_command(args),
   }
 }
