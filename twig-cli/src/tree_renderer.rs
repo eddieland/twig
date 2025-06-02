@@ -295,8 +295,8 @@ impl<'a> TreeRenderer<'a> {
 
         // Add GitHub PR if available
         if let Some(pr_number) = issue.github_pr {
-          let target_column = if has_jira { pr_column_pos } else { jira_column_pos };
-          let spaces_needed = target_column.saturating_sub(current_pos);
+          // Always position PRs at the PR column position for consistent alignment
+          let spaces_needed = pr_column_pos.saturating_sub(current_pos);
           line.push_str(&" ".repeat(spaces_needed));
 
           let pr_display = if self.no_color {
