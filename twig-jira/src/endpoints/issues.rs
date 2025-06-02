@@ -6,7 +6,7 @@
 use anyhow::{Context, Result};
 use reqwest::{StatusCode, header};
 use serde::Deserialize;
-use tracing::{debug, info, instrument, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::client::JiraClient;
 use crate::consts::USER_AGENT;
@@ -139,6 +139,16 @@ impl JiraClient {
       .basic_auth(&self.auth.username, Some(&self.auth.api_token))
       .send()
       .await
+      .inspect_err(|e| {
+        error!("Request failed: {:?}", e);
+        if e.is_timeout() {
+          error!("Request timed out");
+        } else if e.is_connect() {
+          error!("Connection failed");
+        } else if e.is_request() {
+          error!("Request configuration error");
+        }
+      })
       .context("Failed to fetch Jira issues")?;
 
     let status = response.status();
