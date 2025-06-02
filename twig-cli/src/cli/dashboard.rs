@@ -11,11 +11,11 @@ use serde::Serialize;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
-use twig_gh::{GitHubPullRequest, create_github_client};
-use twig_jira::{Issue, create_jira_client};
+use twig_gh::GitHubPullRequest;
+use twig_jira::Issue;
 
-use crate::consts::{DEFAULT_JIRA_HOST, ENV_JIRA_HOST};
-use crate::creds::{get_github_credentials, get_jira_credentials};
+use crate::clients;
+use crate::creds::get_github_credentials;
 use crate::git::detect_current_repository;
 use crate::repo_state::RepoState;
 use crate::utils::output::{print_error, print_warning};
@@ -187,7 +187,7 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
   let mut pull_requests = Vec::new();
   if !skip_github {
     if let Ok(creds) = get_github_credentials() {
-      if let Ok(github_client) = create_github_client(&creds.username, &creds.password) {
+      if let Ok(github_client) = clients::create_github_client(&creds.username, &creds.password) {
         if let Ok((owner, repo_name)) = github_client.extract_repo_info_from_url(remote_url) {
           match rt.block_on(github_client.list_pull_requests(&owner, &repo_name, Some("open"), None)) {
             Ok(prs) => {
@@ -222,34 +222,29 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
   // Collect Jira issues
   let mut issues = Vec::new();
   if !skip_jira {
-    if let Ok(creds) = get_jira_credentials() {
-      // Get Jira host from environment or use default
-      let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
+    if let Ok(jira_client) = clients::create_jira_client_from_netrc() {
+      // Set up JQL filters
+      let assignee = if dashboard.mine { Some("me") } else { None };
+      let pagination = Some((50, 0));
 
-      if let Ok(jira_client) = create_jira_client(&jira_host, &creds.username, &creds.password) {
-        // Set up JQL filters
-        let assignee = if dashboard.mine { Some("me") } else { None };
-        let pagination = Some((50, 0));
-
-        match rt.block_on(jira_client.list_issues(None, None, assignee, pagination)) {
-          Ok(jira_issues) => {
-            for issue in jira_issues {
-              // Skip if we're only showing recent issues
-              if dashboard.recent {
-                if let Ok(updated_date) = chrono::DateTime::parse_from_rfc3339(&issue.fields.updated) {
-                  let seven_days_ago = chrono::Utc::now() - chrono::Duration::days(7);
-                  if updated_date < seven_days_ago {
-                    continue;
-                  }
+      match rt.block_on(jira_client.list_issues(None, None, assignee, pagination)) {
+        Ok(jira_issues) => {
+          for issue in jira_issues {
+            // Skip if we're only showing recent issues
+            if dashboard.recent {
+              if let Ok(updated_date) = chrono::DateTime::parse_from_rfc3339(&issue.fields.updated) {
+                let seven_days_ago = chrono::Utc::now() - chrono::Duration::days(7);
+                if updated_date < seven_days_ago {
+                  continue;
                 }
               }
-
-              issues.push(issue);
             }
+
+            issues.push(issue);
           }
-          Err(e) => {
-            print_warning(&format!("Failed to fetch Jira issues: {e}"));
-          }
+        }
+        Err(e) => {
+          print_warning(&format!("Failed to fetch Jira issues: {e}"));
         }
       }
     }

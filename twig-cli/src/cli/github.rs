@@ -11,11 +11,12 @@ use owo_colors::OwoColorize;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
-use twig_gh::{PullRequestStatus, create_github_client};
+use twig_gh::PullRequestStatus;
 
-use crate::creds::get_github_credentials;
+use crate::clients;
 use crate::git::detect_current_repository;
 use crate::repo_state::RepoState;
+use crate::utils::get_current_branch_github_pr;
 use crate::utils::output::{
   format_check_status, format_command, format_pr_review_status, print_error, print_info, print_success, print_warning,
 };
@@ -167,17 +168,7 @@ fn handle_check_command() -> Result<()> {
   // Create a runtime for async operations
   let rt = Runtime::new()?;
 
-  // Get GitHub credentials
-  let credentials = match get_github_credentials() {
-    Ok(creds) => creds,
-    Err(e) => {
-      print_error(&format!("Failed to get GitHub credentials: {e}"));
-      return Ok(());
-    }
-  };
-
-  // Create GitHub client
-  let github_client = create_github_client(&credentials.username, &credentials.password)?;
+  let github_client = clients::create_github_client_from_netrc()?;
 
   // Test connection
   match rt.block_on(github_client.test_connection()) {
@@ -214,22 +205,14 @@ fn handle_check_command() -> Result<()> {
 fn handle_checks_command(cmd: &ChecksCommand) -> Result<()> {
   use std::path::PathBuf;
 
-  use crate::utils::get_current_branch_github_pr;
-
-  // Create a runtime for async operations
-  let rt = Runtime::new()?;
-
-  // Get GitHub credentials
-  let credentials = match get_github_credentials() {
-    Ok(creds) => creds,
+  // Create a runtime and GitHub client
+  let (rt, github_client) = match clients::create_github_runtime_and_client() {
+    Ok(result) => result,
     Err(e) => {
-      print_error(&format!("Failed to get GitHub credentials: {e}"));
+      print_error(&format!("Failed to create GitHub client: {e}"));
       return Ok(());
     }
   };
-
-  // Create GitHub client
-  let github_client = create_github_client(&credentials.username, &credentials.password)?;
 
   // Get repository path (current or specified)
   let repo_path = if let Some(path) = &cmd.repo {
@@ -427,17 +410,7 @@ fn handle_pr_status_command() -> Result<()> {
   // Create a runtime for async operations
   let rt = Runtime::new()?;
 
-  // Get GitHub credentials
-  let credentials = match get_github_credentials() {
-    Ok(creds) => creds,
-    Err(e) => {
-      print_error(&format!("Failed to get GitHub credentials: {e}"));
-      return Ok(());
-    }
-  };
-
-  // Create GitHub client
-  let github_client = create_github_client(&credentials.username, &credentials.password)?;
+  let github_client = clients::create_github_client_from_netrc()?;
 
   // Get the current repository
   let repo_path = match detect_current_repository() {
@@ -539,17 +512,7 @@ fn handle_pr_list_command(cmd: &ListCommand) -> Result<()> {
   // Create a runtime for async operations
   let rt = Runtime::new()?;
 
-  // Get GitHub credentials
-  let credentials = match get_github_credentials() {
-    Ok(creds) => creds,
-    Err(e) => {
-      print_error(&format!("Failed to get GitHub credentials: {e}"));
-      return Ok(());
-    }
-  };
-
-  // Create GitHub client
-  let github_client = create_github_client(&credentials.username, &credentials.password)?;
+  let github_client = clients::create_github_client_from_netrc()?;
 
   // Get repository path (current or specified)
   let repo_path = if let Some(path) = &cmd.repo {
@@ -673,17 +636,7 @@ fn handle_pr_link_command(pr_url_or_id: &str) -> Result<()> {
   // Create a runtime for async operations
   let rt = Runtime::new()?;
 
-  // Get GitHub credentials
-  let credentials = match get_github_credentials() {
-    Ok(creds) => creds,
-    Err(e) => {
-      print_error(&format!("Failed to get GitHub credentials: {e}"));
-      return Ok(());
-    }
-  };
-
-  // Create GitHub client
-  let github_client = create_github_client(&credentials.username, &credentials.password)?;
+  let github_client = clients::create_github_client_from_netrc()?;
 
   // Get the current repository
   let repo_path = match detect_current_repository() {

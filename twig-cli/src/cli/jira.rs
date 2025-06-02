@@ -8,13 +8,10 @@ use clap::{Args, Subcommand};
 use git2::Repository as Git2Repository;
 use owo_colors::OwoColorize;
 use tokio::runtime::Runtime;
-use twig_jira::create_jira_client;
 
-use crate::consts::{DEFAULT_JIRA_HOST, ENV_JIRA_HOST};
-use crate::creds::get_jira_credentials;
-use crate::git;
 use crate::repo_state::{BranchMetadata, RepoState};
 use crate::utils::output::{print_error, print_info, print_success, print_warning};
+use crate::{clients, git};
 
 /// Command for Jira integration
 #[derive(Args)]
@@ -168,21 +165,7 @@ fn handle_view_issue_command(issue_key: &str) -> Result<()> {
   let rt = Runtime::new().context("Failed to create async runtime")?;
 
   rt.block_on(async {
-    // Get Jira credentials
-    let creds = match get_jira_credentials() {
-      Ok(creds) => creds,
-      Err(e) => {
-        print_error(&format!("Failed to get Jira credentials: {e}"));
-        print_info("Use the 'twig creds check' command to verify your credentials.");
-        return Ok(());
-      }
-    };
-
-    // Get Jira host from environment or use default
-    let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
-
-    // Create Jira client
-    let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
+    let jira_client = clients::create_jira_client_from_netrc()?;
 
     // Fetch the issue
     match jira_client.get_issue(issue_key).await {
@@ -250,26 +233,9 @@ fn handle_view_issue_command(issue_key: &str) -> Result<()> {
 
 /// Handle the transition issue command
 fn handle_transition_issue_command(issue_key: &str, transition: Option<&str>) -> Result<()> {
-  // Create a tokio runtime for async operations
-  let rt = Runtime::new().context("Failed to create async runtime")?;
+  let (rt, jira_client) = clients::create_jira_runtime_and_client()?;
 
   rt.block_on(async {
-    // Get Jira credentials
-    let creds = match get_jira_credentials() {
-      Ok(creds) => creds,
-      Err(e) => {
-        print_error(&format!("Failed to get Jira credentials: {e}"));
-        print_info("Use the 'twig creds check' command to verify your credentials.");
-        return Ok(());
-      }
-    };
-
-    // Get Jira host from environment or use default
-    let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
-
-    // Create Jira client
-    let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
-
     // If no transition is specified, list available transitions
     if transition.is_none() {
       print_info(&format!("Available transitions for issue {issue_key}:"));
@@ -341,26 +307,9 @@ fn handle_transition_issue_command(issue_key: &str, transition: Option<&str>) ->
 
 /// Handle the create branch command
 fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<()> {
-  // Create a tokio runtime for async operations
-  let rt = Runtime::new().context("Failed to create async runtime")?;
+  let (rt, jira_client) = clients::create_jira_runtime_and_client()?;
 
   rt.block_on(async {
-    // Get Jira credentials
-    let creds = match get_jira_credentials() {
-      Ok(creds) => creds,
-      Err(e) => {
-        print_error(&format!("Failed to get Jira credentials: {e}"));
-        print_info("Use the 'twig creds check' command to verify your credentials.");
-        return Ok(());
-      }
-    };
-
-    // Get Jira host from environment or use default
-    let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
-
-    // Create Jira client
-    let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
-
     // Fetch the issue to get its summary
     let issue = match jira_client.get_issue(issue_key).await {
       Ok(issue) => issue,
@@ -468,26 +417,8 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
 
 /// Handle the link branch command
 fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Result<()> {
-  // Create a tokio runtime for async operations
-  let rt = Runtime::new().context("Failed to create async runtime")?;
-
+  let (rt, jira_client) = clients::create_jira_runtime_and_client()?;
   rt.block_on(async {
-    // Get Jira credentials
-    let creds = match get_jira_credentials() {
-      Ok(creds) => creds,
-      Err(e) => {
-        print_error(&format!("Failed to get Jira credentials: {e}"));
-        print_info("Use the 'twig creds check' command to verify your credentials.");
-        return Ok(());
-      }
-    };
-
-    // Get Jira host from environment or use default
-    let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
-
-    // Create Jira client
-    let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
-
     // Verify the issue exists
     match jira_client.get_issue(issue_key).await {
       Ok(_) => {

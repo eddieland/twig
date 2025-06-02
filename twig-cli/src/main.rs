@@ -13,6 +13,7 @@ use tracing_subscriber::{EnvFilter, fmt};
 
 mod auto_dependency_discovery;
 mod cli;
+mod clients;
 mod completion;
 mod config;
 mod consts;

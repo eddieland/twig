@@ -6,6 +6,7 @@
 
 pub mod auto_dependency_discovery;
 pub mod cli;
+pub mod clients;
 pub mod completion;
 pub mod config;
 pub mod consts;

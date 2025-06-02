@@ -11,7 +11,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use tokio::runtime::Runtime;
 
-use crate::creds::get_github_credentials;
+use crate::clients;
 use crate::repo_state::{BranchMetadata, RepoState};
 use crate::utils::output::{print_info, print_success, print_warning};
 
@@ -229,14 +229,7 @@ fn detect_jira_issue_from_branch(branch_name: &str) -> Option<String> {
 
 /// Detect GitHub PR number from branch using GitHub API
 async fn detect_github_pr_from_branch(branch_name: &str, repo_path: &std::path::Path) -> Option<u32> {
-  // Get GitHub credentials
-  let credentials = match get_github_credentials() {
-    Ok(creds) => creds,
-    Err(_) => return None, // Silently fall back if no credentials
-  };
-
-  // Create GitHub client
-  let github_client = match twig_gh::create_github_client(&credentials.username, &credentials.password) {
+  let github_client = match clients::create_github_client_from_netrc() {
     Ok(client) => client,
     Err(_) => return None, // Silently fall back if client creation fails
   };

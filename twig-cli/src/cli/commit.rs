@@ -6,10 +6,8 @@
 use anyhow::{Context, Result};
 use clap::Args;
 use tokio::runtime::Runtime;
-use twig_jira::create_jira_client;
 
-use crate::consts::{DEFAULT_JIRA_HOST, ENV_JIRA_HOST};
-use crate::creds::get_jira_credentials;
+use crate::clients;
 use crate::git::detect_current_repository;
 use crate::utils::get_current_branch_jira_issue;
 use crate::utils::output::{print_error, print_info, print_success, print_warning};
@@ -49,14 +47,7 @@ pub fn handle_commit_command(args: CommitArgs) -> Result<()> {
     }
   };
 
-  // Get Jira credentials and create client
-  let credentials = get_jira_credentials().context("Failed to get Jira credentials")?;
-
-  // Get Jira host from environment or use default
-  let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
-
-  // Create Jira client
-  let jira_client = create_jira_client(&jira_host, &credentials.username, &credentials.password)?;
+  let jira_client = clients::create_jira_client_from_netrc()?;
 
   // Create a runtime for async operations
   let rt = Runtime::new().context("Failed to create tokio runtime")?;

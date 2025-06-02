@@ -7,11 +7,8 @@ use anyhow::{Context, Result};
 use clap::Args;
 use git2::Repository as Git2Repository;
 use tokio::runtime::Runtime;
-use twig_gh::create_github_client;
-use twig_jira::create_jira_client;
 
-use crate::consts::{DEFAULT_JIRA_HOST, ENV_JIRA_HOST};
-use crate::creds::{get_github_credentials, get_jira_credentials};
+use crate::clients;
 use crate::git::detect_current_repository;
 use crate::repo_state::{BranchMetadata, RepoState};
 use crate::utils::output::{print_error, print_info, print_success, print_warning};
@@ -383,26 +380,9 @@ fn create_branch_from_jira_issue(
   issue_key: &str,
   parent_option: Option<&str>,
 ) -> Result<()> {
-  // Create a runtime for async operations
-  let rt = Runtime::new().context("Failed to create async runtime")?;
+  let (rt, jira_client) = clients::create_jira_runtime_and_client()?;
 
   rt.block_on(async {
-    // Get Jira credentials
-    let creds = match get_jira_credentials() {
-      Ok(creds) => creds,
-      Err(e) => {
-        print_error(&format!("Failed to get Jira credentials: {e}"));
-        print_info("Use 'twig creds check' to verify your credentials.");
-        return Err(e);
-      }
-    };
-
-    // Get Jira host from environment or use default
-    let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
-
-    // Create Jira client
-    let jira_client = create_jira_client(&jira_host, &creds.username, &creds.password)?;
-
     // Fetch the issue to get its summary
     let issue = match jira_client.get_issue(issue_key).await {
       Ok(issue) => issue,
@@ -459,17 +439,8 @@ fn create_branch_from_github_pr(
   let rt = Runtime::new().context("Failed to create async runtime")?;
 
   rt.block_on(async {
-    // Get GitHub credentials
-    let credentials = match get_github_credentials() {
-      Ok(creds) => creds,
-      Err(e) => {
-        print_error(&format!("Failed to get GitHub credentials: {e}"));
-        return Err(e);
-      }
-    };
-
     // Create GitHub client
-    let github_client = create_github_client(&credentials.username, &credentials.password)?;
+    let github_client = clients::create_github_client_from_netrc()?;
 
     // Open the git repository to get remote info
     let repo = Git2Repository::open(repo_path)?;
