@@ -3,6 +3,7 @@
 This document contains user stories derived from feedback provided by an argit user, capturing key workflows and feature requests that should be considered for twig implementation.
 
 The user stories are categorized into:
+
 1. **Core argit Features** - Existing functionality in argit that should be implemented in twig
 2. **Enhancement Requests** - Nice-to-have improvements that weren't in the original argit
 
@@ -10,48 +11,118 @@ The user stories are categorized into:
 
 ### Creating and Navigating Branches
 
-1. **As a developer**, I want to create new branches linked to tickets using a simple command (`flow`/`switch`) so that I can quickly start working on new features or fixes.
+1. I want to create new branches linked to tickets using a simple command (`flow`/`switch`) so that I can quickly start working on new features or fixes.
 
-2. **As a developer**, I want to quickly navigate to the root branch (`flow --root`/`switch --root`) so that I can update my local repository with the latest changes.
+   **Implementation Status**: ✅ Fully implemented
 
-3. **As a developer**, I want to quickly navigate to branches associated with specific stories or PRs (`story go`/`pr go`) so that I can efficiently switch between different tasks.
+   - In argit, `argit flow J-123` was used to switch to (and create if needed) a Jira branch
+   - Twig provides `twig switch` command that can create branches from Jira issues
+   - Also offers `twig jira branch create` for explicit creation
+   - Example: `twig switch PROJ-123` or `twig jira branch create PROJ-123`
+
+2. I want to quickly navigate to the root branch (`flow --root`/`switch --root`) so that I can update my local repository with the latest changes.
+
+   **Implementation Status**: ⚠️ Partially implemented
+
+   - Twig doesn't have a direct `--root` flag for switch
+   - However, you can switch to them directly: `twig switch main`
+
+3. I want to quickly open the web browser to view Jira issues or GitHub PRs (`story go`/`pr go`) so that I can easily access their details.
+
+   **Implementation Status**: ⚠️ Not yet implemented
+
+   - In argit, `argit pr go` and `argit story go` opened the web browser to view the PR/story
+   - Twig currently has no direct equivalent for opening the web browser to view the PR/story
+   - Branch switching is handled separately by the `switch` command (see item #1)
 
 ### Branch Rebasing and Dependency Management
 
-4. **As a developer**, I want to perform cascading rebases (`cascade`) so that changes from parent branches automatically propagate to all child branches.
+4. I want to perform cascading rebases (`cascade`) so that changes from parent branches automatically propagate to all child branches.
 
-5. **As a developer**, I want to easily identify when my tickets have landed (`tidy`) so that I can update ticket statuses in project management tools.
+   **Implementation Status**: ✅ Fully implemented
 
-6. **As a developer**, I want to add dependencies to parent branches (`track`) so that I can establish relationships between my current branch and its parent branch (e.g., `track feat/my-parent`).
+   - Twig provides `twig cascade` command
+   - Supports options like `--max-depth`, `--force`, `--show-graph`, and `--autostash`
+   - Example: `twig cascade`
+
+5. I want to easily identify when my tickets have landed (`tidy`) so that I can update ticket statuses in project management tools.
+
+   **Implementation Status**: ⚠️ Partially implemented
+
+   - Twig doesn't have a direct equivalent to argit's `tidy`
+   - However, `twig git stale-branches` provides similar functionality to identify branches that haven't been updated recently
+   - Example: `twig git stale-branches --days 30`
+
+6. I want to add dependencies to parent branches (`track`) so that I can establish relationships between my current branch and its parent branch (e.g., `track feat/my-parent`).
+
+   **Implementation Status**: ✅ Fully implemented
+
+   - Twig provides `twig branch depend` command
+   - Example: `twig branch depend feature/child-branch feature/parent-branch`
+   - Dependencies are visualized with `twig tree`
 
 ### Branch Locking
 
-7. **As a developer**, I want to lock branches (`lock`) so that I can create temporary branches that I don't want to push but still want to consistently rebase.
+7. I want to lock branches (`lock`) so that I can create temporary branches that I don't want to push but still want to consistently rebase.
+
+   **Implementation Status**: ⚠️ Partially implemented
+
+   - Similar behavior can be achieved by defining separate root branches
+   - Direct branch locking functionality is planned for future implementation
 
 ## Enhancement Requests
 
 ### Branch Management Improvements
 
-8. **As a developer**, I want child branches to be automatically reparented when their parent branch is merged so that my branch hierarchy remains clean and accurate.
+8. I want child branches to be automatically reparented when their parent branch is merged so that my branch hierarchy remains clean and accurate.
 
-9. **As a developer**, I want an aggressive cleanup option (`tidy --aggressive`) so that I can remove empty parent branches and maintain a cleaner branch structure.
+   **Implementation Status**: ❌ Not yet implemented
+
+   - This feature is not currently available in twig
+   - Planned for future implementation
+
+9. I want an aggressive cleanup option (`tidy --aggressive`) so that I can remove empty parent branches and maintain a cleaner branch structure.
+
+   **Implementation Status**: ❌ Not yet implemented
+
+   - This feature is not currently available in twig
+   - Planned for future implementation
 
 ### Configuration Management
 
-10. **As a developer**, I want a global configuration option that works across repositories so that I can use the same workflow tools even in repositories without specific tool configuration.
+10. I want a global configuration option that works across repositories so that I can use the same workflow tools even in repositories without specific tool configuration and so that I can keep repository content and history clean.
 
-11. **As a developer**, I want to initialize repositories without checking in configuration files so that I can keep repository history clean while still using workflow tools.
+    **Implementation Status**: ⚠️ Partially implemented
+
+    - Twig stores some configuration in XDG directories (`~/.config/twig`, etc.)
+    - However, it still creates a `.twig` directory inside each repository
+      - This directory needs to be added to `.gitignore` to keep the repository clean
+    - Repositories are tracked globally: `twig git add /path/to/repo`
 
 ### Integration with External Tools
 
-12. **As a developer**, I want integration with lat-pr for handling parent branches and labels so that I can maintain branch dependencies when creating pull requests.
+11. I want integration with lat-pr for handling parent branches and labels so that I can maintain branch dependencies when creating pull requests.
+
+    **Implementation Status**: ❌ Not yet implemented
+
+    - This feature is not currently available in twig
+    - Planned for future implementation
 
 ### Enhanced Branch Locking
 
-13. **As a developer**, I want different levels of branch locking so that I can control how branches are managed:
-   - Normal branches (standard workflow)
-   - Local-only branches (for temporary work that shouldn't be pushed)
-   - Remote-updates-only branches (based on someone else's branch)
+12. I want different levels of branch locking so that I can control how branches are managed:
+
+    - Normal branches (standard workflow)
+    - Local-only branches (for temporary work that shouldn't be pushed)
+    - Remote-updates-only branches (based on someone else's branch)
+
+    **Implementation Status**: ⚠️ Partially implemented
+
+    - Similar behavior can be achieved by defining separate root branches
+      - Root branches can be defined using `twig branch root add <branch-name>`
+      - Different root branches can have separate dependency trees
+      - This allows for isolation between different types of branches
+    - Direct ignore/locking type support will be added in a future implementation
 
 ## Deprecated Features
 
@@ -68,8 +139,35 @@ When implementing these features in twig, consider:
 1. Maintaining compatibility with existing workflows while leveraging Rust's performance benefits
 2. Providing clear migration paths from argit commands to twig equivalents
 3. Enhancing the most frequently used commands first:
-   - `flow`/`switch`
-   - `cascade`
-   - `tidy`
-   - `track`
-   - `story go`/`pr go`
+   - `flow`/`switch` - ✅ Implemented
+   - `cascade` - ✅ Implemented
+   - `tidy` - ⚠️ Partially implemented via `git stale-branches`
+   - `track` - ✅ Implemented via `branch depend`
+   - `story go`/`pr go` - ⚠️ Not yet implemented
+
+## Additional Features in Twig
+
+Twig offers several features that weren't in the original argit:
+
+1. **Worktree Support**: Efficiently manage git worktrees for feature development
+
+   - `twig worktree create feature/new-thing`
+   - `twig worktree list`
+   - `twig worktree clean`
+
+2. **GitHub Integration**: Track PR status and review information
+
+   - `twig github pr status`
+   - `twig github checks`
+
+3. **Batch Operations**: Execute commands across all tracked repositories
+
+   - `twig git exec "git status"`
+
+4. **Comprehensive Dashboard**: View all branches, PRs, and issues in one place
+
+   - `twig dashboard`
+
+5. **Upward Rebasing**: Rebase current branch on its ancestors
+
+   - `twig rebase`
