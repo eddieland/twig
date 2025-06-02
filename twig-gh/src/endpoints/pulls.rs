@@ -55,7 +55,7 @@ impl GitHubClient {
       .basic_auth(&self.auth.username, Some(&self.auth.token))
       .send()
       .await
-      .context("Failed to send request to GitHub API")?;
+      .context(format!("GET {url} failed"))?;
 
     if !response.status().is_success() {
       let status = response.status();
@@ -89,7 +89,7 @@ impl GitHubClient {
       .basic_auth(&self.auth.username, Some(&self.auth.token))
       .send()
       .await
-      .context("Failed to send request to GitHub API")?;
+      .context(format!("GET {url} failed"))?;
 
     let status = response.status();
     debug!("GitHub API response status: {}", status);
@@ -145,7 +145,7 @@ impl GitHubClient {
       .basic_auth(&self.auth.username, Some(&self.auth.token))
       .send()
       .await
-      .context("Failed to send request to GitHub API")?;
+      .context(format!("GET {url} failed"))?;
 
     let status = response.status();
     debug!("GitHub API response status: {}", status);
@@ -209,6 +209,7 @@ impl GitHubClient {
 
     Ok(status)
   }
+
   /// Find pull requests by head branch name
   #[instrument(skip(self), level = "debug")]
   pub async fn find_pull_requests_by_head_branch(

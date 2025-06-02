@@ -45,7 +45,7 @@ impl JiraClient {
       .basic_auth(&self.auth.username, Some(&self.auth.api_token))
       .send()
       .await
-      .context("Failed to fetch Jira issue")?;
+      .context(format!("GET {url} failed"))?;
 
     let status = response.status();
     debug!("Jira API response status: {}", status);
@@ -149,7 +149,7 @@ impl JiraClient {
           error!("Request configuration error");
         }
       })
-      .context("Failed to fetch Jira issues")?;
+      .context(format!("GET {url} failed"))?;
 
     let status = response.status();
     debug!("Jira API response status: {}", status);
@@ -215,7 +215,7 @@ impl JiraClient {
       .json(&body)
       .send()
       .await
-      .context("Failed to add comment to Jira issue")?;
+      .context(format!("POST {url} failed"))?;
 
     let status = response.status();
     debug!("Jira API response status: {}", status);

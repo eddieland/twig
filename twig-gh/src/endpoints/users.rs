@@ -22,7 +22,7 @@ impl GitHubClient {
       .basic_auth(&self.auth.username, Some(&self.auth.token))
       .send()
       .await
-      .context("Failed to fetch GitHub user")?;
+      .context(format!("GET {url} failed"))?;
 
     match response.status() {
       StatusCode::OK => {
