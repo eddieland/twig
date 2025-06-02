@@ -320,7 +320,7 @@ fn display_text_dashboard(data: &DashboardData, include_remote: bool, skip_githu
 
   // Display branches
   println!(
-    "\n{}",
+    "{}",
     (if include_remote {
       "All Branches (Local & Remote)"
     } else {
