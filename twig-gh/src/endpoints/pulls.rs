@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use reqwest::header;
-use tracing::{debug, instrument, trace, warn};
+use tracing::{debug, info, instrument, trace, warn};
 
 use crate::client::GitHubClient;
 use crate::consts::{ACCEPT, USER_AGENT};
@@ -35,7 +35,7 @@ impl GitHubClient {
     let state_param = state.unwrap_or("open");
     let pagination = pagination_options.unwrap_or_default();
 
-    debug!(
+    info!(
       "Listing pull requests for {}/{} with state={}",
       owner, repo, state_param
     );
@@ -72,20 +72,10 @@ impl GitHubClient {
     Ok(pull_requests)
   }
 
-  /// Get pull requests for a repository
-  #[allow(dead_code)]
-  pub async fn get_pull_requests(
-    &self,
-    owner: &str,
-    repo: &str,
-    state: Option<&str>,
-  ) -> Result<Vec<GitHubPullRequest>> {
-    self.list_pull_requests(owner, repo, state, None).await
-  }
   /// Get a specific pull request by number
   #[instrument(skip(self), level = "debug")]
   pub async fn get_pull_request(&self, owner: &str, repo: &str, pr_number: u32) -> Result<GitHubPullRequest> {
-    debug!("Fetching pull request #{} for {}/{}", pr_number, owner, repo);
+    info!("Fetching pull request #{} for {}/{}", pr_number, owner, repo);
 
     let url = format!("{}/repos/{}/{}/pulls/{}", self.base_url, owner, repo, pr_number);
 
@@ -106,7 +96,7 @@ impl GitHubClient {
 
     match status {
       reqwest::StatusCode::OK => {
-        debug!("Successfully received pull request data");
+        info!("Successfully received pull request data");
         let pull_request = response
           .json::<GitHubPullRequest>()
           .await
@@ -141,7 +131,7 @@ impl GitHubClient {
     repo: &str,
     pr_number: u32,
   ) -> Result<Vec<PullRequestReview>> {
-    debug!("Fetching reviews for PR #{} in {}/{}", pr_number, owner, repo);
+    info!("Fetching reviews for PR #{} in {}/{}", pr_number, owner, repo);
 
     let url = format!("{}/repos/{}/{}/pulls/{}/reviews", self.base_url, owner, repo, pr_number);
 
@@ -162,7 +152,7 @@ impl GitHubClient {
 
     match status {
       reqwest::StatusCode::OK => {
-        debug!("Successfully received PR reviews data");
+        info!("Successfully received PR reviews data");
         let reviews = response
           .json::<Vec<PullRequestReview>>()
           .await
@@ -193,7 +183,7 @@ impl GitHubClient {
   /// runs
   #[instrument(skip(self), level = "debug")]
   pub async fn get_pr_status(&self, owner: &str, repo: &str, pr_number: u32) -> Result<PullRequestStatus> {
-    debug!("Fetching PR status for #{} in {}/{}", pr_number, owner, repo);
+    info!("Fetching PR status for #{} in {}/{}", pr_number, owner, repo);
 
     // Get the PR details
     let pr = self.get_pull_request(owner, repo, pr_number).await?;
@@ -211,7 +201,7 @@ impl GitHubClient {
       check_runs,
     };
 
-    debug!(
+    info!(
       "Successfully fetched PR status with {} reviews and {} check runs",
       status.reviews.len(),
       status.check_runs.len()
@@ -228,7 +218,7 @@ impl GitHubClient {
     branch_name: &str,
     state: Option<&str>,
   ) -> Result<Vec<GitHubPullRequest>> {
-    debug!(
+    info!(
       "Finding pull requests for {}/{} with head branch: {}",
       owner, repo, branch_name
     );
@@ -250,7 +240,7 @@ impl GitHubClient {
       })
       .collect();
 
-    debug!(
+    info!(
       "Found {} pull requests with head branch: {}",
       matching_prs.len(),
       branch_name

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use reqwest::{StatusCode, header};
-use tracing::instrument;
+use tracing::{info, instrument};
 
 use crate::client::GitHubClient;
 use crate::consts::{ACCEPT, USER_AGENT};
@@ -10,6 +10,8 @@ impl GitHubClient {
   /// Get the current authenticated user
   #[instrument(skip(self), level = "debug")]
   pub async fn get_current_user(&self) -> Result<GitHubUser> {
+    info!("Fetching current user profile");
+
     let url = format!("{}/user", self.base_url);
 
     let response = self

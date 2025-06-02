@@ -35,7 +35,7 @@ impl JiraClient {
   #[instrument(skip(self), level = "debug")]
   pub async fn get_issue(&self, issue_key: &str) -> Result<Issue> {
     let url = format!("{}/rest/api/2/issue/{}", self.base_url, issue_key);
-    debug!("Fetching Jira issue: {}", issue_key);
+    info!("Fetching Jira issue: {}", issue_key);
     trace!("Jira API URL: {}", url);
 
     let response = self
@@ -52,7 +52,7 @@ impl JiraClient {
 
     match status {
       StatusCode::OK => {
-        debug!("Successfully received Jira issue data");
+        info!("Successfully received Jira issue data");
         let issue = response.json::<Issue>().await.context("Failed to parse Jira issue")?;
 
         info!("Successfully fetched Jira issue: {}", issue_key);
@@ -115,7 +115,7 @@ impl JiraClient {
       format!("{} order by updated DESC", jql_parts.join(" AND "))
     };
 
-    debug!("JQL query: {}", jql);
+    info!("JQL query: {}", jql);
 
     // Set up pagination
     let (max_results, start_at) = pagination_options.unwrap_or((50, 0));
@@ -178,7 +178,7 @@ impl JiraClient {
   /// Add a comment to a Jira issue
   #[instrument(skip(self, comment_text), level = "debug")]
   pub async fn add_comment(&self, issue_key: &str, comment_text: &str, dry_run: bool) -> Result<Option<Comment>> {
-    debug!("Adding comment to Jira issue: {}", issue_key);
+    info!("Adding comment to Jira issue: {}", issue_key);
 
     if dry_run {
       info!("Dry run: Would add comment to issue {}", issue_key);

@@ -200,28 +200,23 @@ fn handle_setup_command() -> Result<()> {
           format!("https://{jira_domain}")
         };
 
-        match create_jira_client(&jira_url, &jira_email, &jira_token) {
-          Ok(client) => match rt.block_on(client.test_connection()) {
-            Ok(true) => {
-              print_success("Jira credentials validated successfully!");
-              write_netrc_entry("atlassian.net", &jira_email, &jira_token)?;
-            }
-            Ok(false) => {
-              print_error("Failed to validate Jira credentials. Please check your credentials and domain.");
-              print_info("Common issues:");
-              println!("  • Make sure your email is correct");
-              println!("  • Verify your API token is valid and not expired");
-              println!("  • Check that the domain is correct (e.g., mycompany.atlassian.net)");
-              print_info("You can manually add credentials to your .netrc file later.");
-            }
-            Err(e) => {
-              print_error(&format!("Error validating Jira credentials: {e}"));
-              print_info("This might be a network issue or the Jira instance might be unreachable.");
-              print_info("You can manually add credentials to your .netrc file later.");
-            }
-          },
+        let client = create_jira_client(&jira_url, &jira_email, &jira_token);
+        match rt.block_on(client.test_connection()) {
+          Ok(true) => {
+            print_success("Jira credentials validated successfully!");
+            write_netrc_entry("atlassian.net", &jira_email, &jira_token)?;
+          }
+          Ok(false) => {
+            print_error("Failed to validate Jira credentials. Please check your credentials and domain.");
+            print_info("Common issues:");
+            println!("  • Make sure your email is correct");
+            println!("  • Verify your API token is valid and not expired");
+            println!("  • Check that the domain is correct (e.g., mycompany.atlassian.net)");
+            print_info("You can manually add credentials to your .netrc file later.");
+          }
           Err(e) => {
-            print_error(&format!("Error creating Jira client: {e}"));
+            print_error(&format!("Error validating Jira credentials: {e}"));
+            print_info("This might be a network issue or the Jira instance might be unreachable.");
             print_info("You can manually add credentials to your .netrc file later.");
           }
         }
@@ -261,28 +256,23 @@ fn handle_setup_command() -> Result<()> {
     } else {
       // Validate GitHub credentials
       print_info("Validating GitHub credentials...");
-      match create_github_client(&github_username, &github_token) {
-        Ok(client) => match rt.block_on(client.test_connection()) {
-          Ok(true) => {
-            print_success("GitHub credentials validated successfully!");
-            write_netrc_entry("github.com", &github_username, &github_token)?;
-          }
-          Ok(false) => {
-            print_error("Failed to validate GitHub credentials. Please check your username and token.");
-            print_info("Common issues:");
-            println!("  • Make sure your username is correct");
-            println!("  • Verify your Personal Access Token is valid and not expired");
-            println!("  • Check that the token has required scopes: repo, read:user");
-            print_info("You can manually add credentials to your .netrc file later.");
-          }
-          Err(e) => {
-            print_error(&format!("Error validating GitHub credentials: {e}",));
-            print_info("This might be a network issue or GitHub might be unreachable.");
-            print_info("You can manually add credentials to your .netrc file later.");
-          }
-        },
+      let client = create_github_client(&github_username, &github_token);
+      match rt.block_on(client.test_connection()) {
+        Ok(true) => {
+          print_success("GitHub credentials validated successfully!");
+          write_netrc_entry("github.com", &github_username, &github_token)?;
+        }
+        Ok(false) => {
+          print_error("Failed to validate GitHub credentials. Please check your username and token.");
+          print_info("Common issues:");
+          println!("  • Make sure your username is correct");
+          println!("  • Verify your Personal Access Token is valid and not expired");
+          println!("  • Check that the token has required scopes: repo, read:user");
+          print_info("You can manually add credentials to your .netrc file later.");
+        }
         Err(e) => {
-          print_error(&format!("Error creating GitHub client: {e}",));
+          print_error(&format!("Error validating GitHub credentials: {e}",));
+          print_info("This might be a network issue or GitHub might be unreachable.");
           print_info("You can manually add credentials to your .netrc file later.");
         }
       }

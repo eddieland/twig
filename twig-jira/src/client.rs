@@ -22,14 +22,14 @@ impl JiraClient {
   /// Create a new Jira client
   #[instrument(skip(auth), level = "debug")]
   pub fn new(base_url: &str, auth: JiraAuth) -> Self {
-    debug!("Creating new Jira client for base URL: {}", base_url);
+    info!("Creating new Jira client for base URL: {}", base_url);
     let client = Client::new();
     let instance = Self {
       client,
       base_url: base_url.to_string(),
       auth,
     };
-    debug!("Jira client created successfully");
+    info!("Jira client created successfully");
     instance
   }
 
@@ -63,19 +63,12 @@ impl JiraClient {
 }
 
 /// Create a Jira client from credentials
-#[instrument(skip(api_token), level = "debug")]
-pub fn create_jira_client(base_url: &str, username: &str, api_token: &str) -> Result<JiraClient> {
-  debug!("Creating Jira client for URL: {} with username: {}", base_url, username);
-
+pub fn create_jira_client(base_url: &str, username: &str, api_token: &str) -> JiraClient {
   let auth = JiraAuth {
     username: username.to_string(),
     api_token: api_token.to_string(),
   };
-
-  let client = JiraClient::new(base_url, auth);
-  debug!("Jira client created successfully");
-
-  Ok(client)
+  JiraClient::new(base_url, auth)
 }
 
 #[cfg(test)]

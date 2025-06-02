@@ -187,32 +187,31 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
   let mut pull_requests = Vec::new();
   if !skip_github {
     if let Ok(creds) = get_github_credentials() {
-      if let Ok(github_client) = clients::create_github_client(&creds.username, &creds.password) {
-        if let Ok((owner, repo_name)) = github_client.extract_repo_info_from_url(remote_url) {
-          match rt.block_on(github_client.list_pull_requests(&owner, &repo_name, Some("open"), None)) {
-            Ok(prs) => {
-              for pr in prs {
-                // Skip if we're only showing PRs created by the current user
-                if dashboard.mine && pr.user.login != creds.username {
-                  continue;
-                }
+      let github_client = clients::create_github_client(&creds.username, &creds.password);
+      if let Ok((owner, repo_name)) = github_client.extract_repo_info_from_url(remote_url) {
+        match rt.block_on(github_client.list_pull_requests(&owner, &repo_name, Some("open"), None)) {
+          Ok(prs) => {
+            for pr in prs {
+              // Skip if we're only showing PRs created by the current user
+              if dashboard.mine && pr.user.login != creds.username {
+                continue;
+              }
 
-                // Skip if we're only showing recent PRs
-                if dashboard.recent {
-                  if let Ok(created_date) = chrono::DateTime::parse_from_rfc3339(&pr.created_at) {
-                    let seven_days_ago = chrono::Utc::now() - chrono::Duration::days(7);
-                    if created_date < seven_days_ago {
-                      continue;
-                    }
+              // Skip if we're only showing recent PRs
+              if dashboard.recent {
+                if let Ok(created_date) = chrono::DateTime::parse_from_rfc3339(&pr.created_at) {
+                  let seven_days_ago = chrono::Utc::now() - chrono::Duration::days(7);
+                  if created_date < seven_days_ago {
+                    continue;
                   }
                 }
-
-                pull_requests.push(pr);
               }
+
+              pull_requests.push(pr);
             }
-            Err(e) => {
-              print_warning(&format!("Failed to fetch GitHub pull requests: {e}"));
-            }
+          }
+          Err(e) => {
+            print_warning(&format!("Failed to fetch GitHub pull requests: {e}"));
           }
         }
       }

@@ -22,7 +22,7 @@ use crate::creds::{get_github_credentials, get_jira_credentials};
 pub fn create_github_client_from_netrc() -> Result<GitHubClient> {
   let credentials = get_github_credentials().context("Failed to get GitHub credentials")?;
 
-  create_github_client(&credentials.username, &credentials.password).context("Failed to create GitHub client")
+  Ok(create_github_client(&credentials.username, &credentials.password))
 }
 
 /// Creates an authenticated Jira client using credentials from .netrc
@@ -36,7 +36,11 @@ pub fn create_jira_client_from_netrc() -> Result<JiraClient> {
   // Get Jira host from environment or use default
   let jira_host = std::env::var(ENV_JIRA_HOST).unwrap_or_else(|_| DEFAULT_JIRA_HOST.to_string());
 
-  create_jira_client(&jira_host, &credentials.username, &credentials.password).context("Failed to create Jira client")
+  Ok(create_jira_client(
+    &jira_host,
+    &credentials.username,
+    &credentials.password,
+  ))
 }
 
 /// Creates a tokio runtime and an authenticated GitHub client

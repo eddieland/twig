@@ -22,14 +22,14 @@ impl GitHubClient {
   /// Create a new GitHub client
   #[instrument(skip(auth), level = "debug")]
   pub fn new(auth: GitHubAuth) -> Self {
-    debug!("Creating new GitHub client");
+    info!("Creating new GitHub client");
     let client = Client::new();
     let instance = Self {
       client,
       base_url: API_BASE_URL.to_string(),
       auth,
     };
-    debug!("GitHub client created with base URL: {}", instance.base_url);
+    info!("GitHub client created with base URL: {}", instance.base_url);
     instance
   }
 
@@ -64,19 +64,12 @@ impl GitHubClient {
 }
 
 /// Create a GitHub client from credentials
-#[instrument(skip(token), level = "debug")]
-pub fn create_github_client(username: &str, token: &str) -> Result<GitHubClient> {
-  debug!("Creating GitHub client with username: {}", username);
-
+pub fn create_github_client(username: &str, token: &str) -> GitHubClient {
   let auth = GitHubAuth {
     username: username.to_string(),
     token: token.to_string(),
   };
-
-  let client = GitHubClient::new(auth);
-  debug!("GitHub client created successfully");
-
-  Ok(client)
+  GitHubClient::new(auth)
 }
 
 #[cfg(test)]

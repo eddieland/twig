@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use reqwest::{StatusCode, header};
 use serde::Deserialize;
-use tracing::instrument;
+use tracing::{info, instrument};
 
 use crate::client::GitHubClient;
 use crate::consts::{ACCEPT, USER_AGENT};
@@ -11,10 +11,9 @@ impl GitHubClient {
   /// Get check runs for a pull request
   #[instrument(skip(self), level = "debug")]
   pub async fn get_check_runs(&self, owner: &str, repo: &str, ref_sha: &str) -> Result<Vec<CheckRun>> {
-    let url = format!(
-      "{}/repos/{}/{}/commits/{}/check-runs",
-      self.base_url, owner, repo, ref_sha
-    );
+    info!("Listing check runs for {}/{} @{}", owner, repo, ref_sha);
+
+    let url = format!("{}/repos/{owner}/{repo}/commits/{ref_sha}/check-runs", self.base_url);
 
     let response = self
       .client
