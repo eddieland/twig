@@ -1,0 +1,10 @@
+---
+source: twig-cli/src/tree_renderer.rs
+expression: output_str
+---
+main
+└── shared-feature (current)
+
+develop
+
+release

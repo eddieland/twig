@@ -12,6 +12,7 @@ help: ## Display this help
 .PHONY: fmt
 fmt: ## Format code using rustfmt
 	cargo fmt --all
+	cargo clippy --fix --allow-dirty
 
 .PHONY: lint
 lint: ## Run clippy for linting
@@ -48,15 +49,15 @@ all: fmt lint test ## Run fmt, lint, and test
 
 .PHONY: insta-review
 insta-review: ## Review Insta snapshots
-	cargo insta review
+	cargo insta review --workspace
 
 .PHONY: insta-accept
 insta-accept: ## Accept all pending Insta snapshots
-	cargo insta accept
+	cargo insta accept --workspace
 
 .PHONY: insta-reject
 insta-reject: ## Reject all pending Insta snapshots
-	cargo insta reject
+	cargo insta reject --workspace
 
 .PHONY: update-snapshots
 update-snapshots: ## Run tests and update snapshots

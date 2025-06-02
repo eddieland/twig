@@ -1,0 +1,7 @@
+---
+source: twig-cli/src/tree_renderer.rs
+expression: output_str
+---
+main
+└── level1
+    └── level2

@@ -84,15 +84,8 @@ pub(crate) fn handle_tree_command(tree: TreeArgs) -> Result<()> {
 
   // Create and configure the tree renderer
   let mut renderer = TreeRenderer::new(&branch_nodes, &roots, tree.max_depth, tree.no_color);
-
-  // Render all root trees
   let mut stdout = io::stdout();
-  for (i, root) in roots.iter().enumerate() {
-    if i > 0 {
-      println!(); // Add spacing between multiple trees
-    }
-    renderer.render_tree(&mut stdout, root, 0, &[], false)?;
-  }
+  renderer.render(&mut stdout, &roots, Some("\n"))?;
 
   // Display orphaned branches if any
   if !orphaned.is_empty() {

@@ -146,9 +146,13 @@ impl<'a> TreeRenderer<'a> {
   }
 
   /// Helper method to render trees from root branches
-  #[allow(dead_code)]
-  pub fn render<W: Write>(&mut self, writer: &mut W, roots: &[String]) -> io::Result<()> {
+  pub fn render<W: Write>(&mut self, writer: &mut W, roots: &[String], delimeter: Option<&str>) -> io::Result<()> {
     for (i, root) in roots.iter().enumerate() {
+      if let Some(delim) = delimeter {
+        if i > 0 {
+          write!(writer, "{delim}")?; // Add delimiter between trees
+        }
+      }
       let is_last_root = i == roots.len() - 1;
       self.render_tree(writer, root, 0, &[], is_last_root)?;
     }
@@ -211,6 +215,7 @@ impl<'a> TreeRenderer<'a> {
 
     Ok(())
   }
+
   /// Print a branch with its metadata
   pub fn print_branch<W: Write>(
     &self,
@@ -674,23 +679,23 @@ mod tests {
     );
     nodes.insert(
       "PROJ-123/feat-one".to_string(),
-      create_test_branch_with_issue(
+      create_test_branch_with_metadata(
         "PROJ-123/feat-one",
         true,
         vec!["main".to_string()],
         vec![],
-        "PROJ-123",
+        Some("PROJ-123"),
         Some(456),
       ),
     );
     nodes.insert(
       "PROJ-124/feat-two-add-more-hats".to_string(),
-      create_test_branch_with_issue(
+      create_test_branch_with_metadata(
         "PROJ-124/feat-two-add-more-hats",
         true,
         vec!["main".to_string()],
         vec![],
-        "PROJ-124",
+        Some("PROJ-124"),
         Some(789),
       ),
     );
@@ -733,36 +738,36 @@ mod tests {
 
     nodes.insert(
       "PROJ-100/left-branch".to_string(),
-      create_test_branch_with_issue(
+      create_test_branch_with_metadata(
         "PROJ-100/left-branch",
         false,
         vec!["main".to_string()],
         vec!["PROJ-300/merge-branch".to_string()],
-        "PROJ-100",
+        Some("PROJ-100"),
         Some(111),
       ),
     );
 
     nodes.insert(
       "PROJ-200/right-branch".to_string(),
-      create_test_branch_with_issue(
+      create_test_branch_with_metadata(
         "PROJ-200/right-branch",
         false,
         vec!["main".to_string()],
         vec!["PROJ-300/merge-branch".to_string()],
-        "PROJ-200",
+        Some("PROJ-200"),
         Some(222),
       ),
     );
 
     nodes.insert(
       "PROJ-300/merge-branch".to_string(),
-      create_test_branch_with_issue(
+      create_test_branch_with_metadata(
         "PROJ-300/merge-branch",
         true,
         vec!["PROJ-100/left-branch".to_string(), "PROJ-200/right-branch".to_string()],
         vec![],
-        "PROJ-300",
+        Some("PROJ-300"),
         Some(333),
       ),
     );
@@ -841,38 +846,6 @@ mod tests {
     assert!(renderer.no_color);
     assert!(!renderer.cross_refs.is_empty());
     assert!(renderer.cross_refs.contains_key("feature1"));
-  }
-
-  fn create_test_branch(name: &str, is_current: bool, parents: Vec<String>, children: Vec<String>) -> BranchNode {
-    BranchNode {
-      name: name.to_string(),
-      is_current,
-      metadata: None,
-      parents,
-      children,
-    }
-  }
-
-  fn create_test_branch_with_issue(
-    name: &str,
-    is_current: bool,
-    parents: Vec<String>,
-    children: Vec<String>,
-    jira_issue: &str,
-    github_pr: Option<u32>,
-  ) -> BranchNode {
-    BranchNode {
-      name: name.to_string(),
-      is_current,
-      metadata: Some(BranchMetadata {
-        branch: name.to_string(),
-        jira_issue: Some(jira_issue.to_string()),
-        github_pr,
-        created_at: "".to_string(),
-      }),
-      parents,
-      children,
-    }
   }
 
   #[test]
@@ -959,6 +932,8 @@ mod tests {
     assert!(output_str.contains("#456"));
     assert!(output_str.contains("[PROJ-123]"));
     assert!(output_str.contains("[PR#456]"));
+
+    assert_snapshot!(output_str, @"PROJ-123/feature-branch  [PROJ-123]  [PR#456]");
   }
 
   #[test]
@@ -1022,5 +997,251 @@ mod tests {
     // This means there should be significant spacing before [PR#321]
     let pr_position = output2_str.find("[PR#321]").unwrap();
     assert!(pr_position > "short".len() + 5); // At least some padding
+  }
+
+  #[test]
+  fn test_render_tree_with_multiple_roots() {
+    let mut nodes = HashMap::new();
+
+    // Create test nodes with two root branches
+    nodes.insert(
+      "main".to_string(),
+      create_test_branch("main", false, vec![], vec!["feature-a".to_string()]),
+    );
+
+    nodes.insert(
+      "develop".to_string(),
+      create_test_branch("develop", false, vec![], vec!["feature-b".to_string()]),
+    );
+
+    nodes.insert(
+      "feature-a".to_string(),
+      create_test_branch("feature-a", false, vec!["main".to_string()], vec![]),
+    );
+
+    nodes.insert(
+      "feature-b".to_string(),
+      create_test_branch("feature-b", true, vec!["develop".to_string()], vec![]),
+    );
+
+    let roots = vec!["main".to_string(), "develop".to_string()];
+    let mut renderer = TreeRenderer::new(&nodes, &roots, None, true);
+
+    // Render the tree to a buffer
+    let mut output = Vec::new();
+    renderer.render(&mut output, &roots, Some("\n")).unwrap();
+
+    let output_str = String::from_utf8(output).unwrap();
+    assert_snapshot!("tree_with_multiple_roots", output_str);
+  }
+
+  #[test]
+  fn test_render_tree_with_max_depth() {
+    let mut nodes = HashMap::new();
+
+    // Create a deep tree structure
+    nodes.insert(
+      "main".to_string(),
+      create_test_branch("main", false, vec![], vec!["level1".to_string()]),
+    );
+    nodes.insert(
+      "level1".to_string(),
+      create_test_branch("level1", false, vec!["main".to_string()], vec!["level2".to_string()]),
+    );
+    nodes.insert(
+      "level2".to_string(),
+      create_test_branch("level2", false, vec!["level1".to_string()], vec!["level3".to_string()]),
+    );
+    nodes.insert(
+      "level3".to_string(),
+      create_test_branch("level3", true, vec!["level2".to_string()], vec![]),
+    );
+
+    let roots = vec!["main".to_string()];
+
+    // Create renderer with max_depth=2
+    let mut renderer = TreeRenderer::new(&nodes, &roots, Some(2), true);
+
+    // Render the tree to a buffer
+    let mut output = Vec::new();
+    renderer.render_tree(&mut output, "main", 0, &[], true).unwrap();
+
+    let output_str = String::from_utf8(output).unwrap();
+    assert_snapshot!("tree_with_max_depth", output_str);
+  }
+
+  #[test]
+  fn test_render_tree_with_cross_references() {
+    let mut nodes = HashMap::new();
+
+    // Create a structure where a branch has multiple parents
+    nodes.insert(
+      "main".to_string(),
+      create_test_branch("main", false, vec![], vec!["shared-feature".to_string()]),
+    );
+    nodes.insert(
+      "develop".to_string(),
+      create_test_branch("develop", false, vec![], vec!["shared-feature".to_string()]),
+    );
+    nodes.insert(
+      "release".to_string(),
+      create_test_branch("release", false, vec![], vec!["shared-feature".to_string()]),
+    );
+    nodes.insert(
+      "shared-feature".to_string(),
+      create_test_branch(
+        "shared-feature",
+        true,
+        vec!["main".to_string(), "develop".to_string(), "release".to_string()],
+        vec![],
+      ),
+    );
+
+    let roots = vec!["main".to_string(), "develop".to_string(), "release".to_string()];
+    let mut renderer = TreeRenderer::new(&nodes, &roots, None, true);
+
+    // Render the tree to a buffer
+    let mut output = Vec::new();
+    renderer.render(&mut output, &roots, Some("\n")).unwrap();
+
+    let output_str = String::from_utf8(output).unwrap();
+    assert_snapshot!("tree_with_cross_references", output_str);
+  }
+
+  #[test]
+  fn test_render_tree_with_github_pr_only() {
+    let mut nodes = HashMap::new();
+
+    // Create a branch with only GitHub PR (no JIRA issue)
+    nodes.insert(
+      "main".to_string(),
+      create_test_branch("main", false, vec![], vec!["feature-pr-only".to_string()]),
+    );
+
+    nodes.insert(
+      "feature-pr-only".to_string(),
+      BranchNode {
+        name: "feature-pr-only".to_string(),
+        is_current: true,
+        metadata: Some(BranchMetadata {
+          branch: "feature-pr-only".to_string(),
+          jira_issue: None,     // No JIRA issue
+          github_pr: Some(123), // Has GitHub PR
+          created_at: "2023-01-01T00:00:00Z".to_string(),
+        }),
+        parents: vec!["main".to_string()],
+        children: vec![],
+      },
+    );
+
+    let roots = vec!["main".to_string()];
+    let mut renderer = TreeRenderer::new(&nodes, &roots, None, true);
+
+    // Render the tree to a buffer
+    let mut output = Vec::new();
+    renderer.render_tree(&mut output, "main", 0, &[], true).unwrap();
+
+    let output_str = String::from_utf8(output).unwrap();
+    assert_snapshot!("tree_with_github_pr_only", output_str);
+  }
+
+  #[test]
+  fn test_render_tree_with_deep_nesting() {
+    let mut nodes = HashMap::new();
+
+    // Create a deeply nested tree structure (5 levels)
+    nodes.insert(
+      "main".to_string(),
+      create_test_branch("main", false, vec![], vec!["feature1".to_string()]),
+    );
+    nodes.insert(
+      "feature1".to_string(),
+      create_test_branch_with_metadata(
+        "feature1",
+        false,
+        vec!["main".to_string()],
+        vec!["feature1-1".to_string()],
+        Some("FEAT-1"),
+        Some(1),
+      ),
+    );
+    nodes.insert(
+      "feature1-1".to_string(),
+      create_test_branch_with_metadata(
+        "feature1-1",
+        false,
+        vec!["feature1".to_string()],
+        vec!["feature1-1-1".to_string()],
+        Some("FEAT-2"),
+        None,
+      ),
+    );
+    nodes.insert(
+      "feature1-1-1".to_string(),
+      create_test_branch_with_metadata(
+        "feature1-1-1",
+        false,
+        vec!["feature1-1".to_string()],
+        vec!["feature1-1-1-1".to_string()],
+        None,
+        Some(41),
+      ),
+    );
+    nodes.insert(
+      "feature1-1-1-1".to_string(),
+      create_test_branch_with_metadata(
+        "feature1-1-1-1",
+        true,
+        vec!["feature1-1-1".to_string()],
+        vec![],
+        Some("FEAT-4"),
+        Some(3),
+      ),
+    );
+
+    let roots = vec!["main".to_string()];
+    let mut renderer = TreeRenderer::new(&nodes, &roots, None, true);
+
+    // Render the tree to a buffer
+    let mut output = Vec::new();
+    renderer.render_tree(&mut output, "main", 0, &[], true).unwrap();
+
+    let output_str = String::from_utf8(output).unwrap();
+    assert_snapshot!("tree_with_deep_nesting", output_str);
+  }
+
+  fn create_test_branch(name: &str, is_current: bool, parents: Vec<String>, children: Vec<String>) -> BranchNode {
+    BranchNode {
+      name: name.to_string(),
+      is_current,
+      metadata: None,
+      parents,
+      children,
+    }
+  }
+
+  fn create_test_branch_with_metadata(
+    name: &str,
+    is_current: bool,
+    parents: Vec<String>,
+    children: Vec<String>,
+    jira_issue: Option<&str>,
+    github_pr: Option<u32>,
+  ) -> BranchNode {
+    BranchNode {
+      name: name.to_string(),
+      is_current,
+      metadata: Some(BranchMetadata {
+        branch: name.to_string(),
+        jira_issue: match jira_issue {
+          Some(s) => Some(s.to_string()),
+          None => None,
+        },
+        github_pr,
+        created_at: "".to_string(),
+      }),
+      parents,
+      children,
+    }
   }
 }
