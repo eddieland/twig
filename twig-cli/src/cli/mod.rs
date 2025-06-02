@@ -98,6 +98,17 @@ pub enum Commands {
   #[command(alias = "casc")]
   Cascade(cascade::CascadeArgs),
 
+  /// Create a commit using Jira issue information
+  #[command(
+    long_about = "Create a commit using Jira issue information for the current branch.\n\n\
+            This command uses the Jira issue associated with the current branch to generate\n\
+            a commit message in the format 'ISSUE-KEY: Issue summary'. You can customize the\n\
+            message with --message, --prefix, and --suffix options. If a commit with the same\n\
+            message already exists in recent commits, it will offer to create a fix-up commit instead.\n\
+            Use --no-fixup to disable this behavior and always create a normal commit."
+  )]
+  Commit(commit::CommitArgs),
+
   /// Generate shell completions
   #[command(long_about = "Generates shell completion scripts for twig commands.\n\n\
             This command generates completion scripts that provide tab completion for twig\n\
@@ -127,6 +138,7 @@ pub enum Commands {
   Dashboard(dashboard::DashboardArgs),
 
   /// Run system diagnostics
+  #[command(name = "diagnose")]
   #[command(
     long_about = "Runs comprehensive system diagnostics to check twig's configuration and dependencies.\n\n\
             This command checks system information, configuration directories, credentials,\n\
@@ -228,17 +240,6 @@ pub enum Commands {
             incomplete work.")]
   #[command(alias = "wt")]
   Worktree(worktree::WorktreeArgs),
-
-  /// Create a commit using Jira issue information
-  #[command(
-    long_about = "Create a commit using Jira issue information for the current branch.\n\n\
-            This command uses the Jira issue associated with the current branch to generate\n\
-            a commit message in the format 'ISSUE-KEY: Issue summary'. You can customize the\n\
-            message with --message, --prefix, and --suffix options. If a commit with the same\n\
-            message already exists in recent commits, it will offer to create a fix-up commit instead.\n\
-            Use --no-fixup to disable this behavior and always create a normal commit."
-  )]
-  Commit(commit::CommitArgs),
 }
 
 pub fn handle_cli(cli: Cli) -> Result<()> {
