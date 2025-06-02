@@ -171,6 +171,29 @@ Specifies the base directory for cache files.
 - **Default**: `$HOME/.cache`
 - **Example**: `export XDG_CACHE_HOME="$HOME/.my-cache"`
 
+## Aliases
+
+```bash
+# Top-level command aliases
+alias tt='twig tree'           # Show branch tree
+alias tsw='twig switch'        # Magic branch switching
+alias td='twig dashboard'      # Show dashboard
+
+# Git subcommand aliases
+alias tgf='twig git fetch --all' # Fetch all repositories
+
+# Worktree subcommand aliases
+alias twl='twig worktree list'   # List worktrees
+
+# Jira subcommand aliases
+alias tjv='twig jira view'     # View Jira issue
+
+# GitHub subcommand aliases
+alias tgps='twig github pr status' # Check PR status
+```
+
+These aliases can significantly reduce typing and make common twig operations more convenient.
+
 ## Development Resources
 
 For information about development workflows, Makefile usage, and snapshot testing, please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file.
