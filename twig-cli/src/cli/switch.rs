@@ -314,10 +314,12 @@ fn switch_to_branch(repo_path: &std::path::Path, branch_name: &str) -> Result<()
     .set_head(&format!("refs/heads/{branch_name}",))
     .with_context(|| format!("Failed to set HEAD to branch '{branch_name}'",))?;
 
-  // Checkout the branch
   let object = repo.find_object(target, None)?;
+
+  // Checkout the branch
+  let mut builder = git2::build::CheckoutBuilder::new();
   repo
-    .checkout_tree(&object, Some(git2::build::CheckoutBuilder::new().force()))
+    .checkout_tree(&object, Some(&mut builder))
     .with_context(|| format!("Failed to checkout branch '{branch_name}'",))?;
 
   print_success(&format!("Switched to branch '{branch_name}'",));
