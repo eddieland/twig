@@ -87,33 +87,32 @@ pub fn check_jira_credentials() -> Result<bool> {
   Ok(get_jira_credentials().is_ok())
 }
 
-/// Get Jira credentials
 pub fn get_jira_credentials() -> Result<Credentials> {
   // Try JIRA_HOST first, then fallback to atlassian.net
   let jira_host = std::env::var(ENV_JIRA_HOST).ok();
-
-  if let Some(host) = &jira_host {
-    if let Some(creds) = parse_netrc_for_machine(host)? {
+  if let Some(host) = jira_host {
+    let normalized_host = normalize_host(&host);
+    if let Some(creds) = parse_netrc_for_machine(&normalized_host)? {
       return Ok(creds);
     }
-  }
-
-  // Try atlassian.net
-  if let Some(creds) = parse_netrc_for_machine("atlassian.net")? {
-    return Ok(creds);
-  }
-
-  // Construct error message based on whether JIRA_HOST is set
-  let error_msg = if jira_host.is_some() {
-    format!(
-      "Jira credentials not found in .netrc file. Please add credentials for machine '{}' or 'atlassian.net'.",
-      jira_host.unwrap()
-    )
+    // Try atlassian.net
+    if let Some(creds) = parse_netrc_for_machine("atlassian.net")? {
+      return Ok(creds);
+    }
+    // Construct error message with already normalized host
+    let error_msg = format!(
+      "Jira credentials not found in .netrc file. Please add credentials for machine '{normalized_host}' or 'atlassian.net'."
+    );
+    Err(anyhow::anyhow!(error_msg))
   } else {
-    "Jira credentials not found in .netrc file. Please add credentials for machine 'atlassian.net'.".to_string()
-  };
-
-  Err(anyhow::anyhow!(error_msg))
+    // Try atlassian.net
+    if let Some(creds) = parse_netrc_for_machine("atlassian.net")? {
+      return Ok(creds);
+    }
+    Err(anyhow::anyhow!(
+      "Jira credentials not found in .netrc file. Please add credentials for machine 'atlassian.net'."
+    ))
+  }
 }
 
 /// Check if GitHub credentials are available
@@ -194,6 +193,39 @@ pub fn write_netrc_entry(machine: &str, username: &str, password: &str) -> Resul
   }
 
   Ok(())
+}
+
+/// Normalizes a JIRA host URL by removing protocol prefixes and trailing
+/// slashes.
+///
+/// # Arguments
+///
+/// * `raw_host` - A string slice containing the raw host URL that may include
+///   protocol prefixes (http:// or https://) and/or trailing slashes
+///
+/// # Returns
+///
+/// A `String` containing the normalized hostname without protocol or trailing
+/// slash
+///
+/// # Examples
+///
+/// ```
+/// let host1 = normalize_host("https://company.atlassian.net/");
+/// assert_eq!(host1, "company.atlassian.net");
+///
+/// let host2 = normalize_host("http://jira.example.com");
+/// assert_eq!(host2, "jira.example.com");
+///
+/// let host3 = normalize_host("my-jira-instance.com");
+/// assert_eq!(host3, "my-jira-instance.com");
+/// ```
+fn normalize_host(raw_host: &str) -> String {
+  raw_host
+    .trim_start_matches("https://")
+    .trim_start_matches("http://")
+    .trim_end_matches('/')
+    .to_string()
 }
 
 #[cfg(test)]
@@ -755,6 +787,18 @@ machine atlassian.net
       env::remove_var(ENV_JIRA_HOST);
     }
     assert!(check_jira_credentials().unwrap());
+  }
+
+  #[test]
+  fn test_normalize_host_removes_https_and_trailing_slash() {
+    let result = normalize_host("https://api.example.com/");
+    assert_eq!(result, "api.example.com");
+  }
+
+  #[test]
+  fn test_normalize_host_removes_http_and_trailing_slash() {
+    let result = normalize_host("http://localhost:8080/");
+    assert_eq!(result, "localhost:8080");
   }
 
   /// RAII guard for test .netrc files
