@@ -88,7 +88,7 @@ pub fn handle_commit_command(args: CommitArgs) -> Result<()> {
 /// Check if a commit with the same message exists in recent history
 fn check_for_duplicate_commit_message(repo_path: &std::path::Path, message: &str) -> Result<bool> {
   // Use git command to search recent commit messages
-  let output = std::process::Command::new("git")
+  let output = std::process::Command::new(crate::utils::platform::GIT_EXECUTABLE)
     .args(["log", "--pretty=format:%s", "-n", "20"]) // Check last 20 commits
     .current_dir(repo_path)
     .output()
@@ -118,7 +118,7 @@ fn prompt_for_fixup() -> Result<bool> {
 fn create_normal_commit(repo_path: &std::path::Path, message: &str) -> Result<()> {
   print_info(&format!("Creating commit with message: '{message}'"));
 
-  let output = std::process::Command::new("git")
+  let output = std::process::Command::new(crate::utils::platform::GIT_EXECUTABLE)
     .args(["commit", "-m", message])
     .current_dir(repo_path)
     .output()
@@ -138,7 +138,7 @@ fn create_normal_commit(repo_path: &std::path::Path, message: &str) -> Result<()
 /// Create a fixup commit with the given message
 fn create_fixup_commit(repo_path: &std::path::Path, message: &str) -> Result<()> {
   // Find the commit hash of the commit to fix
-  let output = std::process::Command::new("git")
+  let output = std::process::Command::new(crate::utils::platform::GIT_EXECUTABLE)
     .args(["log", "--pretty=format:%h %s", "-n", "20"]) // Check last 20 commits
     .current_dir(repo_path)
     .output()
@@ -161,7 +161,7 @@ fn create_fixup_commit(repo_path: &std::path::Path, message: &str) -> Result<()>
 
   print_info(&format!("Creating fixup commit for commit {commit_hash}"));
 
-  let output = std::process::Command::new("git")
+  let output = std::process::Command::new(crate::utils::platform::GIT_EXECUTABLE)
     .args(["commit", "--fixup", &commit_hash])
     .current_dir(repo_path)
     .output()

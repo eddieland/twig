@@ -227,7 +227,7 @@ pub fn execute_repository<P: AsRef<Path>>(path: P, command: &str) -> Result<()> 
 
   // Split the command into program and arguments
   let mut parts = command.split_whitespace();
-  let program = parts.next().unwrap_or("git");
+  let program = parts.next().unwrap_or(crate::utils::platform::GIT_EXECUTABLE);
   let args: Vec<&str> = parts.collect();
 
   // Execute the command
