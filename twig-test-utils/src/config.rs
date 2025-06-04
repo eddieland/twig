@@ -28,7 +28,7 @@ impl ConfigDirsTestGuard {
   /// Create a new TestConfigDirs instance with default organization and
   /// application names
   pub fn new() -> anyhow::Result<Self> {
-    Self::with_names("ai", "lat", "twig")
+    Self::with_names("eddieland", "", "twig")
   }
 
   /// Create a new TestConfigDirs instance with custom organization and

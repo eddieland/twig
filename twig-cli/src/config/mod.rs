@@ -19,7 +19,7 @@ pub struct ConfigDirs {
 impl ConfigDirs {
   /// Create a new ConfigDirs instance
   pub fn new() -> Result<Self> {
-    let proj_dirs = ProjectDirs::from("ai", "lat", "twig").context("Failed to determine project directories")?;
+    let proj_dirs = ProjectDirs::from("eddieland", "", "twig").context("Failed to determine project directories")?;
 
     let config_dir = proj_dirs.config_dir().to_path_buf();
     let data_dir = proj_dirs.data_dir().to_path_buf();

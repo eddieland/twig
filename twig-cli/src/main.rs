@@ -31,7 +31,7 @@ fn main() -> Result<()> {
   let config: NoWorriesConfig = NoWorriesConfig {
     metadata: NoWorriesMetadata {
       name: "twig".to_string(),
-      support_email: Some("ejones@lat.ai".to_string()),
+      support_email: Some("e@eddie.land".to_string()),
       // Other metadata fields use defaults from Cargo.toml
       ..Default::default()
     },
