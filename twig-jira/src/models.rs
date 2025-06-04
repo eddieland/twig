@@ -36,7 +36,7 @@ pub struct IssueFields {
 /// Represents a Jira user
 #[derive(Debug, Deserialize, Serialize)]
 pub struct JiraUser {
-  pub name: String,
+  pub name: Option<String>,
   #[serde(rename = "displayName")]
   pub display_name: String,
   #[serde(rename = "emailAddress", default)]
