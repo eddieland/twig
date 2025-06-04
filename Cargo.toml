@@ -10,7 +10,7 @@ default-members = ["twig-cli"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.21"
+version = "0.1.22"
 edition = "2024"
 rust-version = "1.87.0"
 authors = ["Edward Jones <e@eddie.land>"]
