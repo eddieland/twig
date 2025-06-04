@@ -240,6 +240,11 @@ impl AutoDependencyDiscovery {
 
 #[cfg(test)]
 mod tests {
+  use std::path::Path;
+
+  use git2::BranchType;
+  use twig_test_utils::git::{GitRepoTestGuard, checkout_branch, create_branch, create_commit};
+
   use super::*;
 
   #[test]
@@ -257,9 +262,402 @@ mod tests {
   }
 
   #[test]
-  fn test_auto_dependency_discovery_creation() {
-    let _discovery = AutoDependencyDiscovery;
-    // Just test that we can create the struct
-    // Actual Git operations would require a real repository
+  fn test_discover_git_dependencies_simple_chain() -> Result<()> {
+    // Create a temporary git repository
+    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let repo = &git_repo.repo;
+    let repo_path = git_repo.path();
+
+    // Create initial commit on main branch
+    create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
+
+    // Create main branch explicitly
+    let head_commit = repo.head()?.peel_to_commit()?;
+    repo.branch("main", &head_commit, false)?;
+    checkout_branch(repo, "main")?;
+
+    // Create feature branch
+    create_branch(repo, "feature", Some("main"))?;
+    checkout_branch(repo, "feature")?;
+    create_commit(repo, "feature.txt", "Feature content", "Feature commit")?;
+
+    // Create sub-feature branch from feature
+    create_branch(repo, "sub-feature", Some("feature"))?;
+    checkout_branch(repo, "sub-feature")?;
+    create_commit(repo, "sub-feature.txt", "Sub-feature content", "Sub-feature commit")?;
+
+    // Initialize repo state
+    let repo_state = RepoState::load(repo_path).unwrap_or_default();
+
+    // Run auto dependency discovery
+    let discovery = AutoDependencyDiscovery;
+    let branch_nodes = discovery.discover_git_dependencies(repo, &repo_state)?;
+
+    // Verify the discovered dependencies
+    assert!(branch_nodes.contains_key("main"));
+    assert!(branch_nodes.contains_key("feature"));
+    assert!(branch_nodes.contains_key("sub-feature"));
+
+    // Check parent-child relationships
+    let main_node = &branch_nodes["main"];
+    let feature_node = &branch_nodes["feature"];
+    let sub_feature_node = &branch_nodes["sub-feature"];
+
+    // Main should have feature as a child
+    assert!(main_node.children.contains(&"feature".to_string()));
+
+    // Feature should have main as a parent and sub-feature as a child
+    assert!(feature_node.parents.contains(&"main".to_string()));
+    assert!(feature_node.children.contains(&"sub-feature".to_string()));
+
+    // Sub-feature should have feature as a parent
+    assert!(sub_feature_node.parents.contains(&"feature".to_string()));
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_suggest_dependencies() -> Result<()> {
+    // Create a temporary git repository
+    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let repo = &git_repo.repo;
+    let repo_path = git_repo.path();
+
+    // Create initial commit on main branch
+    create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
+
+    // Create main branch explicitly
+    let head_commit = repo.head()?.peel_to_commit()?;
+    repo.branch("main", &head_commit, false)?;
+    checkout_branch(repo, "main")?;
+
+    // Create feature branch
+    create_branch(repo, "feature", Some("main"))?;
+    checkout_branch(repo, "feature")?;
+    create_commit(repo, "feature.txt", "Feature content", "Feature commit")?;
+
+    // Create sub-feature branch from feature
+    create_branch(repo, "sub-feature", Some("feature"))?;
+    checkout_branch(repo, "sub-feature")?;
+    create_commit(repo, "sub-feature.txt", "Sub-feature content", "Sub-feature commit")?;
+
+    // Initialize repo state
+    let repo_state = RepoState::load(repo_path).unwrap_or_default();
+
+    // Run auto dependency discovery to suggest dependencies
+    let discovery = AutoDependencyDiscovery;
+    let suggestions = discovery.suggest_dependencies(repo, &repo_state)?;
+
+    // Verify the suggested dependencies
+    assert!(!suggestions.is_empty());
+
+    // Check for specific suggestions
+    let has_feature_main = suggestions
+      .iter()
+      .any(|s| s.child == "feature" && s.parent == "main" && s.confidence > 0.0);
+
+    let has_subfeature_feature = suggestions
+      .iter()
+      .any(|s| s.child == "sub-feature" && s.parent == "feature" && s.confidence > 0.0);
+
+    assert!(has_feature_main, "Should suggest feature depends on main");
+    assert!(has_subfeature_feature, "Should suggest sub-feature depends on feature");
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_suggest_dependencies_with_existing_dependencies() -> Result<()> {
+    // Create a temporary git repository
+    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let repo = &git_repo.repo;
+    let repo_path = git_repo.path();
+
+    // Create initial commit on main branch
+    create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
+
+    // Create main branch explicitly
+    let head_commit = repo.head()?.peel_to_commit()?;
+    repo.branch("main", &head_commit, false)?;
+    checkout_branch(repo, "main")?;
+
+    // Create feature branch
+    create_branch(repo, "feature", Some("main"))?;
+    checkout_branch(repo, "feature")?;
+    create_commit(repo, "feature.txt", "Feature content", "Feature commit")?;
+
+    // Create sub-feature branch from feature
+    create_branch(repo, "sub-feature", Some("feature"))?;
+    checkout_branch(repo, "sub-feature")?;
+    create_commit(repo, "sub-feature.txt", "Sub-feature content", "Sub-feature commit")?;
+
+    // Initialize repo state and add a user-defined dependency
+    let mut repo_state = RepoState::load(repo_path).unwrap_or_default();
+    repo_state.add_dependency("feature".to_string(), "main".to_string())?;
+    repo_state.save(repo_path)?;
+
+    // Reload the repo state
+    let repo_state = RepoState::load(repo_path)?;
+
+    // Run auto dependency discovery to suggest dependencies
+    let discovery = AutoDependencyDiscovery;
+    let suggestions = discovery.suggest_dependencies(repo, &repo_state)?;
+
+    // Verify the suggested dependencies
+    // The feature->main dependency should not be suggested since it already exists
+    let has_feature_main = suggestions.iter().any(|s| s.child == "feature" && s.parent == "main");
+
+    let has_subfeature_feature = suggestions
+      .iter()
+      .any(|s| s.child == "sub-feature" && s.parent == "feature");
+
+    assert!(
+      !has_feature_main,
+      "Should not suggest feature depends on main (already exists)"
+    );
+    assert!(has_subfeature_feature, "Should suggest sub-feature depends on feature");
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_get_auto_discovered_roots() -> Result<()> {
+    // Create a temporary git repository
+    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let repo = &git_repo.repo;
+    let repo_path = git_repo.path();
+
+    // Create initial commit on main branch
+    create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
+
+    // Create main branch explicitly
+    let head_commit = repo.head()?.peel_to_commit()?;
+    repo.branch("main", &head_commit, false)?;
+    checkout_branch(repo, "main")?;
+
+    // Create feature branch
+    create_branch(repo, "feature", Some("main"))?;
+    checkout_branch(repo, "feature")?;
+    create_commit(repo, "feature.txt", "Feature content", "Feature commit")?;
+
+    // Create another independent branch from main
+    checkout_branch(repo, "main")?;
+    create_branch(repo, "independent", Some("main"))?;
+    checkout_branch(repo, "independent")?;
+    create_commit(repo, "independent.txt", "Independent content", "Independent commit")?;
+
+    // Initialize repo state
+    let repo_state = RepoState::load(repo_path).unwrap_or_default();
+
+    // Run auto dependency discovery to get root branches
+    let discovery = AutoDependencyDiscovery;
+    let roots = discovery.get_auto_discovered_roots(repo, &repo_state)?;
+
+    // Verify the discovered roots
+    assert!(roots.contains(&"main".to_string()), "Main should be a root branch");
+    assert!(
+      !roots.contains(&"feature".to_string()),
+      "Feature should not be a root branch"
+    );
+    assert!(
+      !roots.contains(&"independent".to_string()),
+      "Independent should not be a root branch"
+    );
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_with_branch_metadata() -> Result<()> {
+    // Create a temporary git repository
+    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let repo = &git_repo.repo;
+    let repo_path = git_repo.path();
+
+    // Create initial commit on main branch
+    create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
+
+    // Create main branch explicitly
+    let head_commit = repo.head()?.peel_to_commit()?;
+    repo.branch("main", &head_commit, false)?;
+    checkout_branch(repo, "main")?;
+
+    // Create feature branch
+    create_branch(repo, "feature", Some("main"))?;
+    checkout_branch(repo, "feature")?;
+    create_commit(repo, "feature.txt", "Feature content", "Feature commit")?;
+
+    // Add branch metadata
+    add_branch_metadata(repo_path, "main", Some("MAIN-123"), None)?;
+    add_branch_metadata(repo_path, "feature", Some("FEAT-456"), Some(42))?;
+
+    // Initialize repo state
+    let repo_state = RepoState::load(repo_path)?;
+
+    // Run auto dependency discovery
+    let discovery = AutoDependencyDiscovery;
+    let branch_nodes = discovery.discover_git_dependencies(repo, &repo_state)?;
+
+    // Verify the discovered dependencies with metadata
+    assert!(branch_nodes.contains_key("main"));
+    assert!(branch_nodes.contains_key("feature"));
+
+    // Check that metadata was properly included
+    let main_node = &branch_nodes["main"];
+    let feature_node = &branch_nodes["feature"];
+
+    assert!(main_node.metadata.is_some());
+    assert_eq!(
+      main_node.metadata.as_ref().unwrap().jira_issue.as_deref(),
+      Some("MAIN-123")
+    );
+
+    assert!(feature_node.metadata.is_some());
+    assert_eq!(
+      feature_node.metadata.as_ref().unwrap().jira_issue.as_deref(),
+      Some("FEAT-456")
+    );
+    assert_eq!(feature_node.metadata.as_ref().unwrap().github_pr, Some(42));
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_analyze_commit_ancestry() -> Result<()> {
+    // Create a temporary git repository
+    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let repo = &git_repo.repo;
+
+    // Create initial commit on main branch
+    create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
+
+    // Create main branch explicitly
+    let head_commit = repo.head()?.peel_to_commit()?;
+    repo.branch("main", &head_commit, false)?;
+    checkout_branch(repo, "main")?;
+
+    // Create feature branch
+    create_branch(repo, "feature", Some("main"))?;
+    checkout_branch(repo, "feature")?;
+    create_commit(repo, "feature.txt", "Feature content", "Feature commit")?;
+
+    // Create sub-feature branch from feature
+    create_branch(repo, "sub-feature", Some("feature"))?;
+    checkout_branch(repo, "sub-feature")?;
+    create_commit(repo, "sub-feature.txt", "Sub-feature content", "Sub-feature commit")?;
+
+    // Create branch info map manually
+    let mut branch_info = HashMap::new();
+
+    // Get commit IDs for each branch
+    let main_commit = repo
+      .find_branch("main", BranchType::Local)?
+      .into_reference()
+      .peel_to_commit()?
+      .id();
+    let feature_commit = repo
+      .find_branch("feature", BranchType::Local)?
+      .into_reference()
+      .peel_to_commit()?
+      .id();
+    let sub_feature_commit = repo
+      .find_branch("sub-feature", BranchType::Local)?
+      .into_reference()
+      .peel_to_commit()?
+      .id();
+
+    // Populate branch info
+    branch_info.insert("main".to_string(), (main_commit, false));
+    branch_info.insert("feature".to_string(), (feature_commit, false));
+    branch_info.insert("sub-feature".to_string(), (sub_feature_commit, true));
+
+    // Create branch nodes
+    let mut branch_nodes = HashMap::new();
+    branch_nodes.insert(
+      "main".to_string(),
+      BranchNode {
+        name: "main".to_string(),
+        is_current: false,
+        metadata: None,
+        parents: Vec::new(),
+        children: Vec::new(),
+      },
+    );
+
+    branch_nodes.insert(
+      "feature".to_string(),
+      BranchNode {
+        name: "feature".to_string(),
+        is_current: false,
+        metadata: None,
+        parents: Vec::new(),
+        children: Vec::new(),
+      },
+    );
+
+    branch_nodes.insert(
+      "sub-feature".to_string(),
+      BranchNode {
+        name: "sub-feature".to_string(),
+        is_current: true,
+        metadata: None,
+        parents: Vec::new(),
+        children: Vec::new(),
+      },
+    );
+
+    // Create root branches set
+    let mut root_branches = branch_nodes
+      .keys()
+      .cloned()
+      .collect::<std::collections::HashSet<String>>();
+
+    // Run analyze_commit_ancestry
+    let discovery = AutoDependencyDiscovery;
+    discovery.analyze_commit_ancestry(&mut branch_nodes, &branch_info, &mut root_branches, repo)?;
+
+    // Verify the results
+    assert!(root_branches.contains("main"), "Main should still be a root branch");
+    assert!(
+      !root_branches.contains("feature"),
+      "Feature should not be a root branch"
+    );
+    assert!(
+      !root_branches.contains("sub-feature"),
+      "Sub-feature should not be a root branch"
+    );
+
+    // Check parent-child relationships
+    let main_node = &branch_nodes["main"];
+    let feature_node = &branch_nodes["feature"];
+    let sub_feature_node = &branch_nodes["sub-feature"];
+
+    assert!(main_node.children.contains(&"feature".to_string()));
+    assert!(feature_node.parents.contains(&"main".to_string()));
+    assert!(feature_node.children.contains(&"sub-feature".to_string()));
+    assert!(sub_feature_node.parents.contains(&"feature".to_string()));
+
+    Ok(())
+  }
+
+  /// Helper function to add a branch-issue association
+  pub fn add_branch_metadata(
+    repo_path: &Path,
+    branch: &str,
+    jira_issue: Option<&str>,
+    github_pr: Option<u32>,
+  ) -> Result<()> {
+    let mut repo_state = RepoState::load(repo_path).unwrap_or_default();
+
+    let metadata = crate::repo_state::BranchMetadata {
+      branch: branch.to_string(),
+      jira_issue: jira_issue.map(|s| s.to_string()),
+      github_pr,
+      created_at: chrono::Utc::now().to_rfc3339(),
+    };
+
+    repo_state.add_branch_issue(metadata);
+    repo_state.save(repo_path)?;
+    Ok(())
   }
 }

@@ -3,10 +3,11 @@
 //! This module provides utilities for creating temporary git repositories
 //! and changing the current working directory for testing.
 
-use std::env;
 use std::path::{Path, PathBuf};
+use std::{env, fs};
 
-use git2::Repository as Git2Repository;
+use anyhow::Result;
+use git2::{BranchType, Repository, Signature};
 use tempfile::TempDir;
 
 /// A test guard that creates a temporary git repository and
@@ -16,7 +17,7 @@ pub struct GitRepoTestGuard {
   /// The temporary directory containing the git repository
   pub temp_dir: TempDir,
   /// The git repository
-  pub repo: Git2Repository,
+  pub repo: Repository,
   /// The original working directory, if changed
   original_dir: Option<PathBuf>,
 }
@@ -30,7 +31,7 @@ impl GitRepoTestGuard {
     let temp_path = temp_dir.path();
 
     // Initialize a git repository in the temporary directory
-    let repo = Git2Repository::init(temp_path).expect("Failed to initialize git repository");
+    let repo = Repository::init(temp_path).expect("Failed to initialize git repository");
 
     // Set test user configuration
     let mut config = repo.config().expect("Failed to get repository config");
@@ -62,7 +63,7 @@ impl GitRepoTestGuard {
     let temp_path = temp_dir.path();
 
     // Initialize a git repository in the temporary directory
-    let repo = Git2Repository::init(temp_path).expect("Failed to initialize git repository");
+    let repo = Repository::init(temp_path).expect("Failed to initialize git repository");
 
     // Set test user configuration
     let mut config = repo.config().expect("Failed to get repository config");
@@ -134,6 +135,65 @@ impl Drop for GitRepoTestGuard {
     // Restore the original working directory if it was changed
     self.restore_dir();
   }
+}
+
+/// Helper function to create a commit in a repository
+pub fn create_commit(repo: &Repository, file_name: &str, content: &str, message: &str) -> Result<()> {
+  // Create a file
+  let repo_path = repo.path().parent().unwrap();
+  let file_path = repo_path.join(file_name);
+  fs::write(&file_path, content)?;
+
+  // Stage the file
+  let mut index = repo.index()?;
+  index.add_path(Path::new(file_name))?;
+  index.write()?;
+
+  // Create a commit
+  let tree_id = index.write_tree()?;
+  let tree = repo.find_tree(tree_id)?;
+
+  let signature = Signature::now("Test User", "test@example.com")?;
+
+  // Handle parent commits
+  if let Ok(head) = repo.head() {
+    if let Ok(parent) = head.peel_to_commit() {
+      repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[&parent])?;
+    } else {
+      repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[])?;
+    }
+  } else {
+    repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[])?;
+  }
+
+  Ok(())
+}
+
+/// Helper function to create a branch in a repository
+pub fn create_branch(repo: &Repository, branch_name: &str, start_point: Option<&str>) -> Result<()> {
+  let head = if let Some(start) = start_point {
+    repo
+      .find_branch(start, BranchType::Local)?
+      .into_reference()
+      .peel_to_commit()?
+  } else {
+    repo.head()?.peel_to_commit()?
+  };
+
+  repo.branch(branch_name, &head, false)?;
+  Ok(())
+}
+
+/// Helper function to checkout a branch
+pub fn checkout_branch(repo: &Repository, branch_name: &str) -> Result<()> {
+  let obj = repo
+    .revparse_single(&format!("refs/heads/{branch_name}"))?
+    .peel_to_commit()?;
+
+  repo.checkout_tree(&obj.into_object(), None)?;
+  repo.set_head(&format!("refs/heads/{branch_name}"))?;
+
+  Ok(())
 }
 
 #[cfg(test)]

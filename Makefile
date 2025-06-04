@@ -12,7 +12,7 @@ help: ## Display this help
 .PHONY: fmt
 fmt: ## Format code using rustfmt
 	cargo fmt --all
-	cargo clippy --fix --allow-dirty
+	cargo clippy --fix --allow-dirty --workspace
 
 .PHONY: lint
 lint: ## Run clippy for linting
