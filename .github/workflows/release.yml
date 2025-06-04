@@ -131,8 +131,8 @@ jobs:
   create-release:
     name: Create Release
     if: success()
-    # Note: does not depend on build-windows since it's optional
-    needs: [validate-version, build-ubuntu, build-macos]
+    # Wait for build-windows even though it's optional
+    needs: [validate-version, build-ubuntu, build-macos, build-windows]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
