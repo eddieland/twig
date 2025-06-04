@@ -2324,6 +2324,7 @@ name = "twig-test-utils"
 version = "0.1.22"
 dependencies = [
  "anyhow",
+ "directories",
  "git2",
  "tempfile",
 ]

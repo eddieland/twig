@@ -15,9 +15,11 @@ pub mod config;
 pub mod env;
 pub mod git;
 pub mod home;
+pub mod netrc;
 
 // Re-export commonly used items
 pub use config::{ConfigDirsTestGuard, setup_test_env, setup_test_env_with_init, setup_test_env_with_registry};
 pub use env::EnvTestGuard;
 pub use git::GitRepoTestGuard;
 pub use home::HomeEnvTestGuard;
+pub use netrc::NetrcGuard;

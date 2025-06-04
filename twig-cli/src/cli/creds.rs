@@ -5,19 +5,22 @@
 
 use std::io::{self, Write};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
+use directories::BaseDirs;
 use tokio::runtime::Runtime;
 use twig_gh::create_github_client;
 use twig_jira::create_jira_client;
 
+use crate::clients::get_jira_host;
+use crate::creds::netrc::{get_netrc_path, write_netrc_entry};
 #[cfg(unix)]
 use crate::creds::platform::FilePermissions;
 #[cfg(unix)]
 use crate::creds::platform::UnixFilePermissions;
 #[cfg(windows)]
 use crate::creds::platform::WindowsFilePermissions;
-use crate::creds::{check_github_credentials, check_jira_credentials, get_netrc_path, write_netrc_entry};
+use crate::creds::{check_github_credentials, check_jira_credentials};
 use crate::utils::output::{format_command, format_repo_path, print_error, print_info, print_success, print_warning};
 
 /// Command for credential management
@@ -66,7 +69,10 @@ pub(crate) fn handle_creds_command(creds: CredsArgs) -> Result<()> {
 /// and checks for Jira and GitHub credentials. It also prints an example
 /// .netrc format for user reference.
 fn handle_check_command() -> Result<()> {
-  let netrc_path = get_netrc_path();
+  let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
+  let home_dir = base_dirs.home_dir();
+
+  let netrc_path = get_netrc_path(home_dir);
 
   // Check if .netrc file exists
   if !netrc_path.exists() {
@@ -103,17 +109,20 @@ fn handle_check_command() -> Result<()> {
   }
 
   // Check Jira credentials
-  match check_jira_credentials() {
-    Ok(true) => print_success("Jira credentials found."),
-    Ok(false) => {
-      print_warning("No Jira credentials found.");
-      println!("Add credentials for machine 'atlassian.net' to your .netrc file.");
-    }
-    Err(e) => print_error(&format!("Error checking Jira credentials: {e}")),
+  match get_jira_host() {
+    Ok(jira_host) => match check_jira_credentials(home_dir, &jira_host) {
+      Ok(true) => print_success("Jira credentials found."),
+      Ok(false) => {
+        print_warning("No Jira credentials found.");
+        println!("Add credentials for machine 'atlassian.net' to your .netrc file.");
+      }
+      Err(e) => print_error(&format!("Error checking Jira credentials: {e}")),
+    },
+    Err(e) => print_error(&format!("Error getting Jira host: {e}")),
   }
 
   // Check GitHub credentials
-  match check_github_credentials() {
+  match check_github_credentials(home_dir) {
     Ok(true) => print_success("GitHub credentials found."),
     Ok(false) => {
       print_warning("No GitHub credentials found.");
@@ -158,7 +167,9 @@ fn handle_setup_command() -> Result<()> {
   println!();
 
   let rt = Runtime::new()?;
-  let netrc_path = get_netrc_path();
+
+  let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
+  let netrc_path = get_netrc_path(base_dirs.home_dir());
 
   // Check if .netrc exists and warn about overwriting
   if netrc_path.exists() {
@@ -227,7 +238,7 @@ fn handle_setup_command() -> Result<()> {
         match rt.block_on(client.test_connection()) {
           Ok(true) => {
             print_success("Jira credentials validated successfully!");
-            write_netrc_entry("atlassian.net", &jira_email, &jira_token)?;
+            write_netrc_entry(&netrc_path, "atlassian.net", &jira_email, &jira_token)?;
           }
           Ok(false) => {
             print_error("Failed to validate Jira credentials. Please check your credentials and domain.");
@@ -283,7 +294,7 @@ fn handle_setup_command() -> Result<()> {
       match rt.block_on(client.test_connection()) {
         Ok(true) => {
           print_success("GitHub credentials validated successfully!");
-          write_netrc_entry("github.com", &github_username, &github_token)?;
+          write_netrc_entry(&netrc_path, "github.com", &github_username, &github_token)?;
         }
         Ok(false) => {
           print_error("Failed to validate GitHub credentials. Please check your username and token.");
@@ -313,7 +324,6 @@ fn handle_setup_command() -> Result<()> {
     #[cfg(windows)]
     {
       print_info("Found existing .netrc file that will be used as a fallback if needed.");
-      print_warning("Note: Secure file permissions are not supported on Windows.");
       print_info("Windows Credential Manager will be used as the primary credential store.");
     }
   }

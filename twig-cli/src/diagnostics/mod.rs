@@ -8,9 +8,12 @@ use std::process::Command;
 use std::{env, fs};
 
 use anyhow::Result;
+use directories::BaseDirs;
 
+use crate::clients::get_jira_host;
 use crate::config::get_config_dirs;
-use crate::creds::{check_github_credentials, check_jira_credentials, get_netrc_path};
+use crate::creds::netrc::get_netrc_path;
+use crate::creds::{check_github_credentials, check_jira_credentials};
 use crate::git::list_repositories;
 use crate::utils::output::{format_repo_path, print_error, print_header, print_success};
 
@@ -137,7 +140,9 @@ fn check_config_directories() -> Result<()> {
 fn check_credentials() -> Result<()> {
   println!("Credentials:");
 
-  let netrc_path = get_netrc_path();
+  let base_dirs =
+    BaseDirs::new().ok_or_else(|| anyhow::anyhow!("Failed to get $HOME directory for credentials check"))?;
+  let netrc_path = get_netrc_path(base_dirs.home_dir());
   if netrc_path.exists() {
     println!("  .netrc file: {}", format_repo_path(&netrc_path.display().to_string()));
 
@@ -163,13 +168,20 @@ fn check_credentials() -> Result<()> {
     }
 
     // Check specific credentials
-    match check_jira_credentials() {
-      Ok(true) => println!("  Jira credentials: Found"),
-      Ok(false) => println!("  Jira credentials: Not found"),
-      Err(e) => print_error(&format!("  Jira credentials: Error - {e}",)),
+    match get_jira_host() {
+      Ok(jira_host) => {
+        println!("  Jira host: {jira_host}");
+        // Check Jira credentials
+        match check_jira_credentials(base_dirs.home_dir(), &jira_host) {
+          Ok(true) => println!("  Jira credentials: Found"),
+          Ok(false) => println!("  Jira credentials: Not found"),
+          Err(e) => print_error(&format!("  Jira credentials: Error - {e}")),
+        }
+      }
+      Err(e) => print_error(&format!("  Jira: Error - {e}")),
     }
 
-    match check_github_credentials() {
+    match check_github_credentials(base_dirs.home_dir()) {
       Ok(true) => println!("  GitHub credentials: Found"),
       Ok(false) => println!("  GitHub credentials: Not found"),
       Err(e) => print_error(&format!("  GitHub credentials: Error - {e}")),

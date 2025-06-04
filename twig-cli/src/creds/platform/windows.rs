@@ -14,7 +14,8 @@ use wincredentials::credential::Credential;
 use wincredentials::*;
 
 use super::{CredentialProvider, FilePermissions};
-use crate::creds::{Credentials, parse_netrc_file};
+use crate::creds::Credentials;
+use crate::creds::netrc::{get_netrc_path, parse_netrc_file};
 
 /// Windows implementation of file permissions using ACLs
 pub struct WindowsFilePermissions;
@@ -48,9 +49,9 @@ pub struct WindowsCredentialProvider {
 }
 
 impl WindowsCredentialProvider {
-  pub fn new() -> Self {
+  pub fn new(home: &Path) -> Self {
     Self {
-      netrc_path: crate::creds::get_netrc_path(),
+      netrc_path: get_netrc_path(home),
     }
   }
 

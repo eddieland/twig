@@ -5,6 +5,7 @@
 
 use anyhow::Result;
 use clap::Args;
+use directories::BaseDirs;
 use git2::{BranchType, Repository as Git2Repository};
 use owo_colors::OwoColorize;
 use serde::Serialize;
@@ -186,47 +187,56 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
   // Collect GitHub PRs
   let mut pull_requests = Vec::new();
   if !skip_github {
-    if let Ok(creds) = get_github_credentials() {
-      let github_client = clients::create_github_client(&creds.username, &creds.password);
-      if let Ok((owner, repo_name)) = github_client.extract_repo_info_from_url(remote_url) {
-        match rt.block_on(github_client.list_pull_requests(&owner, &repo_name, Some("open"), None)) {
-          Ok(prs) => {
-            for pr in prs {
-              // Skip if we're only showing PRs created by the current user
-              if dashboard.mine && pr.user.login != creds.username {
-                continue;
-              }
+    if let Some(base_dirs) = BaseDirs::new() {
+      // Get GitHub credentials from .netrc
+      if let Ok(creds) = get_github_credentials(base_dirs.home_dir()) {
+        let gh = clients::create_github_client(&creds.username, &creds.password);
+        if let Ok((owner, repo_name)) = gh.extract_repo_info_from_url(remote_url) {
+          match rt.block_on(gh.list_pull_requests(&owner, &repo_name, Some("open"), None)) {
+            Ok(prs) => {
+              for pr in prs {
+                // Skip if we're only showing PRs created by the current user
+                if dashboard.mine && pr.user.login != creds.username {
+                  continue;
+                }
 
-              // Skip if we're only showing recent PRs
-              if dashboard.recent {
-                if let Ok(created_date) = chrono::DateTime::parse_from_rfc3339(&pr.created_at) {
-                  let seven_days_ago = chrono::Utc::now() - chrono::Duration::days(7);
-                  if created_date < seven_days_ago {
-                    continue;
+                // Skip if we're only showing recent PRs
+                if dashboard.recent {
+                  if let Ok(created_date) = chrono::DateTime::parse_from_rfc3339(&pr.created_at) {
+                    let seven_days_ago = chrono::Utc::now() - chrono::Duration::days(7);
+                    if created_date < seven_days_ago {
+                      continue;
+                    }
                   }
                 }
-              }
 
-              pull_requests.push(pr);
+                pull_requests.push(pr);
+              }
             }
-          }
-          Err(e) => {
-            print_warning(&format!("Failed to fetch GitHub pull requests: {e}"));
+            Err(e) => {
+              print_warning(&format!("Failed to fetch GitHub pull requests: {e}"));
+            }
           }
         }
       }
+    } else {
+      print_error("Failed to get home directory for .netrc");
     }
   }
 
   // Collect Jira issues
   let mut issues = Vec::new();
   if !skip_jira {
-    if let Ok(jira_client) = clients::create_jira_client_from_netrc() {
+    if let Some(base_dirs) = BaseDirs::new() {
+      // Get Jira credentials from .netrc
+      let jira_host = clients::get_jira_host()?;
+      let jira = clients::create_jira_client_from_netrc(base_dirs.home_dir(), &jira_host)?;
+
       // Set up JQL filters
       let assignee = if dashboard.mine { Some("me") } else { None };
       let pagination = Some((50, 0));
 
-      match rt.block_on(jira_client.list_issues(None, None, assignee, pagination)) {
+      match rt.block_on(jira.list_issues(None, None, assignee, pagination)) {
         Ok(jira_issues) => {
           for issue in jira_issues {
             // Skip if we're only showing recent issues
@@ -246,6 +256,8 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
           print_warning(&format!("Failed to fetch Jira issues: {e}"));
         }
       }
+    } else {
+      print_error("Failed to get home directory for .netrc");
     }
   }
 

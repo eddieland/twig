@@ -13,7 +13,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 use super::{CredentialProvider, FilePermissions};
-use crate::creds::{Credentials, parse_netrc_file};
+use crate::creds::Credentials;
+use crate::creds::netrc::{get_netrc_path, parse_netrc_file, write_netrc_entry};
 
 /// Unix implementation of file permissions using chmod-style permissions
 pub struct UnixFilePermissions;
@@ -41,16 +42,10 @@ pub struct NetrcCredentialProvider {
   netrc_path: PathBuf,
 }
 
-impl Default for NetrcCredentialProvider {
-  fn default() -> Self {
-    Self::new()
-  }
-}
-
 impl NetrcCredentialProvider {
-  pub fn new() -> Self {
+  pub fn new(home: &Path) -> Self {
     Self {
-      netrc_path: crate::creds::get_netrc_path(),
+      netrc_path: get_netrc_path(home),
     }
   }
 }
@@ -65,7 +60,7 @@ impl CredentialProvider for NetrcCredentialProvider {
   }
 
   fn store_credentials(&self, service: &str, credentials: &Credentials) -> Result<()> {
-    crate::creds::write_netrc_entry(service, &credentials.username, &credentials.password)?;
+    write_netrc_entry(&self.netrc_path, service, &credentials.username, &credentials.password)?;
 
     // Ensure secure permissions
     UnixFilePermissions::set_secure_permissions(&self.netrc_path)?;

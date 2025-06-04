@@ -12,6 +12,7 @@ name = "twig_test_utils"
 [dependencies]
 # Core dependencies
 anyhow.workspace = true
+directories.workspace = true
 git2.workspace = true
 
 # Testing utilities

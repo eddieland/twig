@@ -8,6 +8,11 @@ use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
 
+#[cfg(unix)]
+pub const HOME_ENV_VAR: &str = "HOME";
+#[cfg(not(unix))]
+pub const HOME_ENV_VAR: &str = "USERPROFILE";
+
 /// A test environment that overrides the HOME directory to use a temporary
 /// directory This is useful for testing credential management and other
 /// home directory dependent functionality
@@ -15,7 +20,7 @@ pub struct HomeEnvTestGuard {
   /// The temporary directory that will be used as HOME
   pub temp_dir: TempDir,
   /// The original HOME value
-  original_home: String,
+  original_home: Option<String>,
 }
 
 impl Default for HomeEnvTestGuard {
@@ -30,11 +35,11 @@ impl HomeEnvTestGuard {
     let temp_dir = TempDir::new().expect("Failed to create temporary directory");
 
     // Save original HOME environment variable
-    let original_home = env::var("HOME").expect("HOME environment variable must be set");
+    let original_home = env::var(HOME_ENV_VAR).ok();
 
     // Override HOME to use the temporary directory
     unsafe {
-      env::set_var("HOME", temp_dir.path());
+      env::set_var(HOME_ENV_VAR, temp_dir.path());
     }
 
     Self {
@@ -56,9 +61,16 @@ impl HomeEnvTestGuard {
 
 impl Drop for HomeEnvTestGuard {
   fn drop(&mut self) {
-    // Restore original HOME environment variable
-    unsafe {
-      env::set_var("HOME", &self.original_home);
+    if let Some(original_home) = &self.original_home {
+      // If the original HOME was set, restore it
+      unsafe {
+        env::set_var(HOME_ENV_VAR, original_home);
+      }
+    } else {
+      // If it wasn't set, remove the HOME variable
+      unsafe {
+        env::remove_var(HOME_ENV_VAR);
+      }
     }
   }
 }
