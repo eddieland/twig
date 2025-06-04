@@ -51,6 +51,11 @@ no-worries = { path = "../no-worries" }
 twig-gh = { path = "../twig-gh" }
 twig-jira = { path = "../twig-jira" }
 
+# Platform-specific dependencies
+[target.'cfg(windows)'.dependencies]
+windows-acl = "0.3"
+wincredentials = "0.2"
+
 [dev-dependencies]
 # Core dependencies
 anyhow.workspace = true

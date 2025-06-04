@@ -3,9 +3,7 @@
 //! Derive-based implementation of the credentials command for managing
 //! credentials for external services like Jira and GitHub.
 
-use std::fs::metadata;
 use std::io::{self, Write};
-use std::os::unix::fs::PermissionsExt;
 
 use anyhow::Result;
 use clap::{Args, Subcommand};
@@ -13,6 +11,12 @@ use tokio::runtime::Runtime;
 use twig_gh::create_github_client;
 use twig_jira::create_jira_client;
 
+#[cfg(unix)]
+use crate::creds::platform::FilePermissions;
+#[cfg(unix)]
+use crate::creds::platform::UnixFilePermissions;
+#[cfg(windows)]
+use crate::creds::platform::WindowsFilePermissions;
 use crate::creds::{check_github_credentials, check_jira_credentials, get_netrc_path, write_netrc_entry};
 use crate::utils::output::{format_command, format_repo_path, print_error, print_info, print_success, print_warning};
 
@@ -75,18 +79,27 @@ fn handle_check_command() -> Result<()> {
   }
 
   // Check file permissions
-  let metadata = metadata(&netrc_path)?;
-  let permissions = metadata.permissions();
-  let mode = permissions.mode();
+  #[cfg(unix)]
+  {
+    let has_secure_permissions = UnixFilePermissions::has_secure_permissions(&netrc_path)?;
+    if !has_secure_permissions {
+      print_warning("Your .netrc file has insecure permissions.");
+      println!(
+        "For security, change permissions to 600: {}",
+        format_command(&format!("chmod 600 {}", netrc_path.display()))
+      );
+    } else {
+      print_success(".netrc file has secure permissions.");
+    }
+  }
 
-  if mode & 0o077 != 0 {
-    print_warning("Your .netrc file has insecure permissions.");
-    println!(
-      "For security, change permissions to 600: {}",
-      format_command(&format!("chmod 600 {}", netrc_path.display()))
-    );
-  } else {
-    print_success(".netrc file has secure permissions.");
+  #[cfg(windows)]
+  {
+    use crate::creds::platform::FilePermissions;
+    let _ = WindowsFilePermissions::has_secure_permissions(&netrc_path);
+    print_warning("Secure file permissions are not fully supported on Windows.");
+    print_warning("Your .netrc file may not be properly secured.");
+    println!("For security, consider using Windows Credential Manager instead.");
   }
 
   // Check Jira credentials
@@ -130,8 +143,18 @@ fn handle_setup_command() -> Result<()> {
   println!("This wizard will help you configure credentials for Jira and GitHub.");
   println!();
 
-  println!("• Credentials will be stored in ~/.netrc");
-  println!("• File permissions will be automatically set to 600 for security");
+  #[cfg(unix)]
+  {
+    println!("• Credentials will be stored in ~/.netrc");
+    println!("• File permissions will be automatically set to 600 for security");
+  }
+
+  #[cfg(windows)]
+  {
+    println!("• Credentials will be stored in Windows Credential Manager");
+    println!("• Will fall back to ~/.netrc if it exists");
+  }
+
   println!();
 
   let rt = Runtime::new()?;
@@ -281,14 +304,18 @@ fn handle_setup_command() -> Result<()> {
 
   // Set secure permissions on .netrc
   if netrc_path.exists() {
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
+    #[cfg(unix)]
+    {
+      UnixFilePermissions::set_secure_permissions(&netrc_path)?;
+      print_success("Set secure permissions on .netrc file (600).");
+    }
 
-    let mut perms = fs::metadata(&netrc_path)?.permissions();
-    perms.set_mode(0o600);
-    fs::set_permissions(&netrc_path, perms)?;
-
-    print_success("Set secure permissions on .netrc file (600).");
+    #[cfg(windows)]
+    {
+      print_info("Found existing .netrc file that will be used as a fallback if needed.");
+      print_warning("Note: Secure file permissions are not supported on Windows.");
+      print_info("Windows Credential Manager will be used as the primary credential store.");
+    }
   }
 
   println!();

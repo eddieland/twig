@@ -12,7 +12,7 @@ use anyhow::Result;
 use crate::config::get_config_dirs;
 use crate::creds::{check_github_credentials, check_jira_credentials, get_netrc_path};
 use crate::git::list_repositories;
-use crate::utils::output::{format_repo_path, print_error, print_header, print_success, print_warning};
+use crate::utils::output::{format_repo_path, print_error, print_header, print_success};
 
 /// Run comprehensive system diagnostics
 pub fn run_diagnostics() -> Result<()> {
@@ -142,11 +142,14 @@ fn check_credentials() -> Result<()> {
     println!("  .netrc file: {}", format_repo_path(&netrc_path.display().to_string()));
 
     // Check file permissions
-    let metadata = fs::metadata(&netrc_path)?;
-    let permissions = metadata.permissions();
     #[cfg(unix)]
     {
       use std::os::unix::fs::PermissionsExt;
+
+      use crate::utils::output::print_warning;
+
+      let metadata = fs::metadata(&netrc_path)?;
+      let permissions = metadata.permissions();
       let mode = permissions.mode();
       if mode & 0o077 == 0 {
         println!("  .netrc permissions: Secure (600)");
@@ -186,7 +189,10 @@ fn check_git_configuration() -> Result<()> {
   println!("Git Configuration:");
 
   // Check if git is available
-  match Command::new("git").arg("--version").output() {
+  match Command::new(crate::utils::platform::GIT_EXECUTABLE)
+    .arg("--version")
+    .output()
+  {
     Ok(output) => {
       if output.status.success() {
         let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -202,7 +208,10 @@ fn check_git_configuration() -> Result<()> {
   }
 
   // Check git configuration
-  if let Ok(output) = Command::new("git").args(["config", "--global", "user.name"]).output() {
+  if let Ok(output) = Command::new(crate::utils::platform::GIT_EXECUTABLE)
+    .args(["config", "--global", "user.name"])
+    .output()
+  {
     if output.status.success() {
       let name = String::from_utf8_lossy(&output.stdout);
       let name = name.trim();
@@ -216,7 +225,10 @@ fn check_git_configuration() -> Result<()> {
     }
   }
 
-  if let Ok(output) = Command::new("git").args(["config", "--global", "user.email"]).output() {
+  if let Ok(output) = Command::new(crate::utils::platform::GIT_EXECUTABLE)
+    .args(["config", "--global", "user.email"])
+    .output()
+  {
     if output.status.success() {
       let email = String::from_utf8_lossy(&output.stdout);
       let email = email.trim();

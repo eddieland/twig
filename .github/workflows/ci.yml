@@ -32,6 +32,8 @@ jobs:
           components: rustfmt, clippy
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-ubuntu-format-clippy
 
       # Conditional steps based on the check type
       - name: Check formatting
@@ -55,6 +57,31 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-${{ matrix.os }}-test
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Build
+        run: cargo build --workspace
+      - name: Run tests
+        run: cargo nextest run --workspace
+
+  # Windows tests are optional and won't block the pipeline if they fail
+  test-windows:
+    name: Test (Windows)
+    runs-on: windows-latest
+    # Make this job non-blocking
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-windows-test
       - name: Install cargo-nextest
         uses: taiki-e/install-action@v2
         with:
@@ -75,6 +102,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-ubuntu-build
       - name: Build release
         run: cargo build --release --workspace
       - name: Upload artifact
@@ -82,3 +111,26 @@ jobs:
         with:
           name: twig-ubuntu
           path: target/release/twig
+
+  # Windows build is optional and won't block the pipeline if it fails
+  build-windows:
+    name: Build (Windows)
+    needs: [test-windows]
+    runs-on: windows-latest
+    # Make this job non-blocking
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-windows-build
+      - name: Build release
+        run: cargo build --release --workspace
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: twig-windows
+          path: target/release/twig.exe

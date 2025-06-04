@@ -256,7 +256,7 @@ fn rebase_branch(repo_path: &Path, _branch: &str, onto: &str, autostash: bool) -
   args.push(onto);
 
   // Execute the rebase command
-  let output = Command::new("git")
+  let output = Command::new(crate::utils::platform::GIT_EXECUTABLE)
     .args(&args)
     .current_dir(repo_path)
     .output()
@@ -302,7 +302,7 @@ fn rebase_branch_force(repo_path: &Path, _branch: &str, onto: &str, autostash: b
   args.push(onto);
 
   // Execute the rebase command
-  let output = Command::new("git")
+  let output = Command::new(crate::utils::platform::GIT_EXECUTABLE)
     .args(&args)
     .current_dir(repo_path)
     .output()
@@ -362,7 +362,7 @@ fn handle_rebase_conflict(_repo_path: &Path, _branch: &str) -> Result<ConflictRe
 
 /// Execute a git command and handle output
 fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<String> {
-  let output = Command::new("git")
+  let output = Command::new(crate::utils::platform::GIT_EXECUTABLE)
     .args(args)
     .current_dir(repo_path)
     .output()

@@ -32,6 +32,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
+        with:
+          key: ubuntu-release
       - name: Build release
         run: cargo build --release --workspace
       - name: Strip binary
@@ -62,6 +64,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
+        with:
+          key: macos-release
       - name: Build release
         run: cargo build --release --workspace
       - name: Strip binary
@@ -81,9 +85,53 @@ jobs:
             twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
             twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
 
+  build-windows:
+    needs: validate-version
+    name: Build Windows
+    runs-on: windows-latest
+    timeout-minutes: 15
+    # Make this job non-blocking
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-release
+      - name: Build release
+        run: cargo build --release --workspace
+      - name: Extract version
+        id: version
+        shell: bash
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Create release directory
+        shell: bash
+        run: mkdir -p release
+
+      - name: Copy binary
+        shell: cmd
+        run: copy target\release\twig.exe release\
+
+      - name: Create zip and checksum
+        shell: cmd
+        run: |
+          7z a twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip .\release\twig.exe
+          certutil -hashfile twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip SHA256 > twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
+          type twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: twig-windows
+          path: |
+            twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip
+            twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
+
   create-release:
     name: Create Release
     if: success()
+    # Note: does not depend on build-windows since it's optional
     needs: [validate-version, build-ubuntu, build-macos]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -112,6 +160,13 @@ jobs:
           name: twig-macos
           path: ./
 
+      - name: Download Windows artifact (if available)
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: twig-windows
+          path: ./
+
       - name: Install envsubst
         run: sudo apt-get update && sudo apt-get install -y gettext-base
 
@@ -127,6 +182,8 @@ jobs:
             ./twig-linux-x86_64-*.tar.gz.sha256
             ./twig-macos-x86_64-*.tar.gz
             ./twig-macos-x86_64-*.tar.gz.sha256
+            ./twig-windows-x86_64-*.zip
+            ./twig-windows-x86_64-*.zip.sha256
           body_path: release_notes.md
           draft: false
           prerelease: false

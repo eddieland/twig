@@ -9,6 +9,7 @@ use anyhow::{Context, Result};
 use git2::Repository as Git2Repository;
 
 pub mod output;
+pub mod platform;
 
 /// Represents an associated item for a branch
 #[derive(Debug, Clone)]
