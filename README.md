@@ -66,14 +66,7 @@ Move-Item -Path twig.exe -Destination "$env:LOCALAPPDATA\twig\"
 
 ### For Developers
 
-If you want to contribute to Twig or build it from source, please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file for detailed instructions on:
-
-- Setting up the development environment
-- Installing Rustup and the required toolchain
-- Building from source
-- Running tests with nextest
-- Using the Makefile for common development tasks
-- Working with snapshot tests
+If you want to contribute to Twig or build it from source, please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file for detailed instructions.
 
 The project uses a specific nightly toolchain for development, which is automatically configured through the `rust-toolchain.toml` file.
 
