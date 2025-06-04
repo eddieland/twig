@@ -324,6 +324,7 @@ pub enum RootSubcommands {
 ```
 
 This creates a command structure like:
+
 - `twig branch depend <child> <parent>`
 - `twig branch remove-dep <child> <parent>`
 - `twig branch root add <branch>`
@@ -434,3 +435,96 @@ For example, when using `HomeEnvTestGuard`:
 ```
 
 This pattern eliminates the need for explicit cleanup code and ensures resources are properly managed even in the presence of errors or early returns.
+
+## Platform-Specific Code
+
+Twig primarily targets Unix-based systems (Linux and macOS), but also supports Windows. This section explains how to handle platform-specific code and testing.
+
+### Marking Code as Platform-Specific
+
+Rust provides conditional compilation attributes that allow you to include or exclude code based on the target platform:
+
+#### Unix-Only Code
+
+```rust
+#[cfg(unix)]
+fn unix_specific_function() {
+    // This code will only compile and run on Unix platforms
+    use std::os::unix::fs::PermissionsExt;
+    // Unix-specific implementation
+}
+```
+
+#### Windows-Only Code
+
+```rust
+#[cfg(windows)]
+fn windows_specific_function() {
+    // This code will only compile and run on Windows
+    use std::os::windows::fs::MetadataExt;
+    // Windows-specific implementation
+}
+```
+
+#### Platform-Agnostic Interface with Platform-Specific Implementations
+
+For functionality that needs different implementations across platforms but the same interface:
+
+```rust
+// Common interface
+pub fn set_executable(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        // Unix implementation using permissions
+        let mut perms = fs::metadata(path)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(path, perms)?;
+    }
+
+    #[cfg(windows)]
+    {
+        // Windows implementation (might be a no-op or use a different approach)
+        // Windows doesn't have the same permission concept
+    }
+
+    Ok(())
+}
+```
+
+### Testing Platform-Specific Code
+
+The testing strategy for platform-specific code involves:
+
+1. **Conditional Test Modules**: Use `#[cfg()]` attributes for test and platform conditions
+
+```rust
+#[cfg(test)]
+#[cfg(windows)]
+mod windows_tests {
+    #[test]
+    fn test_windows_specific_feature() {
+        // This test only runs on Windows
+    }
+}
+
+#[cfg(test)]
+#[cfg(unix)]
+mod unix_tests {
+    #[test]
+    fn test_unix_specific_feature() {
+        // This test only runs on Unix platforms
+    }
+}
+```
+
+2. **CI Integration**: Our CI pipeline runs tests on multiple platforms to ensure platform-specific code works correctly:
+   - Linux runners test Unix-specific code
+   - Windows runners test Windows-specific code
+   - Cross-platform code is tested on all platforms
+
+When adding Windows-specific functionality, ensure:
+
+1. The core functionality works across all platforms
+2. Platform-specific optimizations or implementations are properly isolated
+3. Tests are added for both the common interface and platform-specific implementations
+4. Documentation clearly indicates any platform-specific behavior

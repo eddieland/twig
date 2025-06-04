@@ -19,7 +19,7 @@ Twig streamlines common developer workflows across multiple repositories, provid
 
 - **Language**: Rust (Edition 2024)
 - **MSRV**: 1.87.0
-- **Target Platforms**: Ubuntu 24.04 (primary), macOS (secondary)
+- **Target Platforms**: Ubuntu 24.04 (primary), macOS (secondary), Windows (tertiary)
 
 ## Installation
 
@@ -31,6 +31,7 @@ The easiest way to install Twig is to download a pre-built binary from the [GitH
 2. Download the appropriate binary for your platform:
    - `twig-linux-x86_64.tar.gz` for Linux
    - `twig-macos-x86_64.tar.gz` for macOS
+   - `twig-windows-x86_64.zip` for Windows
 3. Extract the archive and move the binary to a location in your PATH:
 
 ```bash
@@ -38,6 +39,29 @@ The easiest way to install Twig is to download a pre-built binary from the [GitH
 tar -xzf twig-*.tar.gz
 chmod +x twig
 sudo mv twig /usr/local/bin/
+```
+
+**For Windows:**
+
+1. Extract the `twig-windows-x86_64.zip` file
+2. The simplest installation option is to move `twig.exe` to a location that's already in your PATH:
+
+```powershell
+# Move to WindowsApps folder (already in PATH for most Windows 10/11 users)
+Move-Item -Path twig.exe -Destination "$env:LOCALAPPDATA\Microsoft\WindowsApps\"
+```
+
+That's it! The executable will now be available from any command prompt or PowerShell window.
+
+Alternatively, if you prefer a dedicated installation location:
+
+```powershell
+# Create a twig folder
+New-Item -Path "$env:LOCALAPPDATA\twig" -ItemType Directory -Force
+Move-Item -Path twig.exe -Destination "$env:LOCALAPPDATA\twig\"
+
+# Add to PATH permanently (requires PowerShell as Administrator)
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";$env:LOCALAPPDATA\twig", "User")
 ```
 
 ### For Developers
@@ -197,3 +221,40 @@ These aliases can significantly reduce typing and make common twig operations mo
 ## Development Resources
 
 For information about development workflows, Makefile usage, and snapshot testing, please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file.
+
+## Windows Usage
+
+While Twig primarily targets Linux and macOS, it can also be used on Windows with some considerations:
+
+### File Path Handling
+
+Windows uses different path normalization techniques compared to Unix-based systems, which can sometimes cause issues:
+
+- Windows uses backslashes (`\`) as path separators, while Unix uses forward slashes (`/`)
+- Windows paths may include drive letters (e.g., `C:\`)
+- Case sensitivity differs between Windows (case-insensitive) and Unix (case-sensitive)
+
+These differences can lead to unexpected behavior when working with paths across different platforms, especially in a Git context where repositories might be accessed from multiple operating systems.
+
+### Troubleshooting Windows-Specific Issues
+
+If you encounter issues when using Twig on Windows:
+
+1. **Enable verbose logging**: Run commands with the `--verbose` flag to get more detailed output
+
+   ```
+   twig --verbose git list
+   ```
+
+2. **Provide crash reports**: If Twig crashes, it will generate a crash report. Please include this when reporting issues:
+
+   ```
+   # Location of crash reports
+   %USERPROFILE%\.local\share\twig\crash-reports\
+   ```
+
+3. **Include panic dumps**: If you encounter a panic, the error message contains valuable information for debugging. Copy the entire output when reporting issues.
+
+4. **Check path normalization**: If you're experiencing path-related issues, try using forward slashes even on Windows, as Git often works better with Unix-style paths.
+
+Providing these details when reporting Windows-specific issues will help us identify and fix problems more effectively.
