@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["GitRepoTestGuard"]};
+window.SIDEBAR_ITEMS = {"fn":["checkout_branch","create_branch","create_commit"],"struct":["GitRepoTestGuard"]};

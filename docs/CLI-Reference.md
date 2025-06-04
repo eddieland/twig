@@ -9,21 +9,22 @@ management to streamline your development workflow.
 Usage: twig [OPTIONS] <COMMAND>
 
 Commands:
-  branch       Branch dependency and root management
-  cascade      Perform a cascading rebase from the current branch to its children
-  completion   Generate shell completions
-  creds        Credential management
-  dashboard    Show a comprehensive dashboard of local branches, PRs, and issues
-  diagnostics  Run system diagnostics
-  git          Git repository management
-  github       GitHub integration
-  init         Initialize twig configuration
-  jira         Jira integration
-  rebase       Rebase the current branch on its parent(s)
-  switch       Magic branch switching
-  sync         Automatically link branches to Jira issues and GitHub PRs
-  tree         Show your branch tree with user-defined dependencies
-  worktree     Worktree management
+  branch      Branch dependency and root management
+  cascade     Perform a cascading rebase from the current branch to its children
+  commit      Create a commit using Jira issue information
+  completion  Generate shell completions
+  creds       Credential management
+  dashboard   Show a comprehensive dashboard of local branches, PRs, and issues
+  diagnose    Run system diagnostics
+  git         Git repository management
+  github      GitHub integration
+  init        Initialize twig configuration
+  jira        Jira integration
+  rebase      Rebase the current branch on its parent(s)
+  switch      Magic branch switching
+  sync        Automatically link branches to Jira issues and GitHub PRs
+  tree        Show your branch tree with user-defined dependencies
+  worktree    Worktree management
 
 Options:
   -v, --verbose...

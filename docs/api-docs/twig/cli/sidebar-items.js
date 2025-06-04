@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Commands"],"fn":["handle_cli"],"mod":["branch","cascade","completion","creds","dashboard","git","github","jira","rebase","switch","sync","tree","worktree"],"struct":["Cli"]};
+window.SIDEBAR_ITEMS = {"enum":["Commands"],"fn":["handle_cli"],"mod":["branch","cascade","commit","completion","creds","dashboard","git","github","jira","rebase","switch","sync","tree","worktree"],"struct":["Cli"]};

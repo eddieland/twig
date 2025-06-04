@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GIT_EXECUTABLE"],"fn":["normalize_path"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["BranchAssociatedItem"],"fn":["get_current_branch_associated_item","get_current_branch_github_pr","get_current_branch_jira_issue","resolve_repository_path"],"mod":["output"]};
+window.SIDEBAR_ITEMS = {"enum":["BranchAssociatedItem"],"fn":["get_current_branch_associated_item","get_current_branch_github_pr","get_current_branch_jira_issue","resolve_repository_path"],"mod":["output","platform"]};
