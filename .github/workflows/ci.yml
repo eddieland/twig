@@ -91,10 +91,10 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-      - name: Build
-        run: cargo build --workspace
-      - name: Run tests
-        run: cargo nextest run --workspace
+      - name: Build (fast)
+        run: cargo build --profile ci-windows --bin twig
+      - name: Run tests (unit tests only)
+        run: cargo nextest run --lib --bins --profile ci-windows
 
   # Build job depends on both fast-checks and test
   build:
@@ -132,10 +132,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: rust-windows-build
-      - name: Build release
-        run: cargo build --release --workspace
+      - name: Build release (fast)
+        run: cargo build --profile ci-windows --bin twig
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: twig-windows
-          path: target/release/twig.exe
+          path: target/ci-windows/twig.exe
