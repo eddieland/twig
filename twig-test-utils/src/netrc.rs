@@ -19,7 +19,6 @@ fn get_netrc_path() -> PathBuf {
 /// the HOME environment variable to point to the temporary directory, and
 /// restores the original HOME environment variable when dropped.
 pub struct NetrcGuard {
-  #[allow(dead_code)]
   temp_dir: TempDir,
   netrc_path: PathBuf,
   original_home: PathBuf,
