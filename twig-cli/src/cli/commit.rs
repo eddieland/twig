@@ -5,9 +5,9 @@
 
 use anyhow::{Context, Result};
 use clap::Args;
-use tokio::runtime::Runtime;
+use directories::BaseDirs;
 
-use crate::clients;
+use crate::clients::{self};
 use crate::git::detect_current_repository;
 use crate::utils::get_current_branch_jira_issue;
 use crate::utils::output::{print_error, print_info, print_success, print_warning};
@@ -47,10 +47,9 @@ pub fn handle_commit_command(args: CommitArgs) -> Result<()> {
     }
   };
 
-  let jira_client = clients::create_jira_client_from_netrc()?;
-
-  // Create a runtime for async operations
-  let rt = Runtime::new().context("Failed to create tokio runtime")?;
+  let jira_host = clients::get_jira_host().context("Failed to get Jira host from environment variable")?;
+  let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
+  let (rt, jira_client) = clients::create_jira_runtime_and_client(base_dirs.home_dir(), &jira_host)?;
 
   // Fetch the issue details
   let issue = rt

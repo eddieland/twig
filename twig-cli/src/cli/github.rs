@@ -4,8 +4,11 @@
 //! including pull request management, status checks, and synchronization with
 //! branch metadata for development workflows.
 
-use anyhow::Result;
+use std::path::PathBuf;
+
+use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
+use directories::BaseDirs;
 use git2::Repository as Git2Repository;
 use owo_colors::OwoColorize;
 use tabled::settings::Style;
@@ -165,10 +168,8 @@ pub(crate) fn handle_github_command(github: GitHubArgs) -> Result<()> {
 
 /// Handle the check command
 fn handle_check_command() -> Result<()> {
-  // Create a runtime for async operations
-  let rt = Runtime::new()?;
-
-  let github_client = clients::create_github_client_from_netrc()?;
+  let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
+  let (rt, github_client) = clients::create_github_runtime_and_client(base_dirs.home_dir())?;
 
   // Test connection
   match rt.block_on(github_client.test_connection()) {
@@ -203,16 +204,8 @@ fn handle_check_command() -> Result<()> {
 
 /// Handle the checks command
 fn handle_checks_command(cmd: &ChecksCommand) -> Result<()> {
-  use std::path::PathBuf;
-
-  // Create a runtime and GitHub client
-  let (rt, github_client) = match clients::create_github_runtime_and_client() {
-    Ok(result) => result,
-    Err(e) => {
-      print_error(&format!("Failed to create GitHub client: {e}"));
-      return Ok(());
-    }
-  };
+  let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
+  let (rt, github_client) = clients::create_github_runtime_and_client(base_dirs.home_dir())?;
 
   // Get repository path (current or specified)
   let repo_path = if let Some(path) = &cmd.repo {
@@ -405,12 +398,8 @@ fn handle_checks_command(cmd: &ChecksCommand) -> Result<()> {
 
 /// Handle the PR status command
 fn handle_pr_status_command() -> Result<()> {
-  use crate::utils::get_current_branch_github_pr;
-
-  // Create a runtime for async operations
-  let rt = Runtime::new()?;
-
-  let github_client = clients::create_github_client_from_netrc()?;
+  let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
+  let (rt, github_client) = clients::create_github_runtime_and_client(base_dirs.home_dir())?;
 
   // Get the current repository
   let repo_path = match detect_current_repository() {
@@ -507,12 +496,8 @@ fn handle_pr_status_command() -> Result<()> {
 
 /// Handle the PR list command
 fn handle_pr_list_command(cmd: &ListCommand) -> Result<()> {
-  use std::path::PathBuf;
-
-  // Create a runtime for async operations
-  let rt = Runtime::new()?;
-
-  let github_client = clients::create_github_client_from_netrc()?;
+  let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
+  let (rt, github_client) = clients::create_github_runtime_and_client(base_dirs.home_dir())?;
 
   // Get repository path (current or specified)
   let repo_path = if let Some(path) = &cmd.repo {
@@ -633,11 +618,6 @@ fn handle_pr_list_command(cmd: &ListCommand) -> Result<()> {
 
 /// Handle the PR link command
 fn handle_pr_link_command(pr_url_or_id: &str) -> Result<()> {
-  // Create a runtime for async operations
-  let rt = Runtime::new()?;
-
-  let github_client = clients::create_github_client_from_netrc()?;
-
   // Get the current repository
   let repo_path = match detect_current_repository() {
     Ok(path) => path,
@@ -673,6 +653,9 @@ fn handle_pr_link_command(pr_url_or_id: &str) -> Result<()> {
     }
   };
 
+  let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
+  let github_client = clients::create_github_client_from_netrc(base_dirs.home_dir())?;
+
   // Extract owner and repo from remote URL
   let (owner, repo_name) = match github_client.extract_repo_info_from_url(remote_url) {
     Ok((owner, repo)) => (owner, repo),
@@ -703,6 +686,7 @@ fn handle_pr_link_command(pr_url_or_id: &str) -> Result<()> {
     }
   };
 
+  let rt = Runtime::new().context("Failed to create async runtime")?;
   let pr = match rt.block_on(github_client.get_pull_request(&owner, &repo_name, pr_number)) {
     Ok(pr) => pr,
     Err(e) => {

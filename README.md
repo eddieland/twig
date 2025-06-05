@@ -144,7 +144,6 @@ Twig supports several environment variables to customize its behavior. For the b
 
 Specifies the URL of your Jira instance.
 
-- **Default**: `https://eddieland.atlassian.net`
 - **Example**: `export JIRA_HOST="https://your-company.atlassian.net"`
 
 **Authentication**: When `JIRA_HOST` is set, Twig will look for credentials in your `.netrc` file matching this hostname first. If not found, it falls back to looking for `atlassian.net` credentials.

@@ -6,6 +6,3 @@
 
 /// Environment variable for the JIRA host URL
 pub const ENV_JIRA_HOST: &str = "JIRA_HOST";
-
-/// Default JIRA host URL if $JIRA_HOST is undefined
-pub const DEFAULT_JIRA_HOST: &str = "https://eddieland.atlassian.net";

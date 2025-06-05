@@ -37,13 +37,13 @@ pub trait CredentialProvider {
 }
 
 /// Get the appropriate credential provider for the current platform
-pub fn get_credential_provider() -> Box<dyn CredentialProvider> {
-  #[cfg(unix)]
-  {
-    Box::new(unix::NetrcCredentialProvider::new())
-  }
-  #[cfg(windows)]
-  {
-    Box::new(windows::WindowsCredentialProvider::new())
-  }
+#[cfg(unix)]
+pub fn get_credential_provider(home: &Path) -> unix::NetrcCredentialProvider {
+  unix::NetrcCredentialProvider::new(home)
+}
+
+/// Get the appropriate credential provider for the current platform
+#[cfg(windows)]
+pub fn get_credential_provider(home: &Path) -> windows::WindowsCredentialProvider {
+  windows::WindowsCredentialProvider::new(home)
 }

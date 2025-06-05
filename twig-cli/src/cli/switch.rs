@@ -3,12 +3,17 @@
 //! Derive-based implementation of the switch command for intelligently
 //! switching to branches based on various inputs.
 
+use std::path::Path;
+
 use anyhow::{Context, Result};
 use clap::Args;
+use directories::BaseDirs;
 use git2::Repository as Git2Repository;
 use tokio::runtime::Runtime;
+use twig_gh::GitHubClient;
+use twig_jira::JiraClient;
 
-use crate::clients;
+use crate::clients::{self, get_jira_host};
 use crate::git::detect_current_repository;
 use crate::repo_state::{BranchMetadata, RepoState};
 use crate::utils::output::{print_error, print_info, print_success, print_warning};
@@ -69,13 +74,21 @@ pub(crate) fn handle_switch_command(switch: SwitchArgs) -> Result<()> {
 
   // Detect input type and handle accordingly
   match detect_input_type(input) {
-    InputType::JiraIssueKey(issue_key) => handle_jira_switch(&repo_path, &issue_key, create_if_missing, parent_option),
-    InputType::JiraIssueUrl(issue_key) => handle_jira_switch(&repo_path, &issue_key, create_if_missing, parent_option),
-    InputType::GitHubPrId(pr_number) => {
-      handle_github_pr_switch(&repo_path, pr_number, create_if_missing, parent_option)
+    InputType::JiraIssueKey(issue_key) | InputType::JiraIssueUrl(issue_key) => {
+      let jira_host = get_jira_host().context("Failed to get Jira host")?;
+
+      let base_dirs = BaseDirs::new().context("Failed to get $HOME")?;
+      let jira = clients::create_jira_client_from_netrc(base_dirs.home_dir(), &jira_host)
+        .context("Failed to create Jira client")?;
+
+      handle_jira_switch(&jira, &repo_path, &issue_key, create_if_missing, parent_option)
     }
-    InputType::GitHubPrUrl(pr_number) => {
-      handle_github_pr_switch(&repo_path, pr_number, create_if_missing, parent_option)
+    InputType::GitHubPrId(pr_number) | InputType::GitHubPrUrl(pr_number) => {
+      let base_dirs = BaseDirs::new().context("Failed to get $HOME")?;
+      let gh =
+        clients::create_github_client_from_netrc(base_dirs.home_dir()).context("Failed to create GitHub client")?;
+
+      handle_github_pr_switch(&gh, &repo_path, pr_number, create_if_missing, parent_option)
     }
     InputType::BranchName(branch_name) => {
       handle_branch_switch(&repo_path, &branch_name, create_if_missing, parent_option)
@@ -199,7 +212,8 @@ fn resolve_parent_branch(repo_path: &std::path::Path, parent_option: Option<&str
 
 /// Handle switching to a branch based on Jira issue
 fn handle_jira_switch(
-  repo_path: &std::path::Path,
+  jira: &JiraClient,
+  repo_path: &Path,
   issue_key: &str,
   create_if_missing: bool,
   parent_option: Option<&str>,
@@ -219,7 +233,7 @@ fn handle_jira_switch(
   // No existing association found
   if create_if_missing {
     print_info("No associated branch found. Creating new branch from Jira issue...");
-    create_branch_from_jira_issue(repo_path, issue_key, parent_option)
+    create_branch_from_jira_issue(jira, repo_path, issue_key, parent_option)
   } else {
     print_warning(&format!(
       "No branch found for Jira issue {issue_key}. Use --create to create a new branch.",
@@ -230,7 +244,8 @@ fn handle_jira_switch(
 
 /// Handle switching to a branch based on GitHub PR
 fn handle_github_pr_switch(
-  repo_path: &std::path::Path,
+  gh: &GitHubClient,
+  repo_path: &Path,
   pr_number: u32,
   create_if_missing: bool,
   parent_option: Option<&str>,
@@ -254,7 +269,7 @@ fn handle_github_pr_switch(
   // No existing association found
   if create_if_missing {
     print_info("No associated branch found. Creating new branch from GitHub PR...");
-    create_branch_from_github_pr(repo_path, pr_number, parent_option)
+    create_branch_from_github_pr(gh, repo_path, pr_number, parent_option)
   } else {
     print_warning(&format!(
       "No branch found for GitHub PR #{pr_number}. Use --create to create a new branch.",
@@ -378,12 +393,12 @@ fn add_branch_dependency(repo_path: &std::path::Path, child: &str, parent: &str)
 
 /// Create a branch from a Jira issue
 fn create_branch_from_jira_issue(
+  jira_client: &JiraClient,
   repo_path: &std::path::Path,
   issue_key: &str,
   parent_option: Option<&str>,
 ) -> Result<()> {
-  let (rt, jira_client) = clients::create_jira_runtime_and_client()?;
-
+  let rt = Runtime::new().context("Failed to create async runtime")?;
   rt.block_on(async {
     // Fetch the issue to get its summary
     let issue = match jira_client.get_issue(issue_key).await {
@@ -433,17 +448,13 @@ fn create_branch_from_jira_issue(
 
 /// Create a branch from a GitHub PR
 fn create_branch_from_github_pr(
-  repo_path: &std::path::Path,
+  github_client: &GitHubClient,
+  repo_path: &Path,
   pr_number: u32,
   parent_option: Option<&str>,
 ) -> Result<()> {
-  // Create a runtime for async operations
   let rt = Runtime::new().context("Failed to create async runtime")?;
-
   rt.block_on(async {
-    // Create GitHub client
-    let github_client = clients::create_github_client_from_netrc()?;
-
     // Open the git repository to get remote info
     let repo = Git2Repository::open(repo_path)?;
     let remote = repo.find_remote("origin")?;
@@ -487,7 +498,7 @@ fn create_branch_from_github_pr(
 }
 
 /// Store Jira issue association in repository state
-fn store_jira_association(repo_path: &std::path::Path, branch_name: &str, issue_key: &str) -> Result<()> {
+fn store_jira_association(repo_path: &Path, branch_name: &str, issue_key: &str) -> Result<()> {
   let mut repo_state = RepoState::load(repo_path)?;
 
   let now = std::time::SystemTime::now()
@@ -510,7 +521,7 @@ fn store_jira_association(repo_path: &std::path::Path, branch_name: &str, issue_
 }
 
 /// Store GitHub PR association in repository state
-fn store_github_pr_association(repo_path: &std::path::Path, branch_name: &str, pr_number: u32) -> Result<()> {
+fn store_github_pr_association(repo_path: &Path, branch_name: &str, pr_number: u32) -> Result<()> {
   let mut repo_state = RepoState::load(repo_path)?;
 
   let now = chrono::Utc::now().to_rfc3339();

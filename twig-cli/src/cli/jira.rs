@@ -5,10 +5,11 @@
 
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
+use directories::BaseDirs;
 use git2::Repository as Git2Repository;
 use owo_colors::OwoColorize;
-use tokio::runtime::Runtime;
 
+use crate::clients::get_jira_host;
 use crate::repo_state::{BranchMetadata, RepoState};
 use crate::utils::output::{print_error, print_info, print_success, print_warning};
 use crate::{clients, git};
@@ -161,12 +162,12 @@ pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
 
 /// Handle the view issue command
 fn handle_view_issue_command(issue_key: &str) -> Result<()> {
-  // Create a tokio runtime for async operations
-  let rt = Runtime::new().context("Failed to create async runtime")?;
+  let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
+  let jira_host = get_jira_host()?;
+
+  let (rt, jira_client) = clients::create_jira_runtime_and_client(base_dirs.home_dir(), &jira_host)?;
 
   rt.block_on(async {
-    let jira_client = clients::create_jira_client_from_netrc()?;
-
     // Fetch the issue
     match jira_client.get_issue(issue_key).await {
       Ok(issue) => {
@@ -233,7 +234,10 @@ fn handle_view_issue_command(issue_key: &str) -> Result<()> {
 
 /// Handle the transition issue command
 fn handle_transition_issue_command(issue_key: &str, transition: Option<&str>) -> Result<()> {
-  let (rt, jira_client) = clients::create_jira_runtime_and_client()?;
+  let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
+  let jira_host = get_jira_host()?;
+
+  let (rt, jira_client) = clients::create_jira_runtime_and_client(base_dirs.home_dir(), &jira_host)?;
 
   rt.block_on(async {
     // If no transition is specified, list available transitions
@@ -307,7 +311,10 @@ fn handle_transition_issue_command(issue_key: &str, transition: Option<&str>) ->
 
 /// Handle the create branch command
 fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<()> {
-  let (rt, jira_client) = clients::create_jira_runtime_and_client()?;
+  let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
+  let jira_host = get_jira_host()?;
+
+  let (rt, jira_client) = clients::create_jira_runtime_and_client(base_dirs.home_dir(), &jira_host)?;
 
   rt.block_on(async {
     // Fetch the issue to get its summary
@@ -417,7 +424,10 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
 
 /// Handle the link branch command
 fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Result<()> {
-  let (rt, jira_client) = clients::create_jira_runtime_and_client()?;
+  let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
+  let jira_host = get_jira_host()?;
+
+  let (rt, jira_client) = clients::create_jira_runtime_and_client(base_dirs.home_dir(), &jira_host)?;
   rt.block_on(async {
     // Verify the issue exists
     match jira_client.get_issue(issue_key).await {

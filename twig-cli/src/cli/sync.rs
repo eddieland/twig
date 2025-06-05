@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use directories::BaseDirs;
 use git2::{BranchType, Repository as Git2Repository};
 use indicatif::{ProgressBar, ProgressStyle};
 use once_cell::sync::Lazy;
@@ -110,6 +111,15 @@ fn sync_branches(
   let mut conflicting_associations = Vec::new();
   let mut unlinked_branches = Vec::new();
 
+  // Create runtime for async operations
+  let rt = Runtime::new().context("Failed to create async runtime")?;
+  let github_client = if !no_github {
+    let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
+    Some(clients::create_github_client_from_netrc(base_dirs.home_dir())?)
+  } else {
+    None
+  };
+
   // Create progress bar
   let pb = ProgressBar::new(total_branches as u64);
   pb.set_style(
@@ -119,9 +129,6 @@ fn sync_branches(
       .progress_chars("#>-"),
   );
   pb.set_message("Scanning branches for Jira issues and GitHub PRs...");
-
-  // Create runtime for async operations
-  let rt = Runtime::new().context("Failed to create async runtime")?;
 
   for (index, branch_name) in branch_names.iter().enumerate() {
     pb.set_position(index as u64);
@@ -137,10 +144,10 @@ fn sync_branches(
       None
     };
 
-    let detected_pr = if !no_github {
+    let detected_pr = if let Some(ref gh) = github_client {
       // Update message for GitHub API call
       pb.set_message(format!("Processing: {branch_name} (checking GitHub API...)",));
-      rt.block_on(detect_github_pr_from_branch(branch_name, repo_path))
+      rt.block_on(detect_github_pr_from_branch(gh, branch_name, repo_path))
     } else {
       None
     };
@@ -228,12 +235,11 @@ fn detect_jira_issue_from_branch(branch_name: &str) -> Option<String> {
 }
 
 /// Detect GitHub PR number from branch using GitHub API
-async fn detect_github_pr_from_branch(branch_name: &str, repo_path: &std::path::Path) -> Option<u32> {
-  let github_client = match clients::create_github_client_from_netrc() {
-    Ok(client) => client,
-    Err(_) => return None, // Silently fall back if client creation fails
-  };
-
+async fn detect_github_pr_from_branch(
+  github_client: &clients::GitHubClient,
+  branch_name: &str,
+  repo_path: &std::path::Path,
+) -> Option<u32> {
   // Open the git repository to get remote info
   let repo = match Git2Repository::open(repo_path) {
     Ok(repo) => repo,

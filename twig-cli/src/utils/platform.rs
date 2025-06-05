@@ -12,19 +12,3 @@ pub const GIT_EXECUTABLE: &str = "git.exe";
 #[cfg(not(windows))]
 #[cfg_attr(windows, allow(dead_code))]
 pub const GIT_EXECUTABLE: &str = "git";
-
-/// Convert a path to use the correct path separators for the current platform
-///
-/// On Windows, this converts forward slashes to backslashes.
-/// On other platforms, this is a no-op.
-#[allow(dead_code)]
-pub fn normalize_path(path: &str) -> String {
-  #[cfg(windows)]
-  {
-    path.replace('/', "\\")
-  }
-  #[cfg(not(windows))]
-  {
-    path.to_string()
-  }
-}
