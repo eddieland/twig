@@ -92,7 +92,7 @@ jobs:
         with:
           tool: cargo-nextest
       - name: Build
-        run: cargo build --workspace
+        run: cargo build --profile ci-windows --bin twig
       - name: Run tests
         run: cargo nextest run --workspace
 
@@ -110,7 +110,7 @@ jobs:
         with:
           shared-key: rust-ubuntu-build
       - name: Build release
-        run: cargo build --release --workspace
+        run: cargo build --release --bin twig
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -133,9 +133,9 @@ jobs:
         with:
           shared-key: rust-windows-build
       - name: Build release
-        run: cargo build --release --workspace
+        run: cargo build --profile ci-windows --bin twig
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: twig-windows
-          path: target/release/twig.exe
+          path: target/ci-windows/twig.exe

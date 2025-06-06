@@ -80,6 +80,22 @@ opt-level = 2
 lto = true # Enable Link Time Optimization
 codegen-units = 1 # Reduce parallel code generation units to increase optimization
 
+# Fast profile for Windows CI test builds - prioritizes speed over optimization
+[profile.ci-windows]
+inherits = "dev"
+opt-level = 0          # No optimization for fastest compilation
+lto = false            # No LTO for fastest compilation
+codegen-units = 256    # Maximum parallel compilation
+debug = false          # No debug info to keep artifacts small
+
+# Optimized profile for Windows release builds
+[profile.release-windows]
+inherits = "release"
+opt-level = 1          # Reduce from 2 to 1 for faster compilation
+lto = "thin"           # Use thin LTO instead of full LTO
+codegen-units = 16     # Increase from 1 to enable parallel compilation
+debug = false          # Ensure no debug info
+
 [profile.dev.package.insta]
 opt-level = 3
 
