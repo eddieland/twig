@@ -93,7 +93,7 @@ jobs:
           tool: cargo-nextest
       - name: Build
         run: cargo build --profile ci-windows --bin twig
-      - name: Run tests (unit tests only)
+      - name: Run tests
         run: cargo nextest run --workspace
 
   # Build job depends on both fast-checks and test
