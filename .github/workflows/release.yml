@@ -101,7 +101,7 @@ jobs:
         with:
           key: windows-release
       - name: Build release
-        run: cargo build --profile ci-windows --bin twig
+        run: cargo build --profile release-windows --bin twig
       - name: Extract version
         id: version
         shell: bash
@@ -112,7 +112,7 @@ jobs:
 
       - name: Copy binary
         shell: cmd
-        run: copy target\ci-windows\twig.exe release\
+        run: copy target\release-windows\twig.exe release\
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
