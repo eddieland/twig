@@ -35,7 +35,7 @@ jobs:
         with:
           key: ubuntu-release
       - name: Build release
-        run: cargo build --release --workspace
+        run: cargo build --release --bin twig
       - name: Strip binary
         run: strip target/release/twig
       - name: Extract version
@@ -67,7 +67,7 @@ jobs:
         with:
           key: macos-release
       - name: Build release
-        run: cargo build --release --workspace
+        run: cargo build --release --bin twig
       - name: Strip binary
         run: strip target/release/twig
       - name: Extract version
@@ -101,7 +101,7 @@ jobs:
         with:
           key: windows-release
       - name: Build release
-        run: cargo build --release --workspace
+        run: cargo build --profile ci-windows --bin twig
       - name: Extract version
         id: version
         shell: bash
@@ -112,7 +112,7 @@ jobs:
 
       - name: Copy binary
         shell: cmd
-        run: copy target\release\twig.exe release\
+        run: copy target\ci-windows\twig.exe release\
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
