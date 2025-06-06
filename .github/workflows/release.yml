@@ -33,7 +33,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: ubuntu-release
+          shared-key: rust-ubuntu-${{ hashFiles('**/Cargo.lock') }}
       - name: Build release
         run: cargo build --release --bin twig
       - name: Strip binary
@@ -65,7 +65,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: macos-release
+          shared-key: rust-macos-latest-${{ hashFiles('**/Cargo.lock') }}
       - name: Build release
         run: cargo build --release --bin twig
       - name: Strip binary
@@ -99,7 +99,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: windows-release
+          shared-key: rust-windows-latest-${{ hashFiles('**/Cargo.lock') }}
       - name: Build release
         run: cargo build --profile release-windows --bin twig
       - name: Extract version

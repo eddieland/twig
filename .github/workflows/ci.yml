@@ -38,7 +38,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: rust-ubuntu-format-clippy
+          shared-key: rust-ubuntu-${{ hashFiles('**/Cargo.lock') }}
 
       # Conditional steps based on the check type
       - name: Check formatting
@@ -63,7 +63,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: rust-${{ matrix.os }}-test
+          shared-key: rust-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Install cargo-nextest
         uses: taiki-e/install-action@v2
         with:
@@ -86,7 +86,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: rust-windows-test
+          shared-key: rust-windows-${{ hashFiles('**/Cargo.lock') }}
       - name: Install cargo-nextest
         uses: taiki-e/install-action@v2
         with:
@@ -108,7 +108,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: rust-ubuntu-build
+          shared-key: rust-ubuntu-${{ hashFiles('**/Cargo.lock') }}
       - name: Build release
         run: cargo build --release --bin twig
       - name: Upload artifact
@@ -131,7 +131,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: rust-windows-build
+          shared-key: rust-windows-${{ hashFiles('**/Cargo.lock') }}
       - name: Build release
         run: cargo build --profile ci-windows --bin twig
       - name: Upload artifact
