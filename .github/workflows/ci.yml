@@ -91,10 +91,10 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-      - name: Build (fast)
+      - name: Build
         run: cargo build --profile ci-windows --bin twig
       - name: Run tests (unit tests only)
-        run: cargo nextest run --lib --bins --profile ci-windows
+        run: cargo nextest run --workspace
 
   # Build job depends on both fast-checks and test
   build:
@@ -110,7 +110,7 @@ jobs:
         with:
           shared-key: rust-ubuntu-build
       - name: Build release
-        run: cargo build --release --workspace
+        run: cargo build --release --bin twig
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -132,7 +132,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: rust-windows-build
-      - name: Build release (fast)
+      - name: Build release
         run: cargo build --profile ci-windows --bin twig
       - name: Upload artifact
         uses: actions/upload-artifact@v4
