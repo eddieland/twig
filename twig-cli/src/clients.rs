@@ -15,43 +15,6 @@ use url::Url;
 use crate::consts::ENV_JIRA_HOST;
 use crate::creds::{get_github_credentials, get_jira_credentials};
 
-/// Ensure a host URL has a scheme, defaulting to https:// if none is present
-fn ensure_scheme(host: &str) -> Result<String> {
-  let trimmed = host.trim();
-  if trimmed.is_empty() {
-    return Err(anyhow::anyhow!("Host cannot be empty"));
-  }
-
-  // Try to parse as URL first
-  match Url::parse(trimmed) {
-    Ok(url) => {
-      // If it parses successfully with any scheme, return normalized URL without
-      // trailing slash
-      let mut result = url.to_string();
-      // Remove trailing slash if it's just the root path
-      if result.ends_with('/') && url.path() == "/" {
-        result.pop();
-      }
-      Ok(result)
-    }
-    Err(_) => {
-      // If parsing fails, try adding https:// prefix
-      let with_scheme = format!("https://{trimmed}");
-      match Url::parse(&with_scheme) {
-        Ok(url) => {
-          let mut result = url.to_string();
-          // Remove trailing slash if it's just the root path
-          if result.ends_with('/') && url.path() == "/" {
-            result.pop();
-          }
-          Ok(result)
-        }
-        Err(e) => Err(anyhow::anyhow!("Invalid URL: {}", e)),
-      }
-    }
-  }
-}
-
 /// Get the $JIRA_HOST environment variable value
 /// If the host doesn't include a scheme (http:// or https://), assumes https://
 pub fn get_jira_host() -> Result<String> {
@@ -110,6 +73,49 @@ pub fn create_jira_runtime_and_client(home: &Path, jira_host: &str) -> Result<(R
   Ok((rt, client))
 }
 
+/// Remove trailing slash if it's just the root path
+fn normalize_url(url: &Url) -> String {
+  let mut result = url.to_string();
+  if result.ends_with('/') && url.path() == "/" {
+    result.pop();
+  }
+  result
+}
+
+/// Try to parse with https:// prefix
+fn parse_with_https_prefix(input: &str) -> Result<Url> {
+  let with_scheme = format!("https://{input}");
+  Url::parse(&with_scheme)
+    .map_err(|_| anyhow::anyhow!("Failed to parse URL: '{}'. Ensure it has a valid scheme.", input))
+}
+
+/// Ensure a host URL has a scheme, defaulting to https:// if none is present
+fn ensure_scheme(input: &str) -> Result<String> {
+  let trimmed = input.trim();
+  if trimmed.is_empty() {
+    return Err(anyhow::anyhow!("Host cannot be empty"));
+  }
+
+  let url = if let Ok(url) = Url::parse(trimmed) {
+    // Check if it has a valid scheme that's not just a hostname being
+    // misinterpreted The URL crate can misinterpret "hostname:port" as
+    // "scheme:path"
+    if url.scheme().len() > 1 && url.host().is_some() {
+      // It's a valid URL with a proper scheme and host
+      url
+    } else {
+      // If the scheme is suspicious (like "localhost" being treated as scheme),
+      // try adding https:// prefix
+      parse_with_https_prefix(trimmed)?
+    }
+  } else {
+    // If parsing fails, try adding https:// prefix
+    parse_with_https_prefix(trimmed)?
+  };
+
+  Ok(normalize_url(&url))
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -155,7 +161,7 @@ mod tests {
   #[test]
   fn test_ensure_scheme_with_port() {
     let result = ensure_scheme("localhost:8080").unwrap();
-    assert_eq!(result, "localhost:8080"); // URL crate parses this as scheme "localhost"
+    assert_eq!(result, "https://localhost:8080"); // Should add https:// prefix like other host:port combinations
   }
 
   #[test]

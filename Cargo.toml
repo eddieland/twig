@@ -96,9 +96,3 @@ opt-level = 1          # Reduce from 2 to 1 for faster compilation
 lto = "thin"           # Use thin LTO instead of full LTO
 codegen-units = 16     # Increase from 1 to enable parallel compilation
 debug = false          # Ensure no debug info
-
-[profile.dev.package.insta]
-opt-level = 3
-
-[profile.dev.package.similar]
-opt-level = 3
