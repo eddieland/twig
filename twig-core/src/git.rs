@@ -136,9 +136,14 @@ mod tests {
     // Initialize a git repository
     Repository::init(repo_path).unwrap();
 
-    let result = detect_repository_from_path(repo_path);
-    assert!(result.is_some());
-    assert_eq!(result.unwrap(), repo_path);
+    let maybe_result = detect_repository_from_path(repo_path);
+    assert!(maybe_result.is_some());
+
+    let result = maybe_result.unwrap();
+    assert_eq!(
+      std::fs::canonicalize(result).unwrap(),
+      std::fs::canonicalize(repo_path).unwrap()
+    );
   }
 
   #[test]
