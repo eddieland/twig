@@ -75,7 +75,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: twig-ubuntu
+          name: twig-${{ matrix.os }}
           path: target/debug/twig
 
   # Windows tests are optional and won't block the pipeline if they fail
