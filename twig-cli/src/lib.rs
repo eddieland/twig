@@ -13,7 +13,5 @@ pub mod creds;
 pub mod diagnostics;
 pub mod git;
 pub mod plugin;
-pub mod state;
-pub mod tree_renderer;
 pub mod user_defined_dependency_resolver;
 pub mod utils;

@@ -9,6 +9,7 @@ pub mod config;
 pub mod git;
 pub mod output;
 pub mod state;
+pub mod tree_renderer;
 pub mod utils;
 
 // Re-export main types for plugin developers
@@ -16,6 +17,7 @@ pub use config::{ConfigDirs, get_config_dirs};
 pub use git::{current_branch, detect_repository, detect_repository_from_path, in_git_repository};
 pub use output::{ColorMode, format_repo_path, print_error, print_info, print_success, print_warning};
 pub use state::{BranchDependency, BranchMetadata, Registry, RepoState, Repository, RootBranch, create_worktree};
+pub use utils::{get_current_branch_github_pr, get_current_branch_jira_issue};
 
 /// Plugin-specific utilities
 pub mod plugin {

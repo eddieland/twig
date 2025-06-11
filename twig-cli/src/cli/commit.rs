@@ -6,12 +6,11 @@
 use anyhow::{Context, Result};
 use clap::Args;
 use directories::BaseDirs;
-use twig_core::detect_repository;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
+use twig_core::{detect_repository, get_current_branch_jira_issue};
 
 use crate::clients::{self};
 use crate::consts;
-use crate::utils::get_current_branch_jira_issue;
 
 /// Arguments for the commit command
 #[derive(Args)]

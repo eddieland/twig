@@ -135,7 +135,7 @@ fn sync_branches(
     pb.set_message(format!("Processing: {branch_name}"));
 
     // Check if branch already has associations
-    let existing_association = repo_state.get_branch_issue_by_branch(branch_name);
+    let existing_association = repo_state.get_branch_metadata(branch_name);
 
     // Detect patterns in branch name
     let detected_jira = if !no_jira {

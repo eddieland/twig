@@ -121,6 +121,50 @@ pub fn extract_repo_name<P: AsRef<Path>>(path: P) -> String {
     .to_string()
 }
 
+/// Get the Jira issue associated with the current branch
+pub fn get_current_branch_jira_issue() -> Result<Option<String>> {
+  use crate::git::{current_branch, detect_repository};
+  use crate::state::RepoState;
+
+  // Get the current repository path
+  let repo_path = detect_repository().ok_or_else(|| anyhow::anyhow!("Not in a Git repository"))?;
+
+  // Get the current branch name
+  let branch_name = current_branch()?.ok_or_else(|| anyhow::anyhow!("Not on any branch"))?;
+
+  // Load the repository state
+  let state = RepoState::load(&repo_path)?;
+
+  // Get the branch metadata and return the Jira issue
+  Ok(
+    state
+      .get_branch_metadata(&branch_name)
+      .and_then(|metadata| metadata.jira_issue.clone()),
+  )
+}
+
+/// Get the GitHub PR number associated with the current branch
+pub fn get_current_branch_github_pr() -> Result<Option<u32>> {
+  use crate::git::{current_branch, detect_repository};
+  use crate::state::RepoState;
+
+  // Get the current repository path
+  let repo_path = detect_repository().ok_or_else(|| anyhow::anyhow!("Not in a Git repository"))?;
+
+  // Get the current branch name
+  let branch_name = current_branch()?.ok_or_else(|| anyhow::anyhow!("Not on any branch"))?;
+
+  // Load the repository state
+  let state = RepoState::load(&repo_path)?;
+
+  // Get the branch metadata and return the GitHub PR number
+  Ok(
+    state
+      .get_branch_metadata(&branch_name)
+      .and_then(|metadata| metadata.github_pr),
+  )
+}
+
 #[cfg(test)]
 mod tests {
   use tempfile::TempDir;

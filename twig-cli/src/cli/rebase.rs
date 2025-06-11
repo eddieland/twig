@@ -11,9 +11,9 @@ use clap::Args;
 use git2::Repository as Git2Repository;
 use twig_core::detect_repository;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
+use twig_core::tree_renderer::TreeRenderer;
 
 use crate::consts;
-use crate::tree_renderer::TreeRenderer;
 use crate::user_defined_dependency_resolver::UserDefinedDependencyResolver;
 
 /// Command for rebasing the current branch on its parent(s)

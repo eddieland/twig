@@ -321,7 +321,7 @@ impl RepoState {
   }
 
   /// Get a branch-issue association by branch name
-  pub fn get_branch_issue_by_branch(&self, branch: &str) -> Option<&BranchMetadata> {
+  pub fn get_branch_metadata(&self, branch: &str) -> Option<&BranchMetadata> {
     self.branches.get(branch)
   }
 

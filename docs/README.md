@@ -4,7 +4,7 @@ This directory contains documentation for the Twig project.
 
 ## Available Documentation
 
-- [CLI Reference](CLI-Reference.md) - Documentation for the command-line interface
+- [CLI Reference](CLI-REF.md) - Documentation for the command-line interface
 - [API Documentation](api-docs/index.html) - Rust API documentation generated from code comments
 
 ## Development

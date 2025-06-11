@@ -167,7 +167,7 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
     }
 
     // Get associated PR and Jira issue
-    let branch_metadata = repo_state.get_branch_issue_by_branch(&branch_name);
+    let branch_metadata = repo_state.get_branch_metadata(&branch_name);
     let github_pr = branch_metadata.as_ref().and_then(|m| m.github_pr);
     let jira_issue = branch_metadata.as_ref().and_then(|m| m.jira_issue.clone());
 

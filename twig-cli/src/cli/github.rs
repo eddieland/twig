@@ -16,11 +16,10 @@ use twig_core::output::{
   format_check_status, format_command, format_pr_review_status, print_error, print_info, print_success, print_warning,
 };
 use twig_core::state::BranchMetadata;
-use twig_core::{RepoState, detect_repository, detect_repository_from_path};
+use twig_core::{RepoState, detect_repository, detect_repository_from_path, get_current_branch_github_pr};
 use twig_gh::PullRequestStatus;
 
 use crate::clients;
-use crate::utils::get_current_branch_github_pr;
 
 /// Command for GitHub integration
 #[derive(Args)]
@@ -141,7 +140,7 @@ pub(crate) fn handle_github_command(github: GitHubArgs) -> Result<()> {
           Some(pr_url_or_id) => handle_pr_link_command(pr_url_or_id),
           None => {
             // Try to get the PR from the current branch
-            match crate::utils::get_current_branch_github_pr() {
+            match get_current_branch_github_pr() {
               Ok(Some(pr_number)) => {
                 // Convert PR number to string and handle it
                 handle_pr_link_command(&pr_number.to_string())
@@ -732,7 +731,7 @@ fn handle_pr_link_command(pr_url_or_id: &str) -> Result<()> {
   // Check if the branch already has an associated issue
   let now = chrono::Utc::now().to_rfc3339();
 
-  if let Some(branch_issue) = repo_state.get_branch_issue_by_branch(branch_name) {
+  if let Some(branch_issue) = repo_state.get_branch_metadata(branch_name) {
     // Update the existing branch issue
     let mut updated_branch_issue = branch_issue.clone();
     updated_branch_issue.github_pr = Some(pr_number);

@@ -10,11 +10,12 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result};
 use git2::{BranchType, FetchOptions, Repository as Git2Repository};
 use tokio::{task, time};
-use twig_core::ConfigDirs;
-use twig_core::output::{format_repo_name, format_repo_path, print_error, print_success, print_warning};
+use twig_core::output::{
+  format_command, format_repo_name, format_repo_path, print_error, print_header, print_success, print_warning,
+};
+use twig_core::{ConfigDirs, Registry};
 
 use crate::consts;
-use crate::state::Registry;
 
 /// Add a repository to the registry
 pub fn add_repository<P: AsRef<Path>>(path: P) -> Result<()> {
@@ -40,8 +41,6 @@ pub fn remove_repository<P: AsRef<Path>>(path: P) -> Result<()> {
 
 /// List all repositories in the registry
 pub fn list_repositories() -> Result<()> {
-  use twig_core::output::{format_command, format_repo_name, format_repo_path, print_header, print_warning};
-
   let config_dirs = ConfigDirs::new()?;
   let registry = Registry::load(&config_dirs)?;
 

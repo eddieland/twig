@@ -55,93 +55,93 @@ jobs:
           cargo build --release
           mkdir -p docs
 
-          cat > docs/CLI-Reference.md << 'EOF'
+          cat > docs/CLI-REF.md << 'EOF'
           # Twig CLI Reference
 
           ```
           EOF
 
-          ./target/release/twig --help >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
+          ./target/release/twig --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
 
           # Add each subcommand as a section
-          echo "" >> docs/CLI-Reference.md
-          echo "## branch" >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
-          ./target/release/twig branch --help >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
+          echo "" >> docs/CLI-REF.md
+          echo "## branch" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig branch --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
 
-          echo "" >> docs/CLI-Reference.md
-          echo "## cascade" >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
-          ./target/release/twig cascade --help >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
+          echo "" >> docs/CLI-REF.md
+          echo "## cascade" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig cascade --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
 
-          echo "" >> docs/CLI-Reference.md
-          echo "## completion" >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
-          ./target/release/twig completion --help >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
+          echo "" >> docs/CLI-REF.md
+          echo "## completion" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig completion --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
 
-          echo "" >> docs/CLI-Reference.md
-          echo "## creds" >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
-          ./target/release/twig creds --help >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
+          echo "" >> docs/CLI-REF.md
+          echo "## creds" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig creds --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
 
-          echo "" >> docs/CLI-Reference.md
-          echo "## dashboard" >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
-          ./target/release/twig dashboard --help >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
+          echo "" >> docs/CLI-REF.md
+          echo "## dashboard" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig dashboard --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
 
-          echo "" >> docs/CLI-Reference.md
-          echo "## git" >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
-          ./target/release/twig git --help >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
+          echo "" >> docs/CLI-REF.md
+          echo "## git" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig git --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
 
-          echo "" >> docs/CLI-Reference.md
-          echo "## github" >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
-          ./target/release/twig github --help >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
+          echo "" >> docs/CLI-REF.md
+          echo "## github" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig github --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
 
-          echo "" >> docs/CLI-Reference.md
-          echo "## jira" >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
-          ./target/release/twig jira --help >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
+          echo "" >> docs/CLI-REF.md
+          echo "## jira" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig jira --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
 
-          echo "" >> docs/CLI-Reference.md
-          echo "## rebase" >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
-          ./target/release/twig rebase --help >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
+          echo "" >> docs/CLI-REF.md
+          echo "## rebase" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig rebase --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
 
-          echo "" >> docs/CLI-Reference.md
-          echo "## switch" >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
-          ./target/release/twig switch --help >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
+          echo "" >> docs/CLI-REF.md
+          echo "## switch" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig switch --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
 
-          echo "" >> docs/CLI-Reference.md
-          echo "## sync" >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
-          ./target/release/twig sync --help >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
+          echo "" >> docs/CLI-REF.md
+          echo "## sync" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig sync --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
 
-          echo "" >> docs/CLI-Reference.md
-          echo "## tree" >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
-          ./target/release/twig tree --help >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
+          echo "" >> docs/CLI-REF.md
+          echo "## tree" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig tree --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
 
-          echo "" >> docs/CLI-Reference.md
-          echo "## worktree" >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
-          ./target/release/twig worktree --help >> docs/CLI-Reference.md
-          echo '```' >> docs/CLI-Reference.md
+          echo "" >> docs/CLI-REF.md
+          echo "## worktree" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig worktree --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
 
       - name: Create docs README
         run: |
@@ -152,7 +152,7 @@ jobs:
 
           ## Available Documentation
 
-          - [CLI Reference](CLI-Reference.md) - Documentation for the command-line interface
+          - [CLI Reference](CLI-REF.md) - Documentation for the command-line interface
           - [API Documentation](api-docs/index.html) - Rust API documentation generated from code comments
 
           ## Development

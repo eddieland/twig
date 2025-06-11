@@ -7,7 +7,8 @@ use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
 
 use owo_colors::OwoColorize;
-use twig_core::state::BranchMetadata;
+
+use crate::state::BranchMetadata;
 
 /// Represents a branch node in the tree
 #[derive(Debug, Clone)]

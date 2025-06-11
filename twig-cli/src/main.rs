@@ -20,8 +20,6 @@ mod creds;
 mod diagnostics;
 mod git;
 mod plugin;
-mod state;
-mod tree_renderer;
 mod user_defined_dependency_resolver;
 mod utils;
 

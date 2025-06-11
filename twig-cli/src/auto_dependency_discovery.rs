@@ -4,7 +4,7 @@
 //! analysis and heuristics to suggest parent-child relationships between
 //! branches.
 //!
-//! This module preserves the existing treev2 logic for future use
+//! This module preserves the legacy treev2 logic for future use
 
 #![allow(dead_code)]
 
@@ -13,8 +13,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use anyhow::Result;
 use git2::{BranchType, Repository as Git2Repository};
 use twig_core::RepoState;
-
-use crate::tree_renderer::BranchNode;
+use twig_core::tree_renderer::BranchNode;
 
 pub struct AutoDependencyDiscovery;
 
@@ -45,7 +44,7 @@ impl AutoDependencyDiscovery {
       let (branch, _) = branch_result?;
       if let Some(name) = branch.name()? {
         let is_current = branch.is_head();
-        let metadata = repo_state.get_branch_issue_by_branch(name).cloned();
+        let metadata = repo_state.get_branch_metadata(name).cloned();
 
         // Get the commit that the branch points to
         let commit = branch.get().peel_to_commit()?;
@@ -244,6 +243,7 @@ mod tests {
 
   use git2::BranchType;
   use twig_core::state::BranchMetadata;
+  use twig_core::tree_renderer::BranchNode;
   use twig_test_utils::git::{GitRepoTestGuard, checkout_branch, create_branch, create_commit};
 
   use super::*;
