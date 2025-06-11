@@ -3,6 +3,8 @@
 //! Example plugin demonstrating how to create a twig plugin in Rust using
 //! twig-core.
 
+use std::env;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use twig_core::{plugin, print_error, print_info, print_success};
@@ -55,13 +57,26 @@ enum Commands {
 fn main() -> Result<()> {
   let cli = Cli::parse();
 
+  // Get verbosity from twig environment variable, fall back to CLI args
+  let verbosity = env::var("TWIG_VERBOSITY")
+    .ok()
+    .and_then(|v| v.parse::<u8>().ok())
+    .unwrap_or(cli.verbose);
+
   // Get twig context
   let config_dir = plugin::plugin_config_dir("deploy")?;
   let data_dir = plugin::plugin_data_dir("deploy")?;
 
-  if cli.verbose > 0 {
+  if verbosity > 0 {
     print_info(&format!("Plugin config dir: {}", config_dir.display()));
     print_info(&format!("Plugin data dir: {}", data_dir.display()));
+  }
+
+  if verbosity > 1 {
+    print_info(&format!("Verbosity level: {}", verbosity));
+    if let Ok(twig_version) = env::var("TWIG_VERSION") {
+      print_info(&format!("Twig version: {}", twig_version));
+    }
   }
 
   // Check if we're in a git repository

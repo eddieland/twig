@@ -9,7 +9,7 @@ use std::process::{Command, Stdio};
 use anyhow::{Context, Result};
 
 /// Execute a plugin with the given name and arguments
-pub fn execute_plugin(plugin_name: &str, args: Vec<String>) -> Result<()> {
+pub fn execute_plugin(plugin_name: &str, args: Vec<String>, verbosity: u8) -> Result<()> {
   let plugin_binary = format!("twig-{plugin_name}");
 
   // Check if plugin exists in PATH
@@ -33,6 +33,7 @@ pub fn execute_plugin(plugin_name: &str, args: Vec<String>) -> Result<()> {
     .env("TWIG_CONFIG_DIR", config_dirs.config_dir())
     .env("TWIG_DATA_DIR", config_dirs.data_dir())
     .env("TWIG_VERSION", env!("CARGO_PKG_VERSION"))
+    .env("TWIG_VERBOSITY", verbosity.to_string())
     .stdin(Stdio::inherit())
     .stdout(Stdio::inherit())
     .stderr(Stdio::inherit());

@@ -29,6 +29,7 @@ When twig executes a plugin, it sets the following environment variables:
 - `TWIG_CURRENT_REPO`: Current repository path (if in a repo)
 - `TWIG_CURRENT_BRANCH`: Current branch name (if in a repo)
 - `TWIG_VERSION`: Version of twig core that invoked the plugin
+- `TWIG_VERBOSITY`: Verbosity level (0-3) passed from twig's `-v` flags
 
 ## Command Line Arguments
 
@@ -43,6 +44,35 @@ Plugins should use standard exit codes:
 - `1`: General error
 - `2`: Misuse of command (invalid arguments)
 - `130`: Interrupted by user (Ctrl+C)
+
+## Verbosity and Logging
+
+Plugins should respect the verbosity level passed from twig to provide consistent logging behavior across the ecosystem.
+
+### Verbosity Levels
+
+The `TWIG_VERBOSITY` environment variable contains a number (0-3) indicating the desired verbosity:
+
+- `0`: Default level - show only warnings and errors
+- `1`: Info level - show informational messages, warnings, and errors
+- `2`: Debug level - show debug messages and everything above
+- `3+`: Trace level - show trace messages and everything above
+
+### Implementation Guidelines
+
+- **Rust plugins**: Use `tracing` or `log` crates and map verbosity levels to appropriate log levels
+- **Python plugins**: Configure the `logging` module based on `TWIG_VERBOSITY`
+- **Shell scripts**: Use conditional output functions that check the verbosity level
+
+### Best Practices for Plugin Logging
+
+1. **Respect the verbosity level**: Don't output debug information when verbosity is 0
+2. **Use appropriate log levels**: Reserve INFO for important user-facing messages
+3. **Send logs to stderr**: Keep stdout clean for structured output that might be parsed
+4. **Include context**: Add plugin name or operation context to log messages
+5. **Be consistent**: Follow the same logging patterns as twig core for familiar UX
+
+See the example plugins in `examples/plugins/` for concrete implementations.
 
 ## Plugin State Management
 
@@ -73,24 +103,14 @@ anyhow = "1.0"
 
 ```rust
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use twig_core::{plugin, print_success, print_error};
 
 #[derive(Parser)]
 #[command(name = "twig-deploy")]
 #[command(about = "Deploy applications using twig context")]
 struct Cli {
-    #[command(subcommand)]
-    command: Commands,
-
-    #[arg(short, long, action = clap::ArgAction::Count)]
-    verbose: u8,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    Staging { /* ... */ },
-    Production { /* ... */ },
+    // CLI arguments here
 }
 
 fn main() -> Result<()> {
@@ -125,7 +145,6 @@ fn main() -> Result<()> {
 ```python
 #!/usr/bin/env python3
 import os
-import sys
 import argparse
 from pathlib import Path
 
@@ -136,21 +155,14 @@ def get_twig_config():
         'data_dir': Path(os.environ.get('TWIG_DATA_DIR', '')),
         'current_repo': os.environ.get('TWIG_CURRENT_REPO'),
         'current_branch': os.environ.get('TWIG_CURRENT_BRANCH'),
+        'verbosity': int(os.environ.get('TWIG_VERBOSITY', '0')),
     }
-
-def get_plugin_config_dir(plugin_name):
-    """Get plugin-specific config directory."""
-    config = get_twig_config()
-    plugin_dir = config['config_dir'] / 'plugins' / plugin_name
-    plugin_dir.mkdir(parents=True, exist_ok=True)
-    return plugin_dir
 
 def main():
     parser = argparse.ArgumentParser(
         prog='twig-backup',
         description='Backup repositories using twig context'
     )
-    parser.add_argument('-v', '--verbose', action='count', default=0)
     # Add subcommands and options
 
     args = parser.parse_args()
@@ -165,15 +177,12 @@ def main():
 #!/bin/bash
 set -euo pipefail
 
-# Plugin metadata
-PLUGIN_NAME="twig-sync"
-PLUGIN_VERSION="1.0.0"
-
 # Access twig configuration
 TWIG_CONFIG_DIR="${TWIG_CONFIG_DIR:-}"
 TWIG_DATA_DIR="${TWIG_DATA_DIR:-}"
 TWIG_CURRENT_REPO="${TWIG_CURRENT_REPO:-}"
 TWIG_CURRENT_BRANCH="${TWIG_CURRENT_BRANCH:-}"
+TWIG_VERBOSITY="${TWIG_VERBOSITY:-0}"
 
 # Plugin directories
 PLUGIN_CONFIG_DIR="$TWIG_CONFIG_DIR/plugins/sync"
