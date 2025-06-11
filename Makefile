@@ -69,7 +69,9 @@ update-snapshots: ## Run tests and update snapshots
 
 .PHONY: cloc
 cloc: ## Count lines of code using Docker
-	docker run --rm -v "$(PWD):/tmp" aldanial/cloc /tmp --exclude-dir=target --fullpath --not-match-d='ref/external'
+	docker run --rm -v "$(PWD):/tmp" aldanial/cloc /tmp \
+		--exclude-dir=.git,.github,.twig,example,docs,ref,target \
+		--fullpath
 
 ### Coverage
 
