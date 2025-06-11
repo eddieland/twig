@@ -46,8 +46,8 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use git2::{BranchType, Repository as Git2Repository};
+use twig_core::RepoState;
 
-use crate::repo_state::RepoState;
 use crate::tree_renderer::BranchNode;
 
 /// Pure user-defined dependency resolver for tree command
@@ -217,10 +217,10 @@ impl UserDefinedDependencyResolver {
 #[cfg(test)]
 mod tests {
   use chrono::Utc;
+  use twig_core::{BranchDependency, RootBranch};
   use uuid::Uuid;
 
   use super::*;
-  use crate::repo_state::{BranchDependency, RootBranch};
 
   fn create_test_repo_state() -> RepoState {
     let mut state = RepoState::default();

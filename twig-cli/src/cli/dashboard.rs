@@ -12,14 +12,13 @@ use serde::Serialize;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
+use twig_core::output::{print_error, print_warning};
+use twig_core::state::RepoState;
 use twig_gh::GitHubPullRequest;
 use twig_jira::Issue;
 
 use crate::clients;
 use crate::creds::get_github_credentials;
-use crate::git::detect_current_repository;
-use crate::repo_state::RepoState;
-use crate::utils::output::{print_error, print_warning};
 
 // Structure to hold dashboard data
 #[derive(Serialize)]
@@ -85,10 +84,10 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
   let repo_path = if let Some(path) = dashboard.repo {
     std::path::PathBuf::from(path)
   } else {
-    match detect_current_repository() {
-      Ok(path) => path,
-      Err(e) => {
-        print_error(&format!("Failed to detect current repository: {e}"));
+    match twig_core::detect_repository() {
+      Some(path) => path,
+      None => {
+        print_error("Failed to detect current repository");
         return Ok(());
       }
     }

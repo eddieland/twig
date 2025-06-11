@@ -24,7 +24,7 @@ pub fn execute_plugin(plugin_name: &str, args: Vec<String>, verbosity: u8) -> Re
 
   // Set up environment variables
   let config_dirs = twig_core::get_config_dirs()?;
-  let current_repo = twig_core::current_repository().unwrap_or(None);
+  let current_repo = twig_core::detect_repository();
   let current_branch = twig_core::current_branch().unwrap_or(None);
 
   let mut cmd = Command::new(&plugin_binary);

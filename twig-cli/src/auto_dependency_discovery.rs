@@ -12,8 +12,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use anyhow::Result;
 use git2::{BranchType, Repository as Git2Repository};
+use twig_core::RepoState;
 
-use crate::repo_state::RepoState;
 use crate::tree_renderer::BranchNode;
 
 pub struct AutoDependencyDiscovery;
@@ -243,6 +243,7 @@ mod tests {
   use std::path::Path;
 
   use git2::BranchType;
+  use twig_core::state::BranchMetadata;
   use twig_test_utils::git::{GitRepoTestGuard, checkout_branch, create_branch, create_commit};
 
   use super::*;
@@ -649,7 +650,7 @@ mod tests {
   ) -> Result<()> {
     let mut repo_state = RepoState::load(repo_path).unwrap_or_default();
 
-    let metadata = crate::repo_state::BranchMetadata {
+    let metadata = BranchMetadata {
       branch: branch.to_string(),
       jira_issue: jira_issue.map(|s| s.to_string()),
       github_pr,

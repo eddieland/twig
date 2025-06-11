@@ -6,11 +6,12 @@
 use anyhow::{Context, Result};
 use clap::Args;
 use directories::BaseDirs;
+use twig_core::detect_repository;
+use twig_core::output::{print_error, print_info, print_success, print_warning};
 
 use crate::clients::{self};
-use crate::git::detect_current_repository;
+use crate::consts;
 use crate::utils::get_current_branch_jira_issue;
-use crate::utils::output::{print_error, print_info, print_success, print_warning};
 
 /// Arguments for the commit command
 #[derive(Args)]
@@ -35,7 +36,7 @@ pub struct CommitArgs {
 /// Handle the commit command
 pub fn handle_commit_command(args: CommitArgs) -> Result<()> {
   // Get the current repository
-  let repo_path = detect_current_repository().context("Not in a git repository")?;
+  let repo_path = detect_repository().context("Not in a git repository")?;
 
   // Get the current branch's Jira issue
   let jira_issue = match get_current_branch_jira_issue()? {
@@ -87,7 +88,7 @@ pub fn handle_commit_command(args: CommitArgs) -> Result<()> {
 /// Check if a commit with the same message exists in recent history
 fn check_for_duplicate_commit_message(repo_path: &std::path::Path, message: &str) -> Result<bool> {
   // Use git command to search recent commit messages
-  let output = std::process::Command::new(crate::utils::platform::GIT_EXECUTABLE)
+  let output = std::process::Command::new(consts::GIT_EXECUTABLE)
     .args(["log", "--pretty=format:%s", "-n", "20"]) // Check last 20 commits
     .current_dir(repo_path)
     .output()
@@ -117,7 +118,7 @@ fn prompt_for_fixup() -> Result<bool> {
 fn create_normal_commit(repo_path: &std::path::Path, message: &str) -> Result<()> {
   print_info(&format!("Creating commit with message: '{message}'"));
 
-  let output = std::process::Command::new(crate::utils::platform::GIT_EXECUTABLE)
+  let output = std::process::Command::new(consts::GIT_EXECUTABLE)
     .args(["commit", "-m", message])
     .current_dir(repo_path)
     .output()
@@ -137,7 +138,7 @@ fn create_normal_commit(repo_path: &std::path::Path, message: &str) -> Result<()
 /// Create a fixup commit with the given message
 fn create_fixup_commit(repo_path: &std::path::Path, message: &str) -> Result<()> {
   // Find the commit hash of the commit to fix
-  let output = std::process::Command::new(crate::utils::platform::GIT_EXECUTABLE)
+  let output = std::process::Command::new(consts::GIT_EXECUTABLE)
     .args(["log", "--pretty=format:%h %s", "-n", "20"]) // Check last 20 commits
     .current_dir(repo_path)
     .output()
@@ -160,7 +161,7 @@ fn create_fixup_commit(repo_path: &std::path::Path, message: &str) -> Result<()>
 
   print_info(&format!("Creating fixup commit for commit {commit_hash}"));
 
-  let output = std::process::Command::new(crate::utils::platform::GIT_EXECUTABLE)
+  let output = std::process::Command::new(consts::GIT_EXECUTABLE)
     .args(["commit", "--fixup", &commit_hash])
     .current_dir(repo_path)
     .output()

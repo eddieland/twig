@@ -8,8 +8,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-
-use crate::config::ConfigDirs;
+use twig_core::ConfigDirs;
 
 /// Represents a repository in the registry
 #[derive(Debug, Serialize, Deserialize, Clone)]

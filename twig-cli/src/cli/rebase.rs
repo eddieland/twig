@@ -9,12 +9,12 @@ use std::process::Command;
 use anyhow::{Context, Result};
 use clap::Args;
 use git2::Repository as Git2Repository;
+use twig_core::detect_repository;
+use twig_core::output::{print_error, print_info, print_success, print_warning};
 
-use crate::git::detect_current_repository;
-use crate::repo_state::RepoState;
+use crate::consts;
 use crate::tree_renderer::TreeRenderer;
 use crate::user_defined_dependency_resolver::UserDefinedDependencyResolver;
-use crate::utils::output::{print_error, print_info, print_success, print_warning};
 
 /// Command for rebasing the current branch on its parent(s)
 #[derive(Args)]
@@ -42,7 +42,7 @@ pub fn handle_rebase_command(args: RebaseArgs) -> Result<()> {
   let repo_path = if let Some(ref repo_arg) = args.repo {
     PathBuf::from(repo_arg)
   } else {
-    detect_current_repository().context("Not in a git repository")?
+    detect_repository().context("Not in a git repository")?
   };
 
   // Rebase the current branch on its parent(s)
@@ -69,7 +69,7 @@ fn rebase_upstream(repo_path: &Path, force: bool, show_graph: bool, autostash: b
   print_info(&format!("Current branch: {current_branch_name}",));
 
   // Load repository state
-  let repo_state = RepoState::load(repo_path).unwrap_or_default();
+  let repo_state = twig_core::state::RepoState::load(repo_path).unwrap_or_default();
 
   // Create the user-defined dependency resolver
   let resolver = UserDefinedDependencyResolver;
@@ -187,7 +187,7 @@ fn show_dependency_tree(repo_path: &Path, _current_branch: &str) -> Result<()> {
     Git2Repository::open(repo_path).context(format!("Failed to open git repository at {}", repo_path.display()))?;
 
   // Load repository state
-  let repo_state = RepoState::load(repo_path).unwrap_or_default();
+  let repo_state = twig_core::state::RepoState::load(repo_path).unwrap_or_default();
 
   // Create the user-defined dependency resolver
   let resolver = UserDefinedDependencyResolver;
@@ -256,7 +256,7 @@ fn rebase_branch(repo_path: &Path, _branch: &str, onto: &str, autostash: bool) -
   args.push(onto);
 
   // Execute the rebase command
-  let output = Command::new(crate::utils::platform::GIT_EXECUTABLE)
+  let output = Command::new(consts::GIT_EXECUTABLE)
     .args(&args)
     .current_dir(repo_path)
     .output()
@@ -302,7 +302,7 @@ fn rebase_branch_force(repo_path: &Path, _branch: &str, onto: &str, autostash: b
   args.push(onto);
 
   // Execute the rebase command
-  let output = Command::new(crate::utils::platform::GIT_EXECUTABLE)
+  let output = Command::new(consts::GIT_EXECUTABLE)
     .args(&args)
     .current_dir(repo_path)
     .output()
@@ -362,7 +362,7 @@ fn handle_rebase_conflict(_repo_path: &Path, _branch: &str) -> Result<ConflictRe
 
 /// Execute a git command and handle output
 fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<String> {
-  let output = Command::new(crate::utils::platform::GIT_EXECUTABLE)
+  let output = Command::new(consts::GIT_EXECUTABLE)
     .args(args)
     .current_dir(repo_path)
     .output()

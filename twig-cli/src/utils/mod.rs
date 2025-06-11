@@ -7,9 +7,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use git2::Repository as Git2Repository;
-
-pub mod output;
-pub mod platform;
+use twig_core::{RepoState, detect_repository, detect_repository_from_path};
 
 /// Represents an associated item for a branch
 #[derive(Debug, Clone)]
@@ -30,11 +28,11 @@ pub fn resolve_repository_path(repo_arg: Option<&str>) -> Result<PathBuf> {
       if !path_buf.exists() {
         return Err(anyhow::anyhow!("Repository path does not exist: {}", path));
       }
-      crate::git::detect_repository(&path_buf).context(format!("Failed to detect repository at path: {path}"))
+      detect_repository_from_path(&path_buf).context(format!("Failed to detect repository at path: {path}"))
     }
     None => {
       // Try to detect the current repository
-      crate::git::detect_current_repository().context("No repository specified and not in a git repository")
+      detect_repository().context("No repository specified and not in a git repository")
     }
   }
 }
@@ -45,7 +43,7 @@ pub fn resolve_repository_path(repo_arg: Option<&str>) -> Result<PathBuf> {
 /// associated with the current branch. If neither is found, it returns None.
 pub fn get_current_branch_associated_item() -> Result<BranchAssociatedItem> {
   // Get the current repository
-  let repo_path = crate::git::detect_current_repository().context("Not in a git repository")?;
+  let repo_path = detect_repository().context("Not in a git repository")?;
 
   // Open the git repository
   let repo = Git2Repository::open(&repo_path).context("Failed to open git repository")?;
@@ -62,7 +60,7 @@ pub fn get_current_branch_associated_item() -> Result<BranchAssociatedItem> {
     .ok_or_else(|| anyhow::anyhow!("Failed to get branch name"))?;
 
   // Load the repository state
-  let repo_state = crate::repo_state::RepoState::load(&repo_path).context("Failed to load repository state")?;
+  let repo_state = RepoState::load(&repo_path).context("Failed to load repository state")?;
 
   // Check if the branch has an associated issue
   if let Some(branch_issue) = repo_state.get_branch_issue_by_branch(branch_name) {

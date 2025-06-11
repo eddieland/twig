@@ -7,8 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
 
 use owo_colors::OwoColorize;
-
-use crate::repo_state::BranchMetadata;
+use twig_core::state::BranchMetadata;
 
 /// Represents a branch node in the tree
 #[derive(Debug, Clone)]
@@ -367,10 +366,10 @@ impl<'a> TreeRenderer<'a> {
 mod tests {
   use std::collections::HashMap;
 
+  use BranchMetadata;
   use insta::assert_snapshot;
 
   use super::*;
-  use crate::repo_state::BranchMetadata;
 
   #[test]
   fn test_build_cross_references_single_parent() {

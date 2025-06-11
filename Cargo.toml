@@ -37,6 +37,7 @@ twig-cli = { path = "twig-cli" }
 
 [dev-dependencies]
 twig-test-utils = { path = "twig-test-utils" }
+twig-core = { path = "twig-core" }
 anyhow = { workspace = true }
 git2 = { workspace = true }
 tempfile = { workspace = true }

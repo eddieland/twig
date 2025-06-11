@@ -13,9 +13,9 @@ pub mod utils;
 
 // Re-export main types for plugin developers
 pub use config::{ConfigDirs, get_config_dirs};
-pub use git::{current_branch, current_repository, detect_repository, in_git_repository};
+pub use git::{current_branch, detect_repository, detect_repository_from_path, in_git_repository};
 pub use output::{ColorMode, format_repo_path, print_error, print_info, print_success, print_warning};
-pub use state::{Registry, RepoState, Repository};
+pub use state::{BranchDependency, BranchMetadata, Registry, RepoState, Repository, RootBranch, create_worktree};
 
 /// Plugin-specific utilities
 pub mod plugin {
@@ -24,17 +24,7 @@ pub mod plugin {
   use anyhow::Result;
 
   pub use super::config::get_config_dirs;
-  pub use super::git::{current_branch, current_repository};
-
-  /// Get the current working directory as a repository path
-  pub fn current_working_repo() -> Result<Option<PathBuf>> {
-    current_repository()
-  }
-
-  /// Check if we're currently in a git repository
-  pub fn in_git_repository() -> bool {
-    super::git::in_git_repository()
-  }
+  pub use super::git::current_branch;
 
   /// Get plugin-specific config directory
   pub fn plugin_config_dir(plugin_name: &str) -> Result<PathBuf> {

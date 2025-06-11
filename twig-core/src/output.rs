@@ -3,11 +3,11 @@
 //! Provides formatted output functions with colors, emojis, and consistent
 //! styling for user-facing messages and terminal output.
 
-use emojis;
 use owo_colors::OwoColorize;
+use {clap, emojis};
 
 /// Enum representing different color modes for output
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorMode {
   /// Enable colored output
   Yes,

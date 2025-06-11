@@ -8,6 +8,7 @@ mod branch;
 pub mod cascade;
 mod commit;
 mod completion;
+mod config;
 mod creds;
 mod dashboard;
 mod git;
@@ -23,8 +24,8 @@ use anyhow::Result;
 use clap::builder::Styles;
 use clap::builder::styling::AnsiColor;
 use clap::{ArgAction, Parser, Subcommand};
+use twig_core::output::ColorMode;
 
-use crate::utils::output::ColorMode;
 use crate::{diagnostics, plugin};
 
 /// Top-level CLI command for the twig tool
@@ -266,7 +267,7 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
       Commands::Diagnostics => diagnostics::run_diagnostics(),
       Commands::Git(git) => git::handle_git_command(git),
       Commands::GitHub(github) => github::handle_github_command(github),
-      Commands::Init => crate::config::init(),
+      Commands::Init => config::handle_init_command(),
       Commands::Jira(jira) => jira::handle_jira_command(jira),
       Commands::Panic => {
         panic!("This is an intentional test panic to verify no-worries integration");

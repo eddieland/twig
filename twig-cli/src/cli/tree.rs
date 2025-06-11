@@ -9,12 +9,11 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::Args;
 use git2::Repository as Git2Repository;
+use twig_core::detect_repository;
+use twig_core::output::{format_command, print_info, print_warning};
 
-use crate::git::detect_current_repository;
-use crate::repo_state::RepoState;
 use crate::tree_renderer::TreeRenderer;
 use crate::user_defined_dependency_resolver::UserDefinedDependencyResolver;
-use crate::utils::output::{format_command, print_info, print_warning};
 
 /// Command for displaying branch dependency trees
 #[derive(Args)]
@@ -43,7 +42,7 @@ pub(crate) fn handle_tree_command(tree: TreeArgs) -> Result<()> {
   let repo_path = if let Some(repo_arg) = tree.repo {
     PathBuf::from(repo_arg)
   } else {
-    detect_current_repository().context("Not in a git repository")?
+    detect_repository().context("Not in a git repository")?
   };
 
   // Open the repository
@@ -51,7 +50,7 @@ pub(crate) fn handle_tree_command(tree: TreeArgs) -> Result<()> {
     Git2Repository::open(&repo_path).context(format!("Failed to open git repository at {}", repo_path.display()))?;
 
   // Load repository state
-  let repo_state = RepoState::load(&repo_path).unwrap_or_default();
+  let repo_state = twig_core::state::RepoState::load(&repo_path).unwrap_or_default();
 
   // Create the user-defined dependency resolver
   let resolver = UserDefinedDependencyResolver;

@@ -52,6 +52,9 @@ impl ConfigDirs {
   pub fn init(&self) -> Result<()> {
     fs::create_dir_all(&self.config_dir).context("Failed to create config directory")?;
     fs::create_dir_all(&self.data_dir).context("Failed to create data directory")?;
+    if let Some(cache_dir) = &self.cache_dir {
+      fs::create_dir_all(cache_dir).context("Failed to create cache directory")?;
+    }
 
     // Create an empty registry file if it doesn't exist
     let registry_path = self.registry_path();

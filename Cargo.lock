@@ -2249,6 +2249,7 @@ dependencies = [
  "git2",
  "tempfile",
  "twig-cli",
+ "twig-core",
  "twig-test-utils",
 ]
 
@@ -2298,6 +2299,7 @@ version = "0.1.23"
 dependencies = [
  "anyhow",
  "chrono",
+ "clap",
  "directories",
  "emojis",
  "git2",

@@ -8,11 +8,11 @@ use clap::{Args, Subcommand};
 use directories::BaseDirs;
 use git2::Repository as Git2Repository;
 use owo_colors::OwoColorize;
+use twig_core::output::{print_error, print_info, print_success, print_warning};
+use twig_core::{BranchMetadata, RepoState, create_worktree, detect_repository};
 
+use crate::clients;
 use crate::clients::get_jira_host;
-use crate::repo_state::{BranchMetadata, RepoState};
-use crate::utils::output::{print_error, print_info, print_success, print_warning};
-use crate::{clients, git};
 
 /// Command for Jira integration
 #[derive(Args)]
@@ -346,10 +346,10 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
     let branch_name = format!("{issue_key}/{sanitized_summary}");
 
     // Get the current repository
-    let repo_path = match git::detect_current_repository() {
-      Ok(path) => path,
-      Err(e) => {
-        print_error(&format!("Failed to find git repository: {e}"));
+    let repo_path = match twig_core::detect_repository() {
+      Some(path) => path,
+      None => {
+        print_error("Failed to find git repository");
         return Ok(());
       }
     };
@@ -371,7 +371,7 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
 
     if with_worktree {
       // Create a worktree for the branch
-      match crate::repo_state::create_worktree(&repo_path, &branch_name) {
+      match create_worktree(&repo_path, &branch_name) {
         Ok(_) => {
           print_success(&format!("Created worktree for branch '{branch_name}'"));
         }
@@ -441,10 +441,10 @@ fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Res
     };
 
     // Get the current repository
-    let repo_path = match git::detect_current_repository() {
-      Ok(path) => path,
-      Err(e) => {
-        print_error(&format!("Failed to find git repository: {e}"));
+    let repo_path = match detect_repository() {
+      Some(path) => path,
+      None => {
+        print_error("Failed to find git repository");
         return Ok(());
       }
     };

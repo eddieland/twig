@@ -10,35 +10,24 @@ use anyhow::{Context, Result};
 use git2::Repository;
 
 /// Detect if the current directory or any parent directory is a Git repository
-pub fn detect_repository() -> Result<Option<PathBuf>> {
-  let current_dir = env::current_dir().context("Failed to get current directory")?;
+pub fn detect_repository() -> Option<PathBuf> {
+  let current_dir = env::current_dir().ok()?;
   detect_repository_from_path(&current_dir)
 }
 
 /// Detect if the given path or any parent directory is a Git repository
-pub fn detect_repository_from_path<P: AsRef<Path>>(path: P) -> Result<Option<PathBuf>> {
+pub fn detect_repository_from_path<P: AsRef<Path>>(path: P) -> Option<PathBuf> {
   let path = path.as_ref();
 
   match Repository::discover(path) {
-    Ok(repo) => {
-      let workdir = repo.workdir().context("Repository has no working directory")?;
-      Ok(Some(workdir.to_path_buf()))
-    }
-    Err(_) => Ok(None),
+    Ok(repo) => repo.workdir().map(|workdir| workdir.to_path_buf()),
+    Err(_) => None,
   }
-}
-
-/// Get the current repository path if we're in a Git repository
-pub fn current_repository() -> Result<Option<PathBuf>> {
-  detect_repository()
 }
 
 /// Get the current branch name if we're in a Git repository
 pub fn current_branch() -> Result<Option<String>> {
-  let repo_path = match detect_repository()? {
-    Some(path) => path,
-    None => return Ok(None),
-  };
+  let repo_path = detect_repository().ok_or_else(|| anyhow::anyhow!("Not in a Git repository"))?;
 
   let repo = Repository::open(&repo_path).context("Failed to open Git repository")?;
 
@@ -53,39 +42,34 @@ pub fn current_branch() -> Result<Option<String>> {
 
 /// Check if we're currently in a git repository
 pub fn in_git_repository() -> bool {
-  detect_repository().unwrap_or(None).is_some()
+  detect_repository().is_some()
 }
 
 /// Get the Git repository object for the current directory
-pub fn get_repository() -> Result<Option<Repository>> {
-  let repo_path = match detect_repository()? {
-    Some(path) => path,
-    None => return Ok(None),
-  };
+pub fn get_repository() -> Option<Repository> {
+  let repo_path = detect_repository()?;
 
-  let repo = Repository::open(&repo_path).context("Failed to open Git repository")?;
+  let repo = Repository::open(&repo_path)
+    .context("Failed to open Git repository")
+    .ok()?;
 
-  Ok(Some(repo))
+  Some(repo)
 }
 
 /// Get the Git repository object for a specific path
-pub fn get_repository_from_path<P: AsRef<Path>>(path: P) -> Result<Option<Repository>> {
-  let repo_path = match detect_repository_from_path(path)? {
-    Some(path) => path,
-    None => return Ok(None),
-  };
+pub fn get_repository_from_path<P: AsRef<Path>>(path: P) -> Option<Repository> {
+  let repo_path = detect_repository_from_path(path)?;
 
-  let repo = Repository::open(&repo_path).context("Failed to open Git repository")?;
+  let repo = Repository::open(&repo_path)
+    .context("Failed to open Git repository")
+    .ok()?;
 
-  Ok(Some(repo))
+  Some(repo)
 }
 
 /// Check if a branch exists in the repository
 pub fn branch_exists(branch_name: &str) -> Result<bool> {
-  let repo = match get_repository()? {
-    Some(repo) => repo,
-    None => return Ok(false),
-  };
+  let repo = get_repository().ok_or_else(|| anyhow::anyhow!("Not in a Git repository"))?;
 
   match repo.find_branch(branch_name, git2::BranchType::Local) {
     Ok(_) => Ok(true),
@@ -95,10 +79,7 @@ pub fn branch_exists(branch_name: &str) -> Result<bool> {
 
 /// Get all local branches in the repository
 pub fn get_local_branches() -> Result<Vec<String>> {
-  let repo = match get_repository()? {
-    Some(repo) => repo,
-    None => return Ok(Vec::new()),
-  };
+  let repo = get_repository().ok_or_else(|| anyhow::anyhow!("Not in a Git repository"))?;
 
   let branches = repo.branches(Some(git2::BranchType::Local))?;
   let mut branch_names = Vec::new();
@@ -115,10 +96,7 @@ pub fn get_local_branches() -> Result<Vec<String>> {
 
 /// Get the remote tracking branch for a local branch
 pub fn get_upstream_branch(branch_name: &str) -> Result<Option<String>> {
-  let repo = match get_repository()? {
-    Some(repo) => repo,
-    None => return Ok(None),
-  };
+  let repo = get_repository().ok_or_else(|| anyhow::anyhow!("Not in a Git repository"))?;
 
   let branch = match repo.find_branch(branch_name, git2::BranchType::Local) {
     Ok(branch) => branch,
@@ -146,7 +124,7 @@ mod tests {
   #[test]
   fn test_detect_repository_none() {
     let temp_dir = TempDir::new().unwrap();
-    let result = detect_repository_from_path(temp_dir.path()).unwrap();
+    let result = detect_repository_from_path(temp_dir.path());
     assert!(result.is_none());
   }
 
@@ -158,7 +136,7 @@ mod tests {
     // Initialize a git repository
     Repository::init(repo_path).unwrap();
 
-    let result = detect_repository_from_path(repo_path).unwrap();
+    let result = detect_repository_from_path(repo_path);
     assert!(result.is_some());
     assert_eq!(result.unwrap(), repo_path);
   }
