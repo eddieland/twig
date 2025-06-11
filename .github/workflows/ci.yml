@@ -94,7 +94,7 @@ jobs:
       - name: Build
         run: cargo build --profile ci-windows --bin twig
       - name: Run tests
-        run: cargo nextest run --workspace
+        run: cargo nextest run --workspace --cargo-profile ci-windows
 
   # Build job depends on both fast-checks and test
   build:
