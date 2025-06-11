@@ -3,20 +3,23 @@
 //! Core Git functionality including repository discovery, branch operations,
 //! fetching, and worktree management for the twig workflow system.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use git2::{BranchType, FetchOptions, Repository as Git2Repository};
 use tokio::{task, time};
+use twig_core::output::{
+  format_command, format_repo_name, format_repo_path, print_error, print_header, print_success, print_warning,
+};
+use twig_core::{ConfigDirs, Registry};
 
-use crate::state::Registry;
-use crate::utils::output::{format_repo_name, format_repo_path, print_error, print_success, print_warning};
+use crate::consts;
 
 /// Add a repository to the registry
 pub fn add_repository<P: AsRef<Path>>(path: P) -> Result<()> {
-  let config_dirs = crate::config::ConfigDirs::new()?;
+  let config_dirs = ConfigDirs::new()?;
   let mut registry = Registry::load(&config_dirs)?;
 
   registry.add(path)?;
@@ -27,7 +30,7 @@ pub fn add_repository<P: AsRef<Path>>(path: P) -> Result<()> {
 
 /// Remove a repository from the registry
 pub fn remove_repository<P: AsRef<Path>>(path: P) -> Result<()> {
-  let config_dirs = crate::config::ConfigDirs::new()?;
+  let config_dirs = ConfigDirs::new()?;
   let mut registry = Registry::load(&config_dirs)?;
 
   registry.remove(path)?;
@@ -38,9 +41,7 @@ pub fn remove_repository<P: AsRef<Path>>(path: P) -> Result<()> {
 
 /// List all repositories in the registry
 pub fn list_repositories() -> Result<()> {
-  use crate::utils::output::{format_command, format_repo_name, format_repo_path, print_header, print_warning};
-
-  let config_dirs = crate::config::ConfigDirs::new()?;
+  let config_dirs = ConfigDirs::new()?;
   let registry = Registry::load(&config_dirs)?;
 
   let repos = registry.list();
@@ -87,7 +88,7 @@ pub fn fetch_repository<P: AsRef<Path>>(path: P, all: bool) -> Result<()> {
   }
 
   // Update the last fetch time in the registry
-  let config_dirs = crate::config::ConfigDirs::new()?;
+  let config_dirs = ConfigDirs::new()?;
   let mut registry = Registry::load(&config_dirs)?;
 
   let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
@@ -100,7 +101,7 @@ pub fn fetch_repository<P: AsRef<Path>>(path: P, all: bool) -> Result<()> {
     .context("Failed to update fetch time in registry")?;
   registry.save(&config_dirs)?;
 
-  use crate::utils::output::{format_repo_path, print_success};
+  use twig_core::output::{format_repo_path, print_success};
   print_success(&format!(
     "Successfully fetched repository at {}",
     format_repo_path(&path.display().to_string())
@@ -110,7 +111,7 @@ pub fn fetch_repository<P: AsRef<Path>>(path: P, all: bool) -> Result<()> {
 
 /// Fetch updates for all repositories in the registry
 pub fn fetch_all_repositories() -> Result<()> {
-  let config_dirs = crate::config::ConfigDirs::new()?;
+  let config_dirs = ConfigDirs::new()?;
   let registry = Registry::load(&config_dirs)?;
 
   let repos = registry.list();
@@ -118,7 +119,7 @@ pub fn fetch_all_repositories() -> Result<()> {
     print_warning("No repositories in registry.");
     println!(
       "Add one with {}",
-      crate::utils::output::format_command("twig git add <path>")
+      twig_core::output::format_command("twig git add <path>")
     );
     return Ok(());
   }
@@ -190,32 +191,6 @@ pub fn fetch_all_repositories() -> Result<()> {
   Ok(())
 }
 
-/// Detect the current working directory repository
-pub fn detect_current_repository() -> Result<PathBuf> {
-  let current_dir = std::env::current_dir().context("Failed to get current directory")?;
-  detect_repository(&current_dir)
-}
-
-/// Detect the current working directory repository
-pub fn detect_repository(path: &Path) -> Result<PathBuf> {
-  // Try to find a git repository in the current directory or any parent
-  let mut current = path.to_path_buf();
-  loop {
-    let git_dir = current.join(".git");
-    if git_dir.exists() && git_dir.is_dir() {
-      return Ok(current);
-    }
-
-    if !current.pop() {
-      break;
-    }
-  }
-
-  Err(anyhow::anyhow!(
-    "No git repository found in current directory or any parent"
-  ))
-}
-
 /// Execute a command in a repository
 pub fn execute_repository<P: AsRef<Path>>(path: P, command: &str) -> Result<()> {
   let path = path.as_ref();
@@ -227,7 +202,7 @@ pub fn execute_repository<P: AsRef<Path>>(path: P, command: &str) -> Result<()> 
 
   // Split the command into program and arguments
   let mut parts = command.split_whitespace();
-  let program = parts.next().unwrap_or(crate::utils::platform::GIT_EXECUTABLE);
+  let program = parts.next().unwrap_or(consts::GIT_EXECUTABLE);
   let args: Vec<&str> = parts.collect();
 
   // Execute the command
@@ -264,7 +239,7 @@ pub fn execute_repository<P: AsRef<Path>>(path: P, command: &str) -> Result<()> 
 
 /// Execute a command in all repositories
 pub fn execute_all_repositories(command: &str) -> Result<()> {
-  let config_dirs = crate::config::ConfigDirs::new()?;
+  let config_dirs = ConfigDirs::new()?;
   let registry = Registry::load(&config_dirs)?;
 
   let repos = registry.list();
@@ -272,7 +247,7 @@ pub fn execute_all_repositories(command: &str) -> Result<()> {
     print_warning("No repositories in registry.");
     println!(
       "Add one with {}",
-      crate::utils::output::format_command("twig git add <path>")
+      twig_core::output::format_command("twig git add <path>")
     );
     return Ok(());
   }
@@ -395,7 +370,7 @@ pub fn find_stale_branches<P: AsRef<Path>>(path: P, days: u32) -> Result<()> {
       println!(
         "  {} (last commit: {})",
         name,
-        crate::utils::output::format_timestamp(&time)
+        twig_core::output::format_timestamp(&time)
       );
     }
   }
@@ -405,7 +380,7 @@ pub fn find_stale_branches<P: AsRef<Path>>(path: P, days: u32) -> Result<()> {
 
 /// Find stale branches in all repositories
 pub fn find_stale_branches_all(days: u32) -> Result<()> {
-  let config_dirs = crate::config::ConfigDirs::new()?;
+  let config_dirs = ConfigDirs::new()?;
   let registry = Registry::load(&config_dirs)?;
 
   let repos = registry.list();
@@ -413,7 +388,7 @@ pub fn find_stale_branches_all(days: u32) -> Result<()> {
     print_warning("No repositories in registry.");
     println!(
       "Add one with {}",
-      crate::utils::output::format_command("twig git add <path>")
+      twig_core::output::format_command("twig git add <path>")
     );
     return Ok(());
   }

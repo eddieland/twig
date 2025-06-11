@@ -11,10 +11,10 @@ use indicatif::{ProgressBar, ProgressStyle};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use tokio::runtime::Runtime;
+use twig_core::output::{print_info, print_success, print_warning};
+use twig_core::state::{BranchMetadata, RepoState};
 
 use crate::clients;
-use crate::repo_state::{BranchMetadata, RepoState};
-use crate::utils::output::{print_info, print_success, print_warning};
 
 static JIRA_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
   vec![
@@ -135,7 +135,7 @@ fn sync_branches(
     pb.set_message(format!("Processing: {branch_name}"));
 
     // Check if branch already has associations
-    let existing_association = repo_state.get_branch_issue_by_branch(branch_name);
+    let existing_association = repo_state.get_branch_metadata(branch_name);
 
     // Detect patterns in branch name
     let detected_jira = if !no_jira {
@@ -296,7 +296,7 @@ fn print_sync_summary(
     for assoc in detected {
       let mut parts = Vec::new();
       if let Some(ref jira_issue) = assoc.jira_issue {
-        if !jira_issue.is_empty() {
+        if !jira_issue.as_str().is_empty() {
           parts.push(format!("Jira: {jira_issue}",));
         }
       }

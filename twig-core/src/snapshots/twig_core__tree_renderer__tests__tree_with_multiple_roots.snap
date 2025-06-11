@@ -1,5 +1,5 @@
 ---
-source: twig-cli/src/tree_renderer.rs
+source: twig-core/src/tree_renderer.rs
 expression: output_str
 ---
 main

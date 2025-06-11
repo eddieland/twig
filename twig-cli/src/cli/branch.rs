@@ -6,10 +6,8 @@
 
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
-
-use crate::git::detect_current_repository;
-use crate::repo_state::RepoState;
-use crate::utils::output::{print_error, print_info, print_success, print_warning};
+use twig_core::output::{print_error, print_info, print_success, print_warning};
+use twig_core::{RepoState, detect_repository};
 
 /// Command for branch dependency and root management
 #[derive(Args)]
@@ -30,10 +28,7 @@ pub enum BranchSubcommands {
   Depend(DependCommand),
 
   /// Remove a dependency between branches
-  #[command(long_about = "Remove a previously defined parent-child relationship.\n\n\
-                     This removes the custom dependency between two branches,\n\
-                     allowing the tree view to fall back to Git's automatic\n\
-                     detection for these branches.")]
+  #[command(long_about = "Remove a previously defined parent-child relationship.")]
   #[command(alias = "rm-dep")]
   RemoveDep(RemoveDepCommand),
 
@@ -155,7 +150,7 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
       let repo_path = if let Some(repo_arg) = cmd.repo {
         crate::utils::resolve_repository_path(Some(&repo_arg))?
       } else {
-        detect_current_repository().context("Not in a git repository")?
+        detect_repository().context("Not in a git repository")?
       };
 
       // Load repository state
@@ -180,7 +175,7 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
       let repo_path = if let Some(repo_arg) = cmd.repo {
         crate::utils::resolve_repository_path(Some(&repo_arg))?
       } else {
-        detect_current_repository().context("Not in a git repository")?
+        detect_repository().context("Not in a git repository")?
       };
 
       // Load repository state
@@ -203,7 +198,7 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
         let repo_path = if let Some(repo_arg) = cmd.repo {
           crate::utils::resolve_repository_path(Some(&repo_arg))?
         } else {
-          detect_current_repository().context("Not in a git repository")?
+          detect_repository().context("Not in a git repository")?
         };
 
         // Load repository state
@@ -232,7 +227,7 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
         let repo_path = if let Some(repo_arg) = cmd.repo {
           crate::utils::resolve_repository_path(Some(&repo_arg))?
         } else {
-          detect_current_repository().context("Not in a git repository")?
+          detect_repository().context("Not in a git repository")?
         };
 
         // Load repository state
@@ -262,7 +257,7 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
         let repo_path = if let Some(repo_arg) = cmd.repo {
           crate::utils::resolve_repository_path(Some(&repo_arg))?
         } else {
-          detect_current_repository().context("Not in a git repository")?
+          detect_repository().context("Not in a git repository")?
         };
 
         // Load repository state

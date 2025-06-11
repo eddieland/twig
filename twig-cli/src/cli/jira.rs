@@ -8,11 +8,11 @@ use clap::{Args, Subcommand};
 use directories::BaseDirs;
 use git2::Repository as Git2Repository;
 use owo_colors::OwoColorize;
+use twig_core::output::{print_error, print_info, print_success, print_warning};
+use twig_core::{BranchMetadata, RepoState, create_worktree, detect_repository, get_current_branch_jira_issue};
 
+use crate::clients;
 use crate::clients::get_jira_host;
-use crate::repo_state::{BranchMetadata, RepoState};
-use crate::utils::output::{print_error, print_info, print_success, print_warning};
-use crate::{clients, git};
 
 /// Command for Jira integration
 #[derive(Args)]
@@ -104,7 +104,7 @@ pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
         Some(key) => handle_link_branch_command(&key, branch_name.as_deref()),
         None => {
           // Try to get the Jira issue from the current branch
-          match crate::utils::get_current_branch_jira_issue() {
+          match get_current_branch_jira_issue() {
             Ok(Some(key)) => handle_link_branch_command(&key, branch_name.as_deref()),
             Ok(None) => {
               print_error("No Jira issue key provided and current branch has no associated Jira issue");
@@ -123,7 +123,7 @@ pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
         Some(key) => handle_transition_issue_command(&key, transition.as_deref()),
         None => {
           // Try to get the Jira issue from the current branch
-          match crate::utils::get_current_branch_jira_issue() {
+          match get_current_branch_jira_issue() {
             Ok(Some(key)) => handle_transition_issue_command(&key, transition.as_deref()),
             Ok(None) => {
               print_error("No Jira issue key provided and current branch has no associated Jira issue");
@@ -143,7 +143,7 @@ pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
         Some(key) => handle_view_issue_command(&key),
         None => {
           // Try to get the Jira issue from the current branch
-          match crate::utils::get_current_branch_jira_issue() {
+          match get_current_branch_jira_issue() {
             Ok(Some(key)) => handle_view_issue_command(&key),
             Ok(None) => {
               print_error("No Jira issue key provided and current branch has no associated Jira issue");
@@ -346,10 +346,10 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
     let branch_name = format!("{issue_key}/{sanitized_summary}");
 
     // Get the current repository
-    let repo_path = match git::detect_current_repository() {
-      Ok(path) => path,
-      Err(e) => {
-        print_error(&format!("Failed to find git repository: {e}"));
+    let repo_path = match twig_core::detect_repository() {
+      Some(path) => path,
+      None => {
+        print_error("Failed to find git repository");
         return Ok(());
       }
     };
@@ -371,7 +371,7 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
 
     if with_worktree {
       // Create a worktree for the branch
-      match crate::repo_state::create_worktree(&repo_path, &branch_name) {
+      match create_worktree(&repo_path, &branch_name) {
         Ok(_) => {
           print_success(&format!("Created worktree for branch '{branch_name}'"));
         }
@@ -441,10 +441,10 @@ fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Res
     };
 
     // Get the current repository
-    let repo_path = match git::detect_current_repository() {
-      Ok(path) => path,
-      Err(e) => {
-        print_error(&format!("Failed to find git repository: {e}"));
+    let repo_path = match detect_repository() {
+      Some(path) => path,
+      None => {
+        print_error("Failed to find git repository");
         return Ok(());
       }
     };
@@ -484,7 +484,7 @@ fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Res
     let mut state = RepoState::load(&repo_path)?;
 
     // Check if the branch is already associated with an issue
-    if let Some(existing) = state.get_branch_issue_by_branch(&branch) {
+    if let Some(existing) = state.get_branch_metadata(&branch) {
       if existing.jira_issue.as_deref() == Some(issue_key) {
         print_info(&format!(
           "Branch '{branch}' is already associated with issue {issue_key}"

@@ -1,7 +1,7 @@
-//! # Repository State Management
+//! # Application State Management
 //!
-//! Manages persistent state for Git repositories, including branch
-//! dependencies, metadata, and configuration storage for the twig tool.
+//! Manages global application state including repository registry,
+//! workspace tracking, and persistent configuration across twig sessions.
 
 use std::collections::HashMap;
 use std::fs;
@@ -12,6 +12,112 @@ use chrono::{DateTime, Utc};
 use git2::Repository as Git2Repository;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+use crate::config::ConfigDirs;
+
+/// Represents a repository in the registry
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Repository {
+  pub path: String,
+  pub name: String,
+  pub last_fetch: Option<String>,
+}
+
+impl Repository {
+  /// Create a new Repository instance
+  pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
+    let path_buf = fs::canonicalize(path.as_ref()).context("Failed to resolve repository path")?;
+
+    let name = path_buf
+      .file_name()
+      .and_then(|n| n.to_str())
+      .unwrap_or("unknown")
+      .to_string();
+
+    Ok(Self {
+      path: path_buf.to_string_lossy().to_string(),
+      name,
+      last_fetch: None,
+    })
+  }
+}
+
+/// Represents the registry of tracked repositories
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Registry {
+  repositories: Vec<Repository>,
+}
+
+impl Registry {
+  /// Load the registry from disk
+  pub fn load(config_dirs: &ConfigDirs) -> Result<Self> {
+    let registry_path = config_dirs.registry_path();
+
+    if !registry_path.exists() {
+      return Ok(Self {
+        repositories: Vec::new(),
+      });
+    }
+
+    let content = fs::read_to_string(&registry_path).context("Failed to read registry file")?;
+
+    let repositories = serde_json::from_str(&content).context("Failed to parse registry file")?;
+
+    Ok(Self { repositories })
+  }
+
+  /// Save the registry to disk
+  pub fn save(&self, config_dirs: &ConfigDirs) -> Result<()> {
+    let registry_path = config_dirs.registry_path();
+    let content = serde_json::to_string_pretty(&self.repositories).context("Failed to serialize registry")?;
+
+    fs::write(&registry_path, content).context("Failed to write registry file")?;
+
+    Ok(())
+  }
+
+  /// Add a repository to the registry
+  pub fn add<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
+    let repo = Repository::new(path)?;
+
+    // Check if the repository is already in the registry
+    if self.repositories.iter().any(|r| r.path == repo.path) {
+      return Ok(());
+    }
+
+    self.repositories.push(repo);
+    Ok(())
+  }
+
+  /// Remove a repository from the registry
+  pub fn remove<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
+    let path_buf = fs::canonicalize(path.as_ref()).context("Failed to resolve repository path")?;
+    let path_str = path_buf.to_string_lossy().to_string();
+
+    self.repositories.retain(|r| r.path != path_str);
+    Ok(())
+  }
+
+  /// List all repositories in the registry
+  pub fn list(&self) -> &[Repository] {
+    &self.repositories
+  }
+
+  /// Update the last fetch time for a repository
+  pub fn update_fetch_time<P: AsRef<Path>>(&mut self, path: P, time: String) -> Result<()> {
+    let path_buf = fs::canonicalize(path.as_ref()).context("Failed to resolve repository path")?;
+    let path_str = path_buf.to_string_lossy().to_string();
+
+    for repo in &mut self.repositories {
+      if repo.path == path_str {
+        repo.last_fetch = Some(time);
+        return Ok(());
+      }
+    }
+
+    Err(anyhow::anyhow!("Repository not found in registry: {}", path_str))
+  }
+}
 
 /// Represents a user-defined branch dependency
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -215,7 +321,7 @@ impl RepoState {
   }
 
   /// Get a branch-issue association by branch name
-  pub fn get_branch_issue_by_branch(&self, branch: &str) -> Option<&BranchMetadata> {
+  pub fn get_branch_metadata(&self, branch: &str) -> Option<&BranchMetadata> {
     self.branches.get(branch)
   }
 
@@ -460,7 +566,7 @@ impl RepoState {
 
 /// Create a new worktree
 pub fn create_worktree<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Result<PathBuf> {
-  use crate::utils::output::{format_repo_path, print_success, print_warning};
+  use crate::output::{format_repo_path, print_success, print_warning};
 
   let repo_path = repo_path.as_ref();
   let repo =
@@ -655,7 +761,7 @@ pub fn create_worktree<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Resul
 
 /// List all worktrees for a repository
 pub fn list_worktrees<P: AsRef<Path>>(repo_path: P) -> Result<()> {
-  use crate::utils::output::{format_command, format_repo_path, format_timestamp, print_header, print_warning};
+  use crate::output::{format_command, format_repo_path, format_timestamp, print_header, print_warning};
 
   let repo_path = repo_path.as_ref();
   let repo =
@@ -710,59 +816,6 @@ pub fn list_worktrees<P: AsRef<Path>>(repo_path: P) -> Result<()> {
   Ok(())
 }
 
-/// Clean up stale worktrees
-pub fn clean_worktrees<P: AsRef<Path>>(repo_path: P) -> Result<()> {
-  use crate::utils::output::{print_success, print_warning};
-
-  let repo_path = repo_path.as_ref();
-  let repo =
-    Git2Repository::open(repo_path).context(format!("Failed to open git repository at {}", repo_path.display()))?;
-
-  // Get the list of worktrees from git
-  let worktree_names = repo.worktrees()?;
-
-  if worktree_names.is_empty() {
-    print_warning("No worktrees found for this repository.");
-    return Ok(());
-  }
-
-  // Load the repository state
-  let mut state = RepoState::load(repo_path)?;
-  let mut cleaned_count = 0;
-
-  // Iterate through the worktree names
-  for i in 0..worktree_names.len() {
-    if let Some(name) = worktree_names.get(i) {
-      let worktree = repo.find_worktree(name)?;
-      let path = worktree.path();
-
-      // Check if the worktree directory still exists
-      if !path.exists() {
-        println!("Cleaning up stale worktree reference: {name} (path no longer exists)",);
-
-        // Prune the worktree reference
-        worktree.prune(None)?;
-
-        // Remove from state
-        state.remove_worktree(name);
-
-        cleaned_count += 1;
-      }
-    }
-  }
-
-  // Save the updated state
-  state.save(repo_path)?;
-
-  if cleaned_count > 0 {
-    print_success(&format!("Cleaned up {cleaned_count} stale worktree references"));
-  } else {
-    println!("No stale worktrees found to clean up");
-  }
-
-  Ok(())
-}
-
 #[cfg(test)]
 mod tests {
   use std::fs;
@@ -770,6 +823,62 @@ mod tests {
   use tempfile::TempDir;
 
   use super::*;
+
+  #[test]
+  fn test_repository_creation() {
+    let temp_dir = TempDir::new().unwrap();
+    let repo_path = temp_dir.path();
+
+    let repo = Repository::new(repo_path).unwrap();
+
+    assert!(!repo.path.is_empty());
+    assert!(!repo.name.is_empty());
+    assert!(repo.last_fetch.is_none());
+  }
+
+  #[test]
+  fn test_registry_load_empty() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_dirs = ConfigDirs {
+      config_dir: temp_dir.path().join("config"),
+      data_dir: temp_dir.path().join("data"),
+      cache_dir: Some(temp_dir.path().join("cache")),
+    };
+
+    // Test loading non-existent registry
+    let registry = Registry::load(&config_dirs).unwrap();
+    assert!(registry.repositories.is_empty());
+  }
+
+  #[test]
+  fn test_registry_save_and_load() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_dirs = ConfigDirs {
+      config_dir: temp_dir.path().join("config"),
+      data_dir: temp_dir.path().join("data"),
+      cache_dir: Some(temp_dir.path().join("cache")),
+    };
+
+    // Create data directory
+    fs::create_dir_all(&config_dirs.data_dir).unwrap();
+
+    let mut registry = Registry {
+      repositories: Vec::new(),
+    };
+
+    // Add a repository
+    let repo_dir = temp_dir.path().join("test_repo");
+    fs::create_dir_all(&repo_dir).unwrap();
+    registry.add(&repo_dir).unwrap();
+
+    // Save registry
+    registry.save(&config_dirs).unwrap();
+
+    // Load registry and verify
+    let loaded_registry = Registry::load(&config_dirs).unwrap();
+    assert_eq!(loaded_registry.repositories.len(), 1);
+    assert_eq!(loaded_registry.repositories[0].name, "test_repo");
+  }
 
   #[test]
   fn test_repo_state_creation() {

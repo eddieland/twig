@@ -1,0 +1,37 @@
+[package]
+name = "twig-core"
+description = "Core library for twig plugins providing configuration structures and utilities"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+name = "twig_core"
+path = "src/lib.rs"
+
+[dependencies]
+# Core dependencies
+anyhow.workspace = true
+chrono.workspace = true
+clap.workspace = true
+console.workspace = true
+directories.workspace = true
+git2.workspace = true
+once_cell.workspace = true
+regex.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Output formatting
+owo-colors.workspace = true
+emojis.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+tempfile.workspace = true

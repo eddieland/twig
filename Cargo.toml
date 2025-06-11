@@ -2,9 +2,16 @@
 members = [
     "no-worries",
     "twig-cli",
+    "twig-core",
     "twig-gh",
     "twig-jira",
     "twig-test-utils",
+]
+exclude = [
+    "/.github",
+    "/.twig",
+    "/ref",
+    "/examples",
 ]
 default-members = ["twig-cli"]
 resolver = "2"
@@ -16,7 +23,6 @@ rust-version = "1.87.0"
 authors = ["Edward Jones <e@eddie.land>"]
 readme = "README.md"
 repository = "https://github.com/eddieland/twig"
-exclude = ["/.github", "/ref"]
 
 [package]
 name = "twig"
@@ -31,6 +37,7 @@ twig-cli = { path = "twig-cli" }
 
 [dev-dependencies]
 twig-test-utils = { path = "twig-test-utils" }
+twig-core = { path = "twig-core" }
 anyhow = { workspace = true }
 git2 = { workspace = true }
 tempfile = { workspace = true }

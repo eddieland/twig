@@ -1,0 +1,42 @@
+//! # Twig Core Library
+//!
+//! Core library for twig plugins providing configuration structures, state
+//! models, and utility functions for plugin developers. This crate enables
+//! plugins to access twig's configuration and state in a read-only manner while
+//! maintaining their own separate state.
+
+pub mod config;
+pub mod git;
+pub mod output;
+pub mod state;
+pub mod tree_renderer;
+pub mod utils;
+
+// Re-export main types for plugin developers
+pub use config::{ConfigDirs, get_config_dirs};
+pub use git::{current_branch, detect_repository, detect_repository_from_path, in_git_repository};
+pub use output::{ColorMode, format_repo_path, print_error, print_info, print_success, print_warning};
+pub use state::{BranchDependency, BranchMetadata, Registry, RepoState, Repository, RootBranch, create_worktree};
+pub use utils::{get_current_branch_github_pr, get_current_branch_jira_issue};
+
+/// Plugin-specific utilities
+pub mod plugin {
+  use std::path::PathBuf;
+
+  use anyhow::Result;
+
+  pub use super::config::get_config_dirs;
+  pub use super::git::current_branch;
+
+  /// Get plugin-specific config directory
+  pub fn plugin_config_dir(plugin_name: &str) -> Result<PathBuf> {
+    let config_dirs = get_config_dirs()?;
+    Ok(config_dirs.config_dir().join("plugins").join(plugin_name))
+  }
+
+  /// Get plugin-specific data directory
+  pub fn plugin_data_dir(plugin_name: &str) -> Result<PathBuf> {
+    let config_dirs = get_config_dirs()?;
+    Ok(config_dirs.data_dir().join("plugins").join(plugin_name))
+  }
+}

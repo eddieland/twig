@@ -8,6 +8,7 @@ mod branch;
 pub mod cascade;
 mod commit;
 mod completion;
+mod config;
 mod creds;
 mod dashboard;
 mod git;
@@ -23,9 +24,9 @@ use anyhow::Result;
 use clap::builder::Styles;
 use clap::builder::styling::AnsiColor;
 use clap::{ArgAction, Parser, Subcommand};
+use twig_core::output::ColorMode;
 
-use crate::diagnostics;
-use crate::utils::output::ColorMode;
+use crate::{diagnostics, plugin};
 
 /// Top-level CLI command for the twig tool
 #[derive(Parser)]
@@ -40,7 +41,6 @@ use crate::utils::output::ColorMode;
 )]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(propagate_version = true)]
-#[command(subcommand_required(true))]
 #[command(disable_help_subcommand = true)]
 #[command(max_term_width = 120)]
 #[command(styles = Styles::styled()
@@ -75,7 +75,11 @@ pub struct Cli {
 
   /// Subcommands
   #[command(subcommand)]
-  pub command: Commands,
+  pub command: Option<Commands>,
+
+  /// Plugin name and arguments (when no subcommand matches)
+  #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+  pub plugin_args: Vec<String>,
 }
 
 /// Subcommands for the twig tool
@@ -254,24 +258,41 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
   }
 
   match cli.command {
-    Commands::Branch(branch) => branch::handle_branch_command(branch),
-    Commands::Cascade(cascade) => cascade::handle_cascade_command(cascade),
-    Commands::Completion(completion) => completion::handle_completion_command(completion),
-    Commands::Creds(creds) => creds::handle_creds_command(creds),
-    Commands::Dashboard(dashboard) => dashboard::handle_dashboard_command(dashboard),
-    Commands::Diagnostics => diagnostics::run_diagnostics(),
-    Commands::Git(git) => git::handle_git_command(git),
-    Commands::GitHub(github) => github::handle_github_command(github),
-    Commands::Init => crate::config::init(),
-    Commands::Jira(jira) => jira::handle_jira_command(jira),
-    Commands::Panic => {
-      panic!("This is an intentional test panic to verify no-worries integration");
-    }
-    Commands::Rebase(rebase) => rebase::handle_rebase_command(rebase),
-    Commands::Switch(switch) => switch::handle_switch_command(switch),
-    Commands::Sync(sync) => sync::handle_sync_command(sync),
-    Commands::Tree(tree) => tree::handle_tree_command(tree),
-    Commands::Worktree(worktree) => worktree::handle_worktree_command(worktree),
-    Commands::Commit(args) => commit::handle_commit_command(args),
+    Some(command) => match command {
+      Commands::Branch(branch) => branch::handle_branch_command(branch),
+      Commands::Cascade(cascade) => cascade::handle_cascade_command(cascade),
+      Commands::Completion(completion) => completion::handle_completion_command(completion),
+      Commands::Creds(creds) => creds::handle_creds_command(creds),
+      Commands::Dashboard(dashboard) => dashboard::handle_dashboard_command(dashboard),
+      Commands::Diagnostics => diagnostics::run_diagnostics(),
+      Commands::Git(git) => git::handle_git_command(git),
+      Commands::GitHub(github) => github::handle_github_command(github),
+      Commands::Init => config::handle_init_command(),
+      Commands::Jira(jira) => jira::handle_jira_command(jira),
+      Commands::Panic => {
+        panic!("This is an intentional test panic to verify no-worries integration");
+      }
+      Commands::Rebase(rebase) => rebase::handle_rebase_command(rebase),
+      Commands::Switch(switch) => switch::handle_switch_command(switch),
+      Commands::Sync(sync) => sync::handle_sync_command(sync),
+      Commands::Tree(tree) => tree::handle_tree_command(tree),
+      Commands::Worktree(worktree) => worktree::handle_worktree_command(worktree),
+      Commands::Commit(args) => commit::handle_commit_command(args),
+    },
+    None => handle_plugin_fallback(cli),
+  }
+}
+
+fn handle_plugin_fallback(cli: Cli) -> Result<()> {
+  // No built-in command matched, try plugin discovery
+  if let Some(plugin_name) = cli.plugin_args.first() {
+    let plugin_args = cli.plugin_args[1..].to_vec();
+    plugin::execute_plugin(plugin_name, plugin_args, cli.verbose)
+  } else {
+    // No command provided at all, show help
+    use clap::CommandFactory;
+    let mut cmd = Cli::command();
+    cmd.print_help()?;
+    Ok(())
   }
 }

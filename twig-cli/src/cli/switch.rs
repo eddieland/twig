@@ -10,13 +10,13 @@ use clap::Args;
 use directories::BaseDirs;
 use git2::Repository as Git2Repository;
 use tokio::runtime::Runtime;
+use twig_core::detect_repository;
+use twig_core::output::{print_error, print_info, print_success, print_warning};
+use twig_core::state::{BranchMetadata, RepoState};
 use twig_gh::GitHubClient;
 use twig_jira::JiraClient;
 
 use crate::clients::{self, get_jira_host};
-use crate::git::detect_current_repository;
-use crate::repo_state::{BranchMetadata, RepoState};
-use crate::utils::output::{print_error, print_info, print_success, print_warning};
 
 /// Command for intelligently switching to branches based on various inputs
 #[derive(Args)]
@@ -70,7 +70,7 @@ pub(crate) fn handle_switch_command(switch: SwitchArgs) -> Result<()> {
   let parent_option = switch.parent.as_deref();
 
   // Get the current repository
-  let repo_path = detect_current_repository().context("Not in a git repository")?;
+  let repo_path = detect_repository().context("Not in a git repository")?;
 
   // Detect input type and handle accordingly
   match detect_input_type(input) {

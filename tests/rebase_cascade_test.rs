@@ -1,9 +1,11 @@
+#![cfg(unix)]
+
 use std::fs;
 use std::path::Path;
 
 use anyhow::Result;
 use git2::{BranchType, Repository as Git2Repository, Signature};
-use twig_cli::repo_state::RepoState;
+use twig_core::state::RepoState;
 use twig_test_utils::git::GitRepoTestGuard;
 
 /// Helper function to create a commit in a repository

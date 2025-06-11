@@ -3,17 +3,15 @@
 //! Provides formatted output functions with colors, emojis, and consistent
 //! styling for user-facing messages and terminal output.
 
-use emojis;
 use owo_colors::OwoColorize;
+use {clap, emojis};
 
 /// Enum representing different color modes for output
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-
 pub enum ColorMode {
   /// Enable colored output
   Yes,
   /// Enable colored output (alias for Yes)
-  #[value(hide = true)]
   Always,
   /// Automatically detect if colors should be used based on terminal
   /// capabilities
@@ -21,12 +19,11 @@ pub enum ColorMode {
   /// Disable colored output
   No,
   /// Disable colored output (alias for No)
-  #[value(hide = true)]
   Never,
 }
 
-// Helper function to safely get an emoji or fallback to a default character
-fn get_emoji_or_default(name: &str, default: &str) -> String {
+/// Helper function to safely get an emoji or fallback to a default character
+pub fn get_emoji_or_default(name: &str, default: &str) -> String {
   match emojis::get_by_shortcode(name) {
     Some(emoji) => emoji.to_string(),
     None => default.to_string(),
@@ -98,20 +95,65 @@ pub fn format_check_status(status: &str, conclusion: Option<&str>) -> String {
     "completed" => {
       if let Some(conclusion) = conclusion {
         match conclusion {
-          "success" => "Success".green().to_string(),
-          "failure" => "Failure".red().to_string(),
-          "neutral" => "Neutral".yellow().to_string(),
-          "cancelled" => "Cancelled".yellow().to_string(),
-          "timed_out" => "Timed Out".red().to_string(),
-          "action_required" => "Action Required".yellow().to_string(),
+          "success" => conclusion.green().to_string(),
+          "failure" => conclusion.red().to_string(),
+          "cancelled" => conclusion.yellow().to_string(),
+          "skipped" => conclusion.bright_black().to_string(),
           _ => conclusion.to_string(),
         }
       } else {
-        "Completed".to_string()
+        status.to_string()
       }
     }
-    "in_progress" => "In Progress".yellow().to_string(),
-    "queued" => "Queued".cyan().to_string(),
+    "in_progress" => status.yellow().to_string(),
+    "queued" => status.blue().to_string(),
     _ => status.to_string(),
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_get_emoji_or_default() {
+    // Test with a known emoji
+    let result = get_emoji_or_default("check_mark", "✓");
+    assert!(!result.is_empty());
+
+    // Test with unknown emoji
+    let result = get_emoji_or_default("nonexistent_emoji", "fallback");
+    assert_eq!(result, "fallback");
+  }
+
+  #[test]
+  fn test_format_functions() {
+    let path = format_repo_path("/test/path");
+    assert!(!path.is_empty());
+
+    let name = format_repo_name("test-repo");
+    assert!(!name.is_empty());
+
+    let timestamp = format_timestamp("2023-01-01");
+    assert!(!timestamp.is_empty());
+
+    let command = format_command("git status");
+    assert!(!command.is_empty());
+  }
+
+  #[test]
+  fn test_pr_review_status_formatting() {
+    assert!(!format_pr_review_status("APPROVED").is_empty());
+    assert!(!format_pr_review_status("CHANGES_REQUESTED").is_empty());
+    assert!(!format_pr_review_status("COMMENTED").is_empty());
+    assert!(!format_pr_review_status("UNKNOWN").is_empty());
+  }
+
+  #[test]
+  fn test_check_status_formatting() {
+    assert!(!format_check_status("completed", Some("success")).is_empty());
+    assert!(!format_check_status("completed", Some("failure")).is_empty());
+    assert!(!format_check_status("in_progress", None).is_empty());
+    assert!(!format_check_status("queued", None).is_empty());
   }
 }

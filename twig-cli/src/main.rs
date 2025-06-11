@@ -15,14 +15,11 @@ mod auto_dependency_discovery;
 mod cli;
 mod clients;
 mod completion;
-mod config;
 mod consts;
 mod creds;
 mod diagnostics;
 mod git;
-mod repo_state;
-mod state;
-mod tree_renderer;
+mod plugin;
 mod user_defined_dependency_resolver;
 mod utils;
 

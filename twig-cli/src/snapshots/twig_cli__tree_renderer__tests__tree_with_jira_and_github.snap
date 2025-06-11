@@ -1,5 +1,0 @@
----
-source: twig-cli/src/tree_renderer.rs
-expression: output_str
----
-PROJ-123/feature-branch  [PROJ-123]  [PR#456]

@@ -4,8 +4,6 @@
 //! including pull request management, status checks, and synchronization with
 //! branch metadata for development workflows.
 
-use std::path::PathBuf;
-
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use directories::BaseDirs;
@@ -14,15 +12,14 @@ use owo_colors::OwoColorize;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
+use twig_core::output::{
+  format_check_status, format_command, format_pr_review_status, print_error, print_info, print_success, print_warning,
+};
+use twig_core::state::BranchMetadata;
+use twig_core::{RepoState, detect_repository, detect_repository_from_path, get_current_branch_github_pr};
 use twig_gh::PullRequestStatus;
 
 use crate::clients;
-use crate::git::detect_current_repository;
-use crate::repo_state::RepoState;
-use crate::utils::get_current_branch_github_pr;
-use crate::utils::output::{
-  format_check_status, format_command, format_pr_review_status, print_error, print_info, print_success, print_warning,
-};
 
 /// Command for GitHub integration
 #[derive(Args)]
@@ -143,7 +140,7 @@ pub(crate) fn handle_github_command(github: GitHubArgs) -> Result<()> {
           Some(pr_url_or_id) => handle_pr_link_command(pr_url_or_id),
           None => {
             // Try to get the PR from the current branch
-            match crate::utils::get_current_branch_github_pr() {
+            match get_current_branch_github_pr() {
               Ok(Some(pr_number)) => {
                 // Convert PR number to string and handle it
                 handle_pr_link_command(&pr_number.to_string())
@@ -209,14 +206,19 @@ fn handle_checks_command(cmd: &ChecksCommand) -> Result<()> {
 
   // Get repository path (current or specified)
   let repo_path = if let Some(path) = &cmd.repo {
-    PathBuf::from(path)
+    detect_repository_from_path(path)
   } else {
-    match detect_current_repository() {
-      Ok(path) => path,
-      Err(e) => {
-        print_error(&format!("Failed to detect current repository: {e}"));
-        return Ok(());
-      }
+    detect_repository()
+  };
+
+  // Check if we found a repository
+  let repo_path = match repo_path {
+    Some(path) => path,
+    None => {
+      print_error(
+        "No git repository found. Make sure you're in a git repository or specify a valid repository path with --repo",
+      );
+      return Ok(());
     }
   };
 
@@ -402,10 +404,10 @@ fn handle_pr_status_command() -> Result<()> {
   let (rt, github_client) = clients::create_github_runtime_and_client(base_dirs.home_dir())?;
 
   // Get the current repository
-  let repo_path = match detect_current_repository() {
-    Ok(path) => path,
-    Err(e) => {
-      print_error(&format!("Failed to detect current repository: {e}"));
+  let repo_path = match detect_repository() {
+    Some(path) => path,
+    None => {
+      print_error("No git repository found. Make sure you're in a git repository");
       return Ok(());
     }
   };
@@ -501,14 +503,19 @@ fn handle_pr_list_command(cmd: &ListCommand) -> Result<()> {
 
   // Get repository path (current or specified)
   let repo_path = if let Some(path) = &cmd.repo {
-    PathBuf::from(path)
+    detect_repository_from_path(path)
   } else {
-    match detect_current_repository() {
-      Ok(path) => path,
-      Err(e) => {
-        print_error(&format!("Failed to detect current repository: {e}"));
-        return Ok(());
-      }
+    detect_repository()
+  };
+
+  // Check if we found a repository
+  let repo_path = match repo_path {
+    Some(path) => path,
+    None => {
+      print_error(
+        "No git repository found. Make sure you're in a git repository or specify a valid repository path with --repo",
+      );
+      return Ok(());
     }
   };
 
@@ -619,10 +626,10 @@ fn handle_pr_list_command(cmd: &ListCommand) -> Result<()> {
 /// Handle the PR link command
 fn handle_pr_link_command(pr_url_or_id: &str) -> Result<()> {
   // Get the current repository
-  let repo_path = match detect_current_repository() {
-    Ok(path) => path,
-    Err(e) => {
-      print_error(&format!("Failed to detect current repository: {e}"));
+  let repo_path = match detect_repository() {
+    Some(path) => path,
+    None => {
+      print_error("No git repository found. Make sure you're in a git repository");
       return Ok(());
     }
   };
@@ -724,7 +731,7 @@ fn handle_pr_link_command(pr_url_or_id: &str) -> Result<()> {
   // Check if the branch already has an associated issue
   let now = chrono::Utc::now().to_rfc3339();
 
-  if let Some(branch_issue) = repo_state.get_branch_issue_by_branch(branch_name) {
+  if let Some(branch_issue) = repo_state.get_branch_metadata(branch_name) {
     // Update the existing branch issue
     let mut updated_branch_issue = branch_issue.clone();
     updated_branch_issue.github_pr = Some(pr_number);
@@ -736,7 +743,7 @@ fn handle_pr_link_command(pr_url_or_id: &str) -> Result<()> {
     ));
   } else {
     // Create a new branch issue
-    let branch_issue = crate::repo_state::BranchMetadata {
+    let branch_issue = BranchMetadata {
       branch: branch_name.to_string(),
       jira_issue: None,
       github_pr: Some(pr_number),

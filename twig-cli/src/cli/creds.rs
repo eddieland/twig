@@ -9,6 +9,7 @@ use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use directories::BaseDirs;
 use tokio::runtime::Runtime;
+use twig_core::output::{format_command, format_repo_path, print_error, print_info, print_success, print_warning};
 use twig_gh::create_github_client;
 use twig_jira::create_jira_client;
 
@@ -21,7 +22,6 @@ use crate::creds::platform::UnixFilePermissions;
 #[cfg(windows)]
 use crate::creds::platform::WindowsFilePermissions;
 use crate::creds::{check_github_credentials, check_jira_credentials};
-use crate::utils::output::{format_command, format_repo_path, print_error, print_info, print_success, print_warning};
 
 /// Command for credential management
 #[derive(Args)]

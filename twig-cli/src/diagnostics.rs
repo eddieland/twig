@@ -9,13 +9,14 @@ use std::{env, fs};
 
 use anyhow::Result;
 use directories::BaseDirs;
+use twig_core::get_config_dirs;
+use twig_core::output::{format_repo_path, print_error, print_header, print_success};
 
 use crate::clients::get_jira_host;
-use crate::config::get_config_dirs;
+use crate::consts;
 use crate::creds::netrc::get_netrc_path;
 use crate::creds::{check_github_credentials, check_jira_credentials};
 use crate::git::list_repositories;
-use crate::utils::output::{format_repo_path, print_error, print_header, print_success};
 
 /// Run comprehensive system diagnostics
 pub fn run_diagnostics() -> Result<()> {
@@ -151,7 +152,7 @@ fn check_credentials() -> Result<()> {
     {
       use std::os::unix::fs::PermissionsExt;
 
-      use crate::utils::output::print_warning;
+      use twig_core::output::print_warning;
 
       let metadata = fs::metadata(&netrc_path)?;
       let permissions = metadata.permissions();
@@ -201,10 +202,7 @@ fn check_git_configuration() -> Result<()> {
   println!("Git Configuration:");
 
   // Check if git is available
-  match Command::new(crate::utils::platform::GIT_EXECUTABLE)
-    .arg("--version")
-    .output()
-  {
+  match Command::new(consts::GIT_EXECUTABLE).arg("--version").output() {
     Ok(output) => {
       if output.status.success() {
         let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -220,7 +218,7 @@ fn check_git_configuration() -> Result<()> {
   }
 
   // Check git configuration
-  if let Ok(output) = Command::new(crate::utils::platform::GIT_EXECUTABLE)
+  if let Ok(output) = Command::new(consts::GIT_EXECUTABLE)
     .args(["config", "--global", "user.name"])
     .output()
   {
@@ -237,7 +235,7 @@ fn check_git_configuration() -> Result<()> {
     }
   }
 
-  if let Ok(output) = Command::new(crate::utils::platform::GIT_EXECUTABLE)
+  if let Ok(output) = Command::new(consts::GIT_EXECUTABLE)
     .args(["config", "--global", "user.email"])
     .output()
   {
