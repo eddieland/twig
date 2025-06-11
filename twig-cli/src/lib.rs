@@ -13,6 +13,7 @@ pub mod consts;
 pub mod creds;
 pub mod diagnostics;
 pub mod git;
+pub mod plugin;
 pub mod repo_state;
 pub mod state;
 pub mod tree_renderer;

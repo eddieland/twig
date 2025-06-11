@@ -2,9 +2,13 @@
 members = [
     "no-worries",
     "twig-cli",
+    "twig-core",
     "twig-gh",
     "twig-jira",
     "twig-test-utils",
+]
+exclude = [
+    "examples/plugins/*",
 ]
 default-members = ["twig-cli"]
 resolver = "2"

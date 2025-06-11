@@ -20,6 +20,7 @@ mod consts;
 mod creds;
 mod diagnostics;
 mod git;
+mod plugin;
 mod repo_state;
 mod state;
 mod tree_renderer;

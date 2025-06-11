@@ -2282,6 +2282,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "twig-core",
  "twig-gh",
  "twig-jira",
  "twig-test-utils",
@@ -2289,6 +2290,25 @@ dependencies = [
  "wincredentials",
  "windows-acl",
  "wiremock",
+]
+
+[[package]]
+name = "twig-core"
+version = "0.1.23"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "directories",
+ "emojis",
+ "git2",
+ "once_cell",
+ "owo-colors",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.12",
+ "uuid",
 ]
 
 [[package]]
