@@ -279,18 +279,20 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
       Commands::Worktree(worktree) => worktree::handle_worktree_command(worktree),
       Commands::Commit(args) => commit::handle_commit_command(args),
     },
-    None => {
-      // No built-in command matched, try plugin discovery
-      if let Some(plugin_name) = cli.plugin_args.first() {
-        let plugin_args = cli.plugin_args[1..].to_vec();
-        plugin::execute_plugin(plugin_name, plugin_args, cli.verbose)
-      } else {
-        // No command provided at all, show help
-        use clap::CommandFactory;
-        let mut cmd = Cli::command();
-        cmd.print_help()?;
-        Ok(())
-      }
-    }
+    None => handle_plugin_fallback(cli),
+  }
+}
+
+fn handle_plugin_fallback(cli: Cli) -> Result<()> {
+  // No built-in command matched, try plugin discovery
+  if let Some(plugin_name) = cli.plugin_args.first() {
+    let plugin_args = cli.plugin_args[1..].to_vec();
+    plugin::execute_plugin(plugin_name, plugin_args, cli.verbose)
+  } else {
+    // No command provided at all, show help
+    use clap::CommandFactory;
+    let mut cmd = Cli::command();
+    cmd.print_help()?;
+    Ok(())
   }
 }
