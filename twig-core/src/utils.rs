@@ -176,8 +176,8 @@ mod tests {
     let temp_dir = TempDir::new().unwrap();
     let path = temp_dir.path();
 
-    let resolved = resolve_repository_path(path).unwrap();
-    assert_eq!(resolved, path);
+    let resolved = resolve_repository_path(&path).unwrap();
+    assert_eq!(resolved, std::fs::canonicalize(path).unwrap());
   }
 
   #[test]

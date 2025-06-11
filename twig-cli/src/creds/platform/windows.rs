@@ -57,7 +57,7 @@ impl WindowsCredentialProvider {
 
   // Helper to format credential target name
   fn format_target_name(service: &str) -> String {
-    format!("twig:{}", service)
+    format!("twig:{service}")
   }
 }
 
