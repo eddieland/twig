@@ -1,0 +1,50 @@
+# Ruff configuration
+line-length = 120
+exclude = [
+    "venv",
+    ".venv",
+    "build",
+    "dist",
+    "__pycache__"
+]
+
+# Linting rules
+[lint]
+# See https://docs.astral.sh/ruff/rules/
+select = [
+    "I",  # Import sorting
+    "E",  # pycodestyle errors (PEP 8)
+    "F",  # Pyflakes (unused imports, undefined names)
+    "W",  # pycodestyle warnings (PEP 8)
+    "D"   # pydocstyle (Google convention)
+]
+# Allow auto-fixing for all supported rules
+fixable = ["ALL"]
+
+[lint.pydocstyle]
+# Follow Google's docstring convention
+# See: https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings
+convention = "google"
+
+[format]
+quote-style = "double"             # Use double quotes for strings
+indent-style = "space"             # Use spaces for indentation
+line-ending = "lf"                 # Use Unix-style line endings
+skip-magic-trailing-comma = false  # Keep trailing commas in multi-line structures
+docstring-code-format = true       # Format code blocks in docstrings
+docstring-code-line-length = 88    # Max line length for code blocks in docstrings
+
+[lint.per-file-ignores]
+# Disable specific docstring rules for test files
+"tests/*" = [
+    # D100: Missing module docstring
+    "D100",
+    # D102: Missing method docstring
+    "D102",
+    # D103: Missing function docstring
+    "D103",
+    # D104: Missing package docstring
+    "D104",
+    # D107: Missing docstring in __init__
+    "D107"
+]

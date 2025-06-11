@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""
-Twig Backup Plugin
+
+"""Twig Backup Plugin.
 
 Example plugin demonstrating how to create a twig plugin in Python.
 """
@@ -8,25 +8,24 @@ Example plugin demonstrating how to create a twig plugin in Python.
 import os
 import sys
 import argparse
-import json
 from pathlib import Path
 
 
 def get_twig_config():
     """Get twig configuration from environment variables."""
     return {
-        'config_dir': Path(os.environ.get('TWIG_CONFIG_DIR', '')),
-        'data_dir': Path(os.environ.get('TWIG_DATA_DIR', '')),
-        'current_repo': os.environ.get('TWIG_CURRENT_REPO'),
-        'current_branch': os.environ.get('TWIG_CURRENT_BRANCH'),
-        'version': os.environ.get('TWIG_VERSION', 'unknown'),
+        "config_dir": Path(os.environ.get("TWIG_CONFIG_DIR", "")),
+        "data_dir": Path(os.environ.get("TWIG_DATA_DIR", "")),
+        "current_repo": os.environ.get("TWIG_CURRENT_REPO"),
+        "current_branch": os.environ.get("TWIG_CURRENT_BRANCH"),
+        "version": os.environ.get("TWIG_VERSION", "unknown"),
     }
 
 
 def get_plugin_config_dir():
     """Get plugin-specific config directory."""
     config = get_twig_config()
-    plugin_dir = config['config_dir'] / 'plugins' / 'backup'
+    plugin_dir = config["config_dir"] / "plugins" / "backup"
     plugin_dir.mkdir(parents=True, exist_ok=True)
     return plugin_dir
 
@@ -34,7 +33,7 @@ def get_plugin_config_dir():
 def get_plugin_data_dir():
     """Get plugin-specific data directory."""
     config = get_twig_config()
-    plugin_dir = config['data_dir'] / 'plugins' / 'backup'
+    plugin_dir = config["data_dir"] / "plugins" / "backup"
     plugin_dir.mkdir(parents=True, exist_ok=True)
     return plugin_dir
 
@@ -62,9 +61,10 @@ def backup_repository(repo_path, backup_dir, verbose=False):
 
     # Simulate backup process
     import time
+
     time.sleep(0.5)
 
-    print_success(f"Repository backed up successfully!")
+    print_success("Repository backed up successfully!")
 
 
 def list_backups(backup_dir, verbose=False):
@@ -92,34 +92,27 @@ def restore_backup(backup_name, restore_path, verbose=False):
 
     # Simulate restore process
     import time
+
     time.sleep(1.0)
 
-    print_success(f"Backup restored successfully!")
+    print_success("Backup restored successfully!")
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        prog='twig-backup',
-        description='Backup repositories using twig context'
-    )
-    parser.add_argument('-v', '--verbose', action='count', default=0,
-                       help='Increase verbosity')
-    parser.add_argument('--color', choices=['auto', 'always', 'never'],
-                       default='auto', help='Control colored output')
+    parser = argparse.ArgumentParser(prog="twig-backup", description="Backup repositories using twig context")
+    parser.add_argument("-v", "--verbose", action="count", default=0, help="Increase verbosity")
+    parser.add_argument("--color", choices=["auto", "always", "never"], default="auto", help="Control colored output")
 
-    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Backup command
-    backup_parser = subparsers.add_parser('create', help='Create a backup')
-    backup_parser.add_argument('--output', '-o', help='Backup output directory')
-
-    # List command
-    list_parser = subparsers.add_parser('list', help='List available backups')
+    backup_parser = subparsers.add_parser("create", help="Create a backup")
+    backup_parser.add_argument("--output", "-o", help="Backup output directory")
 
     # Restore command
-    restore_parser = subparsers.add_parser('restore', help='Restore a backup')
-    restore_parser.add_argument('backup_name', help='Name of backup to restore')
-    restore_parser.add_argument('--destination', '-d', help='Restore destination')
+    restore_parser = subparsers.add_parser("restore", help="Restore a backup")
+    restore_parser.add_argument("backup_name", help="Name of backup to restore")
+    restore_parser.add_argument("--destination", "-d", help="Restore destination")
 
     args = parser.parse_args()
 
@@ -133,31 +126,31 @@ def main():
         print_info(f"Plugin config dir: {plugin_config_dir}")
         print_info(f"Plugin data dir: {plugin_data_dir}")
 
-        if config['current_repo']:
+        if config["current_repo"]:
             print_info(f"Current repository: {config['current_repo']}")
-        if config['current_branch']:
+        if config["current_branch"]:
             print_info(f"Current branch: {config['current_branch']}")
 
     if not args.command:
         parser.print_help()
         return
 
-    if args.command == 'create':
-        if not config['current_repo']:
+    if args.command == "create":
+        if not config["current_repo"]:
             print_error("Not in a git repository. Please run this command from within a git repository.")
             sys.exit(1)
 
-        backup_dir = args.output or str(plugin_data_dir / 'backups')
-        backup_repository(config['current_repo'], backup_dir, args.verbose > 0)
+        backup_dir = args.output or str(plugin_data_dir / "backups")
+        backup_repository(config["current_repo"], backup_dir, args.verbose > 0)
 
-    elif args.command == 'list':
-        backup_dir = str(plugin_data_dir / 'backups')
+    elif args.command == "list":
+        backup_dir = str(plugin_data_dir / "backups")
         list_backups(backup_dir, args.verbose > 0)
 
-    elif args.command == 'restore':
+    elif args.command == "restore":
         restore_path = args.destination or os.getcwd()
         restore_backup(args.backup_name, restore_path, args.verbose > 0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
