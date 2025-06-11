@@ -72,6 +72,11 @@ jobs:
         run: cargo build --workspace
       - name: Run tests
         run: cargo nextest run --workspace
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: twig-${{ matrix.os }}
+          path: target/debug/twig
 
   # Windows tests are optional and won't block the pipeline if they fail
   test-windows:
@@ -95,45 +100,6 @@ jobs:
         run: cargo build --profile ci-windows --bin twig
       - name: Run tests
         run: cargo nextest run --workspace --cargo-profile ci-windows
-
-  # Build job depends on both fast-checks and test
-  build:
-    name: Build
-    needs: [fast-checks, test]
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: rust-ubuntu-${{ hashFiles('**/Cargo.lock') }}
-      - name: Build release
-        run: cargo build --release --bin twig
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: twig-ubuntu
-          path: target/release/twig
-
-  # Windows build is optional and won't block the pipeline if it fails
-  build-windows:
-    name: Build (Windows)
-    needs: [test-windows]
-    runs-on: windows-latest
-    # Make this job non-blocking
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: rust-windows-${{ hashFiles('**/Cargo.lock') }}
-      - name: Build release
-        run: cargo build --profile ci-windows --bin twig
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

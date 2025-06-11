@@ -52,7 +52,7 @@ jobs:
 
       - name: Generate unified CLI docs
         run: |
-          cargo build --release
+          cargo build
           mkdir -p docs
 
           cat > docs/CLI-REF.md << 'EOF'
