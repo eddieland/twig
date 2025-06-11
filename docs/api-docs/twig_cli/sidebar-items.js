@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["auto_dependency_discovery","cli","clients","completion","config","consts","creds","diagnostics","git","repo_state","state","tree_renderer","user_defined_dependency_resolver","utils"]};
+window.SIDEBAR_ITEMS = {"mod":["auto_dependency_discovery","cli","clients","completion","consts","creds","diagnostics","git","plugin","user_defined_dependency_resolver","utils"]};

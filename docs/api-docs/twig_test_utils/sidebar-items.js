@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["config","env","git","home"]};
+window.SIDEBAR_ITEMS = {"mod":["config","env","git","netrc"]};

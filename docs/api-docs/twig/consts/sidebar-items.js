@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_JIRA_HOST","ENV_JIRA_HOST"]};
+window.SIDEBAR_ITEMS = {"constant":["ENV_JIRA_HOST","GIT_EXECUTABLE"]};

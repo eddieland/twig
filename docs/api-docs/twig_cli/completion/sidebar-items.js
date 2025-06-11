@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["generate_completions","parse_shell"]};
+window.SIDEBAR_ITEMS = {"enum":["Shell"],"fn":["generate_completions"]};

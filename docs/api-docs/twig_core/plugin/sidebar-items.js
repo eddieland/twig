@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["plugin_config_dir","plugin_data_dir"]};
