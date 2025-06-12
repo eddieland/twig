@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Shell"],"fn":["generate_completions"]};

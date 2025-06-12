@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+
+# Cancel existing runs for the same pull request (but not main branch builds)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  actions: read  # For artifact uploads
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Fast checks that run in parallel
+  fast-checks:
+    name: Fast Checks
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [format, clippy]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-ubuntu-${{ hashFiles('**/Cargo.lock') }}
+
+      # Conditional steps based on the check type
+      - name: Check formatting
+        if: matrix.check == 'format'
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        if: matrix.check == 'clippy'
+        run: cargo clippy --workspace -- -D warnings
+
+  # Tests can run in parallel with the fast-checks
+  test:
+    name: Test
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Build
+        run: cargo build --workspace
+      - name: Run tests
+        run: cargo nextest run --workspace
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: twig-${{ matrix.os }}
+          path: target/debug/twig
+
+  # Windows tests are optional and won't block the pipeline if they fail
+  test-windows:
+    name: Test (Windows)
+    runs-on: windows-latest
+    # Make this job non-blocking
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-windows-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Build
+        run: cargo build --profile ci-windows --bin twig
+      - name: Run tests
+        run: cargo nextest run --workspace --cargo-profile ci-windows
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: twig-windows
+          path: target/ci-windows/twig.exe

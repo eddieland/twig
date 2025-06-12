@@ -1,0 +1,71 @@
+[package]
+name = "twig-cli"
+description = "A Git-based developer productivity tool that enhances workflows by integrating git repository management with Jira issue tracking and GitHub pull request workflows"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+name = "twig_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "twig"
+path = "src/main.rs"
+test = false
+
+[dependencies]
+# Core dependencies
+anyhow.workspace = true
+chrono.workspace = true
+directories.workspace = true
+git2.workspace = true
+regex.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+
+# CLI and UI dependencies
+clap.workspace = true
+clap_complete.workspace = true
+console.workspace = true
+dialoguer.workspace = true
+emojis.workspace = true
+indicatif.workspace = true
+owo-colors.workspace = true
+tabled.workspace = true
+
+# Tracing and logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+url.workspace = true
+
+# Local crate dependencies
+no-worries = { path = "../no-worries" }
+twig-core = { path = "../twig-core" }
+twig-gh = { path = "../twig-gh" }
+twig-jira = { path = "../twig-jira" }
+
+# Platform-specific dependencies
+[target.'cfg(windows)'.dependencies]
+wincredentials.workspace = true
+
+[dev-dependencies]
+# Core dependencies
+anyhow.workspace = true
+directories.workspace = true
+reqwest.workspace = true
+tempfile.workspace = true
+
+# Testing dependencies
+insta.workspace = true
+mockall.workspace = true
+test-case.workspace = true
+tokio = { workspace = true, features = ["full"] }
+twig-test-utils = { path = "../twig-test-utils" }
+wiremock.workspace = true

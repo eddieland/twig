@@ -1,0 +1,21 @@
+[package]
+name = "no-worries"
+description = "A custom panic handler for enhanced error reporting and graceful failure handling"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+name = "no_worries"
+path = "src/lib.rs"
+
+[dependencies]
+# Core dependencies
+backtrace = "0.3.75"
+chrono = { workspace = true }
+is-terminal = "0.4.12"
+
+# UI dependencies
+owo-colors = { workspace = true }

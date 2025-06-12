@@ -1,0 +1,31 @@
+[package]
+name = "twig-gh"
+description = "GitHub API client for twig"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[dependencies]
+# Core dependencies
+anyhow.workspace = true
+regex.workspace = true
+
+# Async and networking
+reqwest.workspace = true
+tokio.workspace = true
+
+# Tracing and logging
+tracing.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+# Core dependencies
+anyhow.workspace = true
+
+# Async and testing
+tokio = { workspace = true, features = ["full"] }
+wiremock.workspace = true

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Commands"],"fn":["handle_cli","handle_plugin_fallback"],"mod":["branch","cascade","commit","completion","config","creds","dashboard","git","github","jira","rebase","switch","sync","tree","worktree"],"struct":["Cli"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["create_github_client","create_github_client_from_netrc","create_github_runtime_and_client","create_jira_client","create_jira_client_from_netrc","create_jira_runtime_and_client","ensure_scheme","get_jira_host","normalize_url","parse_with_https_prefix"],"struct":["GitHubClient","JiraClient"]};

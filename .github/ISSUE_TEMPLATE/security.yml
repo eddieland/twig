@@ -1,0 +1,80 @@
+name: Security Issue
+description: Report a security vulnerability (use private reporting for sensitive issues)
+title: "[Security]: "
+labels: ["security", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ⚠️ **Important**: For sensitive security vulnerabilities, please use GitHub's private vulnerability reporting feature instead of creating a public issue.
+
+        This template is for security-related issues that are not sensitive vulnerabilities (e.g., security documentation improvements, security feature requests).
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue Type
+      description: What type of security issue is this?
+      options:
+        - "Security documentation improvement"
+        - "Security feature request"
+        - "Security configuration issue"
+        - "Security best practices question"
+        - "Other (non-sensitive security topic)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the security issue or improvement you're suggesting.
+      placeholder: "Please describe the security concern or improvement..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Security Impact
+      description: What is the potential security impact or benefit of addressing this issue?
+      placeholder: "This would improve security by..."
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: If you have ideas for how to address this issue, please describe them.
+      placeholder: "I suggest..."
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Any relevant security guidelines, standards, or documentation.
+      placeholder: "Links to security best practices, CVE references, etc."
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+
+        **For actual security vulnerabilities:**
+
+        Please use GitHub's private vulnerability reporting feature:
+        1. Go to the Security tab of this repository
+        2. Click "Report a vulnerability"
+        3. Fill out the private vulnerability report
+
+        This ensures sensitive security information is handled appropriately.
+
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Confirmation
+      description: Please confirm the following
+      options:
+        - label: This is NOT a sensitive security vulnerability that should be reported privately
+          required: true
+        - label: I agree to follow this project's Code of Conduct
+          required: true

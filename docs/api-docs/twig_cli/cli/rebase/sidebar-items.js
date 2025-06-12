@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ConflictResolution","RebaseResult"],"fn":["execute_git_command","handle_rebase_command","handle_rebase_conflict","rebase_branch","rebase_branch_force","rebase_upstream","show_dependency_tree"],"struct":["RebaseArgs"]};

@@ -1,0 +1,9 @@
+---
+source: twig-core/src/tree_renderer.rs
+expression: output_str
+---
+main
+└── feature-a
+
+develop
+└── feature-b (current)

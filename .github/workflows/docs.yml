@@ -1,0 +1,193 @@
+name: Generate Documentation
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write  # For committing generated docs
+  actions: read    # For artifact uploads
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  generate-docs:
+    name: Generate Documentation
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Generate API docs
+        run: cargo doc --workspace --no-deps --document-private-items
+
+      - name: Copy API docs to docs directory
+        run: |
+          # Create api-docs directory if it doesn't exist
+          mkdir -p docs/api-docs
+
+          # Copy the generated docs to the docs/api-docs directory
+          cp -r target/doc/* docs/api-docs/
+
+          # Create an index.html file that redirects to the main crate documentation
+          cat > docs/api-docs/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta http-equiv="refresh" content="0; url=twig/index.html">
+            <title>Twig API Documentation</title>
+          </head>
+          <body>
+            <p>Redirecting to <a href="twig/index.html">Twig API Documentation</a>...</p>
+          </body>
+          </html>
+          EOF
+
+      - name: Generate unified CLI docs
+        run: |
+          cargo build
+          mkdir -p docs
+
+          cat > docs/CLI-REF.md << 'EOF'
+          # Twig CLI Reference
+
+          ```
+          EOF
+
+          ./target/release/twig --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+
+          # Add each subcommand as a section
+          echo "" >> docs/CLI-REF.md
+          echo "## branch" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig branch --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+
+          echo "" >> docs/CLI-REF.md
+          echo "## cascade" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig cascade --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+
+          echo "" >> docs/CLI-REF.md
+          echo "## completion" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig completion --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+
+          echo "" >> docs/CLI-REF.md
+          echo "## creds" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig creds --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+
+          echo "" >> docs/CLI-REF.md
+          echo "## dashboard" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig dashboard --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+
+          echo "" >> docs/CLI-REF.md
+          echo "## git" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig git --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+
+          echo "" >> docs/CLI-REF.md
+          echo "## github" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig github --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+
+          echo "" >> docs/CLI-REF.md
+          echo "## jira" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig jira --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+
+          echo "" >> docs/CLI-REF.md
+          echo "## rebase" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig rebase --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+
+          echo "" >> docs/CLI-REF.md
+          echo "## switch" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig switch --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+
+          echo "" >> docs/CLI-REF.md
+          echo "## sync" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig sync --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+
+          echo "" >> docs/CLI-REF.md
+          echo "## tree" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig tree --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+
+          echo "" >> docs/CLI-REF.md
+          echo "## worktree" >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+          ./target/release/twig worktree --help >> docs/CLI-REF.md
+          echo '```' >> docs/CLI-REF.md
+
+      - name: Create docs README
+        run: |
+          cat > docs/README.md << 'EOF'
+          # Twig Documentation
+
+          This directory contains documentation for the Twig project.
+
+          ## Available Documentation
+
+          - [CLI Reference](CLI-REF.md) - Documentation for the command-line interface
+          - [API Documentation](api-docs/index.html) - Rust API documentation generated from code comments
+
+          ## Development
+
+          The documentation in this directory is automatically generated by GitHub Actions when:
+          - A new release is published
+          - The documentation workflow is manually triggered
+
+          Please do not edit these files directly as your changes will be overwritten.
+          EOF
+
+      - name: Check for changes
+        id: verify-changed-files
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit documentation
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add docs/
+          git commit -m "docs: auto-update documentation [skip ci]"
+          git push
+
+      - name: Upload documentation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: twig-docs
+          path: docs/

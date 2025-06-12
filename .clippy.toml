@@ -1,0 +1,14 @@
+# Clippy configuration
+# See all lints at: https://rust-lang.github.io/rust-clippy/master/
+
+# Configure msrv (Minimum Supported Rust Version)
+msrv = "1.87.0"
+
+disallowed-methods = []
+cognitive-complexity-threshold = 25
+too-many-arguments-threshold = 7
+too-many-lines-threshold = 100
+enum-variant-size-threshold = 200
+type-complexity-threshold = 250
+doc-valid-idents = ["GitHub", "twig"]
+allowed-duplicate-crates = []

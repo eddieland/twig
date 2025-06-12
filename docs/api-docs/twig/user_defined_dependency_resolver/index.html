@@ -1,0 +1,36 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="User-Defined Dependency Resolver"><title>twig::user_defined_dependency_resolver - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-84e720fa.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="twig" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0-nightly (1677d46cb 2025-06-10)" data-channel="nightly" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../../static.files/storage-4e99c027.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-fd3af306.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../twig/index.html">twig</a><span class="version">0.1.23</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module user_<wbr>defined_<wbr>dependency_<wbr>resolver</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#user-defined-dependency-resolver" title="User-Defined Dependency Resolver">User-Defined Dependency Resolver</a></li><li><a href="#usage" title="Usage">Usage</a></li><li><a href="#example" title="Example">Example</a></li><li><a href="#notes" title="Notes">Notes</a></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate twig</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">twig</a></div><h1>Module <span>user_defined_dependency_resolver</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/twig/user_defined_dependency_resolver.rs.html#1-348">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="user-defined-dependency-resolver"><a class="doc-anchor" href="#user-defined-dependency-resolver">§</a>User-Defined Dependency Resolver</h2>
+<p>Resolves explicitly configured branch dependencies to build branch trees
+based on user-defined relationships rather than Git history analysis.</p>
+<p>This module provides the <code>UserDefinedDependencyResolver</code> struct, which
+contains methods to resolve user dependencies, build branch trees, and
+validate dependency integrity. The resolver uses information from the
+repository state and user-defined configurations to establish parent-child
+relationships between branches, allowing for a custom view of the branch
+hierarchy that reflects the user’s intentions and configurations.</p>
+<h2 id="usage"><a class="doc-anchor" href="#usage">§</a>Usage</h2>
+<p>To use the <code>UserDefinedDependencyResolver</code>, create an instance and call
+its methods with the appropriate parameters. For example, to resolve user
+dependencies and build branch nodes, use the <code>resolve_user_dependencies</code>
+method. To build a tree structure from user-defined dependencies and roots,
+use the <code>build_tree_from_user_dependencies</code> method.</p>
+<h2 id="example"><a class="doc-anchor" href="#example">§</a>Example</h2>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">let </span>resolver = UserDefinedDependencyResolver;
+<span class="kw">let </span>repo_state = ...; <span class="comment">// Obtain repo state
+</span><span class="kw">let </span>repo = ...; <span class="comment">// Obtain Git2 repository instance
+
+// Resolve user dependencies and build branch nodes
+</span><span class="kw">let </span>branch_nodes = resolver.resolve_user_dependencies(<span class="kw-2">&amp;</span>repo, <span class="kw-2">&amp;</span>repo_state)<span class="question-mark">?</span>;
+
+<span class="comment">// Build tree structure from user-defined dependencies and roots
+</span><span class="kw">let </span>(roots, orphaned) = resolver.build_tree_from_user_dependencies(<span class="kw-2">&amp;</span>branch_nodes, <span class="kw-2">&amp;</span>repo_state);</code></pre></div>
+<h2 id="notes"><a class="doc-anchor" href="#notes">§</a>Notes</h2>
+<ul>
+<li>The resolver does not modify the actual Git repository or its branches; it
+only provides a way to visualize and work with user-defined branch
+dependencies.</li>
+<li>Dependency cycles are not allowed and will be reported as errors if
+detected.</li>
+<li>The resolver can suggest a default root branch based on user-defined
+settings or common branch naming conventions.</li>
+</ul>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.UserDefinedDependencyResolver.html" title="struct twig::user_defined_dependency_resolver::UserDefinedDependencyResolver">User<wbr>Defined<wbr>Dependency<wbr>Resolver</a></dt><dd>Pure user-defined dependency resolver for tree command</dd></dl></section></div></main></body></html>
