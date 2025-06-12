@@ -165,6 +165,22 @@ pub fn get_current_branch_github_pr() -> Result<Option<u32>> {
   )
 }
 
+/// Open a URL in the default browser
+pub fn open_url_in_browser(url: &str) -> Result<()> {
+  use crate::output::{print_success, print_warning};
+
+  match open::that(url) {
+    Ok(()) => {
+      print_success(&format!("Opening {url} in browser..."));
+      Ok(())
+    }
+    Err(e) => {
+      print_warning(&format!("Failed to open browser to {url}: {e}"));
+      Ok(())
+    }
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use tempfile::TempDir;

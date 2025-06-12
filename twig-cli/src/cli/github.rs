@@ -29,6 +29,18 @@ pub struct GitHubArgs {
   pub subcommand: GitHubSubcommands,
 }
 
+/// Open GitHub PR in browser
+#[derive(Args)]
+pub struct OpenCommand {
+  /// PR number (defaults to current branch's PR)
+  #[arg(index = 1)]
+  pub pr_number: Option<String>,
+
+  /// Path to a specific repository (defaults to current repository)
+  #[arg(long, short = 'r', value_name = "PATH")]
+  pub repo: Option<String>,
+}
+
 /// Subcommands for the GitHub command
 #[derive(Subcommand)]
 pub enum GitHubSubcommands {
@@ -45,6 +57,12 @@ pub enum GitHubSubcommands {
                       including check name, status, conclusion, and links to detailed results.")]
   #[command(alias = "ci")]
   Checks(ChecksCommand),
+
+  /// Open GitHub PR in browser
+  #[command(long_about = "Open a GitHub pull request in the default browser.\n\n\
+                         If no PR number is provided, opens the PR associated with the current branch.\n\
+                         The command will construct the GitHub URL and open it using the system's default browser.")]
+  Open(OpenCommand),
 
   /// Pull request operations
   #[command(long_about = "Manage GitHub pull requests.\n\n\
@@ -133,6 +151,7 @@ pub struct LinkCommand {
 pub(crate) fn handle_github_command(github: GitHubArgs) -> Result<()> {
   match github.subcommand {
     GitHubSubcommands::Check => handle_check_command(),
+    GitHubSubcommands::Open(open) => handle_github_open_command(&open),
     GitHubSubcommands::Checks(checks) => handle_checks_command(&checks),
     GitHubSubcommands::Pr(pr) => match pr.subcommand {
       PrSubcommands::Link(link) => {
@@ -161,6 +180,104 @@ pub(crate) fn handle_github_command(github: GitHubArgs) -> Result<()> {
       PrSubcommands::Status => handle_pr_status_command(),
     },
   }
+}
+
+/// Handle the GitHub open command
+fn handle_github_open_command(cmd: &OpenCommand) -> Result<()> {
+  use twig_core::open_url_in_browser;
+
+  // Get repository path (current or specified)
+  let repo_path = if let Some(path) = &cmd.repo {
+    detect_repository_from_path(path)
+  } else {
+    detect_repository()
+  };
+
+  // Check if we found a repository
+  let repo_path = match repo_path {
+    Some(path) => path,
+    None => {
+      print_error(
+        "No git repository found. Make sure you're in a git repository or specify a valid repository path with --repo",
+      );
+      return Ok(());
+    }
+  };
+
+  // Open the git repository
+  let repo = match Git2Repository::open(&repo_path) {
+    Ok(repo) => repo,
+    Err(e) => {
+      print_error(&format!("Failed to open git repository: {e}"));
+      return Ok(());
+    }
+  };
+
+  // Get the remote URL to extract owner and repo
+  let remote = match repo.find_remote("origin") {
+    Ok(remote) => remote,
+    Err(e) => {
+      print_error(&format!("Failed to find remote 'origin': {e}"));
+      return Ok(());
+    }
+  };
+
+  let remote_url = match remote.url() {
+    Some(url) => url,
+    None => {
+      print_error("Failed to get remote URL");
+      return Ok(());
+    }
+  };
+
+  // Create GitHub client to extract repo info
+  let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
+  let (_, github_client) = clients::create_github_runtime_and_client(base_dirs.home_dir())?;
+
+  // Extract owner and repo from remote URL
+  let (owner, repo_name) = match github_client.extract_repo_info_from_url(remote_url) {
+    Ok((owner, repo)) => (owner, repo),
+    Err(e) => {
+      print_error(&format!("Failed to extract repository info from URL: {e}"));
+      return Ok(());
+    }
+  };
+
+  // Determine PR number
+  let pr_number = if let Some(pr_num_str) = &cmd.pr_number {
+    // PR number provided as argument
+    match pr_num_str.parse::<u32>() {
+      Ok(num) => num,
+      Err(_) => {
+        print_error(&format!("Invalid PR number: {pr_num_str}"));
+        print_info("PR number must be a positive integer");
+        return Ok(());
+      }
+    }
+  } else {
+    // Try to get PR number from current branch
+    match get_current_branch_github_pr() {
+      Ok(Some(pr_number)) => pr_number,
+      Ok(None) => {
+        print_error("Current branch has no associated GitHub PR");
+        print_info(&format!(
+          "Link a PR with {}",
+          format_command("twig github pr link <pr-url>")
+        ));
+        return Ok(());
+      }
+      Err(e) => {
+        print_error(&format!("Failed to get associated PR: {e}"));
+        return Ok(());
+      }
+    }
+  };
+
+  // Construct GitHub PR URL
+  let url = format!("https://github.com/{owner}/{repo_name}/pull/{pr_number}");
+
+  // Open URL in browser
+  open_url_in_browser(&url)
 }
 
 /// Handle the check command

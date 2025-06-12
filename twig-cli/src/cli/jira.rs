@@ -25,6 +25,16 @@ pub struct JiraArgs {
 /// Subcommands for the Jira command
 #[derive(Subcommand)]
 pub enum JiraSubcommands {
+  /// Open Jira issue in browser
+  #[command(long_about = "Open a Jira issue in the default browser.\n\n\
+                         If no issue key is provided, opens the issue associated with the current branch.\n\
+                         The command will construct the Jira URL using the configured host and open it using the system's default browser.")]
+  Open {
+    /// The Jira issue key (e.g., PROJ-123)
+    #[arg(index = 1)]
+    issue_key: Option<String>,
+  },
+
   /// Create a branch from a Jira issue
   #[command(long_about = "Create a Git branch from a Jira issue.\n\n\
                       This command creates a branch with a name derived from the Jira issue key\n\
@@ -95,6 +105,7 @@ pub enum JiraSubcommands {
 /// actions based on the subcommand provided.
 pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
   match jira.subcommand {
+    JiraSubcommands::Open { issue_key } => handle_jira_open_command(issue_key.as_deref()),
     JiraSubcommands::CreateBranch {
       issue_key,
       with_worktree,
@@ -513,4 +524,44 @@ fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Res
 
     Ok(())
   })
+}
+
+/// Handle the Jira open command
+fn handle_jira_open_command(issue_key: Option<&str>) -> Result<()> {
+  use twig_core::open_url_in_browser;
+
+  // Determine issue key (from arg or current branch)
+  let issue_key = if let Some(key) = issue_key {
+    key.to_string()
+  } else {
+    // Try to get the Jira issue from the current branch
+    match get_current_branch_jira_issue() {
+      Ok(Some(key)) => key,
+      Ok(None) => {
+        print_error("Current branch has no associated Jira issue");
+        print_info("Link an issue with: twig jira link-branch <issue-key>");
+        return Ok(());
+      }
+      Err(e) => {
+        print_error(&format!("Failed to get associated Jira issue: {e}"));
+        return Ok(());
+      }
+    }
+  };
+
+  // Get Jira host from configuration
+  let jira_host = match get_jira_host() {
+    Ok(host) => host,
+    Err(e) => {
+      print_error(&format!("Jira host not configured: {e}"));
+      print_info("Set up Jira credentials with: twig creds jira");
+      return Ok(());
+    }
+  };
+
+  // Construct Jira issue URL
+  let url = format!("{jira_host}/browse/{issue_key}");
+
+  // Open URL in browser
+  open_url_in_browser(&url)
 }

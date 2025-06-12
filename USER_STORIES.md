@@ -29,11 +29,13 @@ The user stories are categorized into:
 
 3. I want to quickly open the web browser to view Jira issues or GitHub PRs (`story go`/`pr go`) so that I can easily access their details.
 
-   **Implementation Status**: ⚠️ Not yet implemented
+   **Implementation Status**: ✅ Fully implemented
 
    - In argit, `argit pr go` and `argit story go` opened the web browser to view the PR/story
-   - Twig currently has no direct equivalent for opening the web browser to view the PR/story
-   - Branch switching is handled separately by the `switch` command (see item #1)
+   - Twig provides equivalent functionality with:
+     - `twig jira open` - Opens Jira issue in browser (defaults to current branch's issue)
+     - `twig github open` - Opens GitHub PR in browser (defaults to current branch's PR)
+   - Examples: `twig jira open PROJ-123` or `twig github open 42`
 
 ### Branch Rebasing and Dependency Management
 
@@ -143,7 +145,7 @@ When implementing these features in twig, consider:
    - `cascade` - ✅ Implemented
    - `tidy` - ⚠️ Partially implemented via `git stale-branches`
    - `track` - ✅ Implemented via `branch depend`
-   - `story go`/`pr go` - ⚠️ Not yet implemented
+   - `story go`/`pr go` - ✅ Implemented via `jira open` and `github open`
 
 ## Additional Features in Twig
 
@@ -171,3 +173,14 @@ Twig offers several features that weren't in the original argit:
 5. **Upward Rebasing**: Rebase current branch on its ancestors
 
    - `twig rebase`
+
+6. **Plugin Architecture**: Extensible kubectl/Docker-inspired plugin system for custom functionality
+
+   - Plugins are executable files named `twig-<plugin-name>` discovered via `$PATH`
+   - Built-in commands take precedence over plugins
+   - Plugins receive context through environment variables (`TWIG_CONFIG_DIR`, `TWIG_CURRENT_REPO`, etc.)
+   - Can be implemented in any language (Rust, Python, Shell, etc.)
+     - Rust plugins can directly use the `twig-core` library for deep integration
+     - Other languages can potentially use FFI (Rust has robust FFI support, e.g., Python bindings)
+   - Examples: `twig deploy`, `twig backup`, `twig lint`
+   - See [`docs/PLUGINS.md`](docs/PLUGINS.md) for development guide

@@ -20,6 +20,7 @@ console.workspace = true
 directories.workspace = true
 git2.workspace = true
 once_cell.workspace = true
+open.workspace = true
 regex.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
