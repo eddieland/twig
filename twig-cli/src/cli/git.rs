@@ -122,6 +122,10 @@ pub struct StaleBranchesCommand {
   /// Path to a specific repository
   #[arg(long, short = 'r', value_name = "PATH")]
   pub repo: Option<String>,
+
+  /// Interactive prune mode - prompt to delete each stale branch
+  #[arg(long)]
+  pub prune: bool,
 }
 
 /// Handle the git command
@@ -159,11 +163,11 @@ pub(crate) fn handle_git_command(git: GitArgs) -> Result<()> {
         .map_err(|e| anyhow!("Days must be a positive number: {}", e))?;
 
       if cmd.all {
-        crate::git::find_stale_branches_all(days)
+        crate::git::find_stale_branches_all(days, cmd.prune)
       } else {
         let repo_arg = cmd.repo.as_deref();
         let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
-        crate::git::find_stale_branches(repo_path, days)
+        crate::git::find_stale_branches(repo_path, days, cmd.prune)
       }
     }
   }
