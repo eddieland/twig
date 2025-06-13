@@ -196,6 +196,52 @@ pub fn checkout_branch(repo: &Repository, branch_name: &str) -> Result<()> {
   Ok(())
 }
 
+/// Helper function to create a commit with a specific timestamp
+pub fn create_commit_with_time(
+  repo: &Repository,
+  file_name: &str,
+  content: &str,
+  message: &str,
+  timestamp: i64,
+) -> Result<()> {
+  // Create a file
+  let repo_path = repo.path().parent().unwrap();
+  let file_path = repo_path.join(file_name);
+  fs::write(&file_path, content)?;
+
+  // Stage the file
+  let mut index = repo.index()?;
+  index.add_path(Path::new(file_name))?;
+  index.write()?;
+
+  // Create a commit with custom timestamp
+  let tree_id = index.write_tree()?;
+  let tree = repo.find_tree(tree_id)?;
+
+  // Create signature with custom timestamp
+  let signature = Signature::new("Test User", "test@example.com", &git2::Time::new(timestamp, 0))?;
+
+  // Handle parent commits
+  if let Ok(head) = repo.head() {
+    if let Ok(parent) = head.peel_to_commit() {
+      repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[&parent])?;
+    } else {
+      repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[])?;
+    }
+  } else {
+    repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[])?;
+  }
+
+  Ok(())
+}
+
+/// Helper to create timestamps for testing
+pub fn days_ago(days: u32) -> i64 {
+  use std::time::{SystemTime, UNIX_EPOCH};
+  let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+  now - (days as i64 * 24 * 60 * 60)
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

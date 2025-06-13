@@ -37,7 +37,6 @@ fn test_git_stale_branches_help() {
     "Stale-branches command not found in help output"
   );
   assert!(stdout.contains("--days"), "Days flag not found in stale-branches help");
-  assert!(stdout.contains("--all"), "All flag not found in stale-branches help");
   assert!(stdout.contains("--repo"), "Repo flag not found in stale-branches help");
 }
 

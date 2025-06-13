@@ -58,8 +58,7 @@ pub enum GitSubcommands {
   /// List stale branches in repositories
   #[command(long_about = "Identifies and lists branches that haven't been updated recently.\n\n\
                      This helps you identify abandoned or forgotten branches that might need\n\
-                     attention, cleanup, or merging. The command analyzes local branch information\n\
-                     and doesn't require remote credentials unless combined with a fetch operation.")]
+                     attention, cleanup, or merging.\n\nThis command analyzes local branch information.")]
   #[command(alias = "stale")]
   StaleBranches(StaleBranchesCommand),
 }
@@ -67,16 +66,16 @@ pub enum GitSubcommands {
 /// Add a repository to the registry
 #[derive(Args)]
 pub struct AddCommand {
-  /// Path to the repository
-  #[arg(default_value = ".")]
+  /// Path to the repository (defaults to current directory)
+  #[arg(default_value = ".", value_name = "PATH")]
   pub path: String,
 }
 
 /// Remove a repository from the registry
 #[derive(Args)]
 pub struct RemoveCommand {
-  /// Path to the repository
-  #[arg(default_value = ".")]
+  /// Path to the repository (defaults to current directory)
+  #[arg(default_value = ".", value_name = "PATH")]
   pub path: String,
 }
 
@@ -87,7 +86,7 @@ pub struct FetchCommand {
   #[arg(long, short = 'a')]
   pub all: bool,
 
-  /// Path to a specific repository
+  /// Path to a specific repository (defaults to current repository)
   #[arg(long, short = 'r', value_name = "PATH")]
   pub repo: Option<String>,
 }
@@ -99,12 +98,12 @@ pub struct ExecCommand {
   #[arg(long, short = 'a')]
   pub all: bool,
 
-  /// Path to a specific repository
+  /// Path to a specific repository (defaults to current repository)
   #[arg(long, short = 'r', value_name = "PATH")]
   pub repo: Option<String>,
 
   /// Command to execute
-  #[arg(required = true, index = 1)]
+  #[arg(required = true, index = 1, value_name = "CMD")]
   pub command: String,
 }
 
@@ -115,13 +114,13 @@ pub struct StaleBranchesCommand {
   #[arg(long, short = 'd', value_name = "DAYS", default_value = "30")]
   pub days: String,
 
-  /// Check all repositories in the registry
-  #[arg(long, short = 'a')]
-  pub all: bool,
-
-  /// Path to a specific repository
+  /// Path to a specific repository (defaults to current repository)
   #[arg(long, short = 'r', value_name = "PATH")]
   pub repo: Option<String>,
+
+  /// Interactive prune mode - prompt to delete each stale branch
+  #[arg(long, short = 'p')]
+  pub prune: bool,
 }
 
 /// Handle the git command
@@ -158,13 +157,9 @@ pub(crate) fn handle_git_command(git: GitArgs) -> Result<()> {
         .parse::<u32>()
         .map_err(|e| anyhow!("Days must be a positive number: {}", e))?;
 
-      if cmd.all {
-        crate::git::find_stale_branches_all(days)
-      } else {
-        let repo_arg = cmd.repo.as_deref();
-        let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
-        crate::git::find_stale_branches(repo_path, days)
-      }
+      let repo_arg = cmd.repo.as_deref();
+      let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
+      crate::git::find_stale_branches(repo_path, days, cmd.prune)
     }
   }
 }
