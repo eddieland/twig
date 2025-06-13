@@ -3,11 +3,11 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
-  contents: write  # For creating releases
-  actions: read    # For artifact downloads
+  contents: write # For creating releases
+  actions: read # For artifact downloads
 
 jobs:
   validate-version:
@@ -113,17 +113,9 @@ jobs:
       - name: Create release directory
         shell: bash
         run: mkdir -p release
-
       - name: Copy binary
         shell: cmd
         run: copy target\release-windows\twig.exe release\
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: twig-windows
-          path: release/twig.exe
-
       - name: Create zip for release
         shell: bash
         run: |
@@ -137,10 +129,10 @@ jobs:
           fi
           cat twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
 
-      - name: Upload zip for release
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: twig-windows-zip
+          name: twig-windows
           path: |
             twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip
             twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
@@ -155,7 +147,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history to get previous tags
+          fetch-depth: 0 # Fetch all history to get previous tags
 
       - name: Get version and previous tag
         id: version_info
@@ -181,7 +173,7 @@ jobs:
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          name: twig-windows-zip
+          name: twig-windows
           path: ./
 
       - name: Install envsubst
