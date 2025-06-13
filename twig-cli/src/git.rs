@@ -346,12 +346,6 @@ pub fn find_stale_branches<P: AsRef<Path>>(path: P, days: u32, prune: bool) -> R
   let path = path.as_ref();
   let repo = Git2Repository::open(path).context(format!("Failed to open git repository at {}", path.display()))?;
 
-  println!(
-    "Finding branches not updated in the last {} days in {}",
-    days,
-    format_repo_path(&path.display().to_string())
-  );
-
   // Load repository state for user-defined dependencies
   let repo_state = RepoState::load(path)?;
 
@@ -463,12 +457,6 @@ fn interactive_prune_branches<P: AsRef<Path>>(
     total_stale: stale_branches.len(),
     ..Default::default()
   };
-
-  println!(
-    "\nFound {} stale branches in {}. Starting interactive pruning...\n",
-    stale_branches.len(),
-    format_repo_path(&repo_path.as_ref().display().to_string())
-  );
 
   for branch_info in stale_branches {
     // Enhance branch info with novel commits and external data
@@ -720,11 +708,6 @@ mod tests {
   use super::*;
 
   #[test]
-  fn test_simple() {
-    assert_eq!(2 + 2, 4);
-  }
-
-  #[test]
   fn test_find_stale_branches_with_date_filtering() {
     let git_repo = GitRepoTestGuard::new_and_change_dir();
     let repo = &git_repo.repo;
@@ -850,35 +833,6 @@ mod tests {
 
     // Verify branch is deleted
     assert!(repo.find_branch("test-branch", git2::BranchType::Local).is_err());
-  }
-
-  #[test]
-  fn test_alphabetical_sorting() {
-    let mut branches = vec![
-      StaleBranchInfo {
-        name: "zebra".to_string(),
-        last_commit_date: "2024-01-01".to_string(),
-        last_commit_hash: "abc123".to_string(),
-        parent_branch: None,
-        novel_commits: vec![],
-        jira_issue: None,
-        github_pr: None,
-      },
-      StaleBranchInfo {
-        name: "alpha".to_string(),
-        last_commit_date: "2024-01-01".to_string(),
-        last_commit_hash: "def456".to_string(),
-        parent_branch: None,
-        novel_commits: vec![],
-        jira_issue: None,
-        github_pr: None,
-      },
-    ];
-
-    branches.sort_by(|a, b| a.name.cmp(&b.name));
-
-    assert_eq!(branches[0].name, "alpha");
-    assert_eq!(branches[1].name, "zebra");
   }
 
   #[test]
