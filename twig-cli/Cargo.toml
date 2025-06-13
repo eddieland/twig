@@ -56,16 +56,8 @@ twig-jira = { path = "../twig-jira" }
 wincredentials.workspace = true
 
 [dev-dependencies]
-# Core dependencies
-anyhow.workspace = true
-directories.workspace = true
-reqwest.workspace = true
-tempfile.workspace = true
-
 # Testing dependencies
 insta.workspace = true
-mockall.workspace = true
-test-case.workspace = true
-tokio = { workspace = true, features = ["full"] }
 twig-test-utils = { path = "../twig-test-utils" }
 wiremock.workspace = true
+tempfile.workspace = true

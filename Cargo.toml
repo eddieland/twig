@@ -47,7 +47,7 @@ tempfile = { workspace = true }
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 directories = "6.0"
-git2 = { version = "0.20", features = ["vendored-openssl"] }
+git2 = { version = "0.20", features = ["https"] }
 open = "5.3"
 regex = "1.10"
 
@@ -66,7 +66,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # Async and networking
-reqwest = { version = "0.12", features = ["json", "native-tls"] }
+reqwest = { version = "0.12", features = ["json", "native-tls"], default-features = false }
 tokio = { version = "1.35", features = ["rt", "rt-multi-thread", "time", "macros"] }
 
 # Serialization
@@ -80,10 +80,12 @@ wincredentials = "0.2"
 
 # Testing dependencies
 insta = "1.43"
-mockall = "0.13"
 tempfile = "3.8"
-test-case = "3.3"
 wiremock = "0.6.3"
+
+[target.'cfg(windows)'.dependencies]
+# Platform-specific git2 features for Windows
+git2 = { version = "0.20", features = ["vendored-openssl"] }
 
 [profile.release]
 opt-level = 2
