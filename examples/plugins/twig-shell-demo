@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 set -euo pipefail
 
 # Plugin metadata
@@ -10,12 +11,15 @@ VERBOSE=0
 COLOR="auto"
 
 show_help() {
-    cat << EOF
+    cat <<EOF
 $PLUGIN_NAME $PLUGIN_VERSION
-Sync repositories using twig context
+A dummy example plugin implemented as a bash script.
+
+This demonstrates the high-level execution pattern and provides a simple entrypoint for checking environment variables
+and other plugin execution details.
 
 USAGE:
-    twig sync [OPTIONS] <COMMAND>
+    twig shell-demo [OPTIONS] <COMMAND>
 
 OPTIONS:
     -h, --help       Print help information
@@ -31,19 +35,19 @@ EOF
 }
 
 show_version() {
-    echo "$PLUGIN_NAME $PLUGIN_VERSION"
+    printf "%s %s\n" "$PLUGIN_NAME" "$PLUGIN_VERSION"
 }
 
 print_success() {
-    echo "✓ $1"
+    printf "✓ %s\n" "$1"
 }
 
 print_error() {
-    echo "✗ $1" >&2
+    printf "✗ %s\n" "$1" >&2
 }
 
 print_info() {
-    echo "ℹ $1"
+    printf "ℹ %s\n" "$1"
 }
 
 print_verbose() {
@@ -51,21 +55,6 @@ print_verbose() {
         print_info "$1"
     fi
 }
-
-# Access twig configuration
-TWIG_CONFIG_DIR="${TWIG_CONFIG_DIR:-}"
-TWIG_DATA_DIR="${TWIG_DATA_DIR:-}"
-TWIG_CURRENT_REPO="${TWIG_CURRENT_REPO:-}"
-TWIG_CURRENT_BRANCH="${TWIG_CURRENT_BRANCH:-}"
-TWIG_VERSION="${TWIG_VERSION:-unknown}"
-
-# Plugin directories
-PLUGIN_CONFIG_DIR="$TWIG_CONFIG_DIR/plugins/sync"
-PLUGIN_DATA_DIR="$TWIG_DATA_DIR/plugins/sync"
-
-# Create plugin directories
-mkdir -p "$PLUGIN_CONFIG_DIR"
-mkdir -p "$PLUGIN_DATA_DIR"
 
 sync_repository() {
     local repo_path="$1"
@@ -79,7 +68,7 @@ sync_repository() {
     cd "$repo_path"
 
     # Check if it's a git repository
-    if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
         print_error "Not a git repository: $repo_path"
         return 1
     fi
@@ -147,39 +136,39 @@ show_sync_status() {
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -h|--help)
-            show_help
-            exit 0
-            ;;
-        -V|--version)
-            show_version
-            exit 0
-            ;;
-        -v|--verbose)
-            VERBOSE=$((VERBOSE + 1))
-            shift
-            ;;
-        --color)
-            COLOR="$2"
-            shift 2
-            ;;
-        all)
-            COMMAND="all"
-            shift
-            ;;
-        current)
-            COMMAND="current"
-            shift
-            ;;
-        status)
-            COMMAND="status"
-            shift
-            ;;
-        *)
-            print_error "Unknown option: $1"
-            show_help
-            exit 1
-            ;;
+    -h | --help)
+        show_help
+        exit 0
+        ;;
+    -V | --version)
+        show_version
+        exit 0
+        ;;
+    -v | --verbose)
+        VERBOSE=$((VERBOSE + 1))
+        shift
+        ;;
+    --color)
+        COLOR="$2"
+        shift 2
+        ;;
+    all)
+        COMMAND="all"
+        shift
+        ;;
+    current)
+        COMMAND="current"
+        shift
+        ;;
+    status)
+        COMMAND="status"
+        shift
+        ;;
+    *)
+        print_error "Unknown option: $1"
+        show_help
+        exit 1
+        ;;
     esac
 done
 
@@ -188,22 +177,27 @@ if [ "$VERBOSE" -gt 0 ]; then
     print_info "Twig version: $TWIG_VERSION"
     print_info "Plugin config dir: $PLUGIN_CONFIG_DIR"
     print_info "Plugin data dir: $PLUGIN_DATA_DIR"
+
+    printf "\nEnv:\n"
+    env | grep "TWIG_"
 fi
 
 # Execute command
 case "${COMMAND:-}" in
-    all)
-        sync_all_repositories
-        ;;
-    current)
-        sync_current_repository
-        ;;
-    status)
-        show_sync_status
-        ;;
-    *)
-        print_error "No command specified"
-        show_help
-        exit 1
-        ;;
+all)
+    sync_all_repositories
+    ;;
+current)
+    sync_current_repository
+    ;;
+status)
+    show_sync_status
+    ;;
+*)
+    printf "\n"
+    print_error "No command specified"
+    printf "\n"
+    show_help
+    exit 1
+    ;;
 esac
