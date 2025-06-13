@@ -288,24 +288,6 @@ fn check_tracked_repositories() -> Result<()> {
 fn check_dependencies() -> Result<()> {
   println!("Dependencies:");
 
-  // Check curl (for API calls if reqwest fails)
-  match Command::new("curl").arg("--version").output() {
-    Ok(output) => {
-      if output.status.success() {
-        let version_line = String::from_utf8_lossy(&output.stdout)
-          .lines()
-          .next()
-          .unwrap_or("curl")
-          .to_string();
-        println!("  curl: {version_line}");
-      } else {
-        println!("  curl: Command failed");
-      }
-    }
-    Err(_) => println!("  curl: Not found"),
-  }
-
-  // Check ssh (for git operations)
   match Command::new("ssh").arg("-V").output() {
     Ok(output) => {
       if output.status.success() {
@@ -318,6 +300,8 @@ fn check_dependencies() -> Result<()> {
     }
     Err(_) => println!("  ssh: Not found"),
   }
+
+  println!();
 
   // Check network connectivity to key services
   check_network_connectivity()?;
