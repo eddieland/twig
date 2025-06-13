@@ -1,11 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 🔒 Security Vulnerability (Private)
-    url: https://github.com/your-username/twig/security/advisories/new
-    about: Report a security vulnerability privately
-  - name: 💬 GitHub Discussions
-    url: https://github.com/your-username/twig/discussions
-    about: Ask questions and discuss ideas with the community
   - name: 📖 Documentation
-    url: https://github.com/your-username/twig/tree/main/docs
+    url: https://github.com/eddieland/twig/tree/main/docs
     about: Browse the documentation
