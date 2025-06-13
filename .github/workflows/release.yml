@@ -128,6 +128,14 @@ jobs:
         shell: bash
         run: |
           7z a twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip ./release/twig.exe
+          # Generate checksum in the same format as Linux/macOS
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip > twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
+          else
+            # Fallback to shasum if sha256sum is not available
+            shasum -a 256 twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip > twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
+          fi
+          cat twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
 
       - name: Upload zip for release
         uses: actions/upload-artifact@v4
@@ -135,6 +143,7 @@ jobs:
           name: twig-windows-zip
           path: |
             twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip
+            twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
 
   create-release:
     name: Create Release
