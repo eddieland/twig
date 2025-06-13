@@ -36,6 +36,7 @@ Here's how argit commands map to their twig equivalents:
 | `argit flow <issue>`    | `twig switch <issue>`           | Creates/switches to branch for issue                                                         |
 | `argit cascade`         | `twig cascade`                  | Rebases child branches                                                                       |
 | No equivalent           | `twig rebase`                   | Rebases current branch on its ancestors (upward rebasing)                                    |
+| `argit flow --root`     | `twig switch --root`            | Switch to default root branch (requires configured default root)                            |
 | `argit tidy`            | `twig git stale-branches`       | ⚠️ Partial equivalent - use `--prune` for interactive cleanup (e.g., `--days 30 --prune`)   |
 | `argit ignore <branch>` | `twig branch root add <branch>` | Mark branches as special; a direct equivalent to `argit ignore` might be added in the future |
 

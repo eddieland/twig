@@ -22,17 +22,27 @@ use crate::clients::{self, get_jira_host};
 #[derive(Args)]
 pub struct SwitchArgs {
   #[arg(
-    required = true,
+    required = false,
     index = 1,
     long_help = "Jira issue, GitHub PR, or branch name\n\n\
-               Can be any of the following:\n\
-               • Jira issue key (PROJ-123)\n\
-               • Jira issue URL (https://company.atlassian.net/browse/PROJ-123)\n\
-               • GitHub PR ID (12345 or PR#12345)\n\
-               • GitHub PR URL (https://github.com/owner/repo/pull/123)\n\
-               • Branch name (feature/my-branch)"
+                Can be any of the following:\n\
+                • Jira issue key (PROJ-123)\n\
+                • Jira issue URL (https://company.atlassian.net/browse/PROJ-123)\n\
+                • GitHub PR ID (12345 or PR#12345)\n\
+                • GitHub PR URL (https://github.com/owner/repo/pull/123)\n\
+                • Branch name (feature/my-branch)\n\n\
+                Not required when using --root flag."
   )]
-  pub input: String,
+  pub input: Option<String>,
+
+  #[arg(
+    long = "root",
+    long_help = "Switch to the default root branch\n\n\
+                Switches to the default root branch as defined in the repository configuration.\n\
+                Requires a default root to be configured with 'twig branch root add <branch> --default'.\n\
+                This provides the same functionality as argit's 'flow --root' command."
+  )]
+  pub root: bool,
 
   #[arg(
     long = "no-create",
@@ -49,8 +59,9 @@ pub struct SwitchArgs {
     value_name = "PARENT",
     num_args = 0..=1,
     default_missing_value = "current",
-    long_help = "Set parent dependency for the new branch\n\n\
-               Specify a parent branch to create a dependency relationship.\n\
+    long_help = "Set parent dependency for the new branch (only applies when creating a new branch)\n\n\
+               Specify a parent branch to create a dependency relationship when a new branch is created.\n\
+               This option is ignored when switching to existing branches.\n\
                Values can be:\n\
                • 'current' (default if flag used without value): Use current branch\n\
                • A branch name: Use the specified branch\n\
@@ -63,14 +74,34 @@ pub struct SwitchArgs {
 /// Handle the switch command
 ///
 /// This function detects the type of input provided (Jira issue, GitHub PR, or
-/// branch name) and switches to the appropriate branch.
+/// branch name) and switches to the appropriate branch, or switches to the root
+/// branch when the --root flag is used.
 pub(crate) fn handle_switch_command(switch: SwitchArgs) -> Result<()> {
-  let input = &switch.input;
   let create_if_missing = !switch.no_create;
   let parent_option = switch.parent.as_deref();
 
   // Get the current repository
   let repo_path = detect_repository().context("Not in a git repository")?;
+
+  // Handle --root flag
+  if switch.root {
+    if switch.input.is_some() {
+      return Err(anyhow::anyhow!(
+        "Cannot specify both --root flag and an input argument. Use either --root or provide an input."
+      ));
+    }
+    return handle_root_switch(&repo_path);
+  }
+
+  // Require input if --root is not specified
+  let input = match switch.input.as_ref() {
+    Some(input) => input,
+    None => {
+      return Err(anyhow::anyhow!(
+        "No input provided. Please specify a Jira issue, GitHub PR, or branch name.\nFor more information, run: twig switch --help"
+      ));
+    }
+  };
 
   // Detect input type and handle accordingly
   match detect_input_type(input) {
@@ -218,7 +249,7 @@ fn handle_jira_switch(
   create_if_missing: bool,
   parent_option: Option<&str>,
 ) -> Result<()> {
-  print_info(&format!("Looking for branch associated with Jira issue: {issue_key}",));
+  tracing::info!("Looking for branch associated with Jira issue: {}", issue_key);
 
   // Load repository state to find associated branch
   let repo_state = RepoState::load(repo_path)?;
@@ -226,7 +257,7 @@ fn handle_jira_switch(
   // Look for existing branch association
   if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(issue_key) {
     let branch_name = &branch_issue.branch;
-    print_info(&format!("Found associated branch: {branch_name}",));
+    tracing::info!("Found associated branch: {}", branch_name);
     return switch_to_branch(repo_path, branch_name);
   }
 
@@ -250,7 +281,7 @@ fn handle_github_pr_switch(
   create_if_missing: bool,
   parent_option: Option<&str>,
 ) -> Result<()> {
-  print_info(&format!("Looking for branch associated with GitHub PR: #{pr_number}",));
+  tracing::info!("Looking for branch associated with GitHub PR: #{}", pr_number);
 
   // Load repository state to find associated branch
   let repo_state = RepoState::load(repo_path)?;
@@ -260,7 +291,7 @@ fn handle_github_pr_switch(
     if let Some(github_pr) = branch_issue.github_pr {
       if github_pr == pr_number {
         let branch_name = &branch_issue.branch;
-        print_info(&format!("Found associated branch: {branch_name}",));
+        tracing::info!("Found associated branch: {}", branch_name);
         return switch_to_branch(repo_path, branch_name);
       }
     }
@@ -289,7 +320,7 @@ fn handle_branch_switch(
 
   // Check if branch exists
   if repo.find_branch(branch_name, git2::BranchType::Local).is_ok() {
-    print_info(&format!("Switching to existing branch: {branch_name}",));
+    tracing::info!("Switching to existing branch: {}", branch_name);
     return switch_to_branch(repo_path, branch_name);
   }
 
@@ -307,6 +338,39 @@ fn handle_branch_switch(
     ));
     Ok(())
   }
+}
+
+/// Handle switching to the root branch
+fn handle_root_switch(repo_path: &std::path::Path) -> Result<()> {
+  tracing::info!("Looking for default root branch");
+
+  // Load repository state to check for user-defined default root
+  let repo_state = RepoState::load(repo_path)?;
+
+  // Only use the user-defined default root, no fallbacks
+  if let Some(default_root) = repo_state.get_default_root() {
+    tracing::info!("Found user-defined default root: {}", default_root);
+
+    // Check if the branch actually exists
+    let repo = Git2Repository::open(repo_path)?;
+    if repo.find_branch(default_root, git2::BranchType::Local).is_err() {
+      return Err(anyhow::anyhow!(
+        "Default root branch '{default_root}' does not exist locally.\n\
+         Please either:\n\
+         • Create the branch: git checkout -b {default_root}\n\
+         • Set a different default root: twig branch root add <existing-branch> --default\n\
+         • Remove the current default: twig branch root remove {default_root}"
+      ));
+    }
+
+    return switch_to_branch(repo_path, default_root);
+  }
+
+  // No default root configured
+  Err(anyhow::anyhow!(
+    "No default root branch configured.\n\
+     Please set a default root with: twig branch root add <branch-name> --default"
+  ))
 }
 
 /// Switch to an existing branch

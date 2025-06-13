@@ -22,10 +22,10 @@ The user stories are categorized into:
 
 2. I want to quickly navigate to the root branch (`flow --root`/`switch --root`) so that I can update my local repository with the latest changes.
 
-   **Implementation Status**: ⚠️ Partially implemented
+   **Implementation Status**: ✅ Fully implemented
 
-   - Twig doesn't have a direct `--root` flag for switch
-   - However, you can switch to them directly: `twig switch main`
+   - Twig provides `twig switch --root` command that switches to the user-defined default root branch
+   - Requires a default root to be configured: `twig branch root add <branch-name> --default`
 
 3. I want to quickly open the web browser to view Jira issues or GitHub PRs (`story go`/`pr go`) so that I can easily access their details.
 

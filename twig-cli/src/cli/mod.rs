@@ -194,7 +194,7 @@ pub enum Commands {
   #[command(alias = "rb")]
   Rebase(rebase::RebaseArgs),
 
-  /// Magic branch switching
+  /// Switch to branches by Jira issue, GitHub PR, or branch name
   #[command(long_about = "Intelligently switch to branches based on various inputs.\n\n\
             This command can switch branches based on:\n\
             • Jira issue key (e.g., PROJ-123)\n\
