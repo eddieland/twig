@@ -53,7 +53,10 @@ The user stories are categorized into:
 
    - Twig doesn't have a direct equivalent to argit's `tidy`
    - However, `twig git stale-branches` provides similar functionality to identify branches that haven't been updated recently
-   - Example: `twig git stale-branches --days 30`
+   - The `--prune` flag enables interactive cleanup of stale branches
+   - Examples:
+     - `twig git stale-branches --days 30` (list only)
+     - `twig git stale-branches --days 30 --prune` (interactive cleanup)
 
 6. I want to add dependencies to parent branches (`track`) so that I can establish relationships between my current branch and its parent branch (e.g., `track feat/my-parent`).
 
@@ -85,10 +88,11 @@ The user stories are categorized into:
 
 9. I want an aggressive cleanup option (`tidy --aggressive`) so that I can remove empty parent branches and maintain a cleaner branch structure.
 
-   **Implementation Status**: ❌ Not yet implemented
+   **Implementation Status**: ⚠️ Partially implemented
 
-   - This feature is not currently available in twig
-   - Planned for future implementation
+   - The `twig git stale-branches --prune` command provides interactive cleanup of stale branches
+   - However, automatic removal of empty parent branches is not yet implemented
+   - Full aggressive cleanup functionality is planned for future implementation
 
 ### Configuration Management
 
@@ -143,7 +147,7 @@ When implementing these features in twig, consider:
 3. Enhancing the most frequently used commands first:
    - `flow`/`switch` - ✅ Implemented
    - `cascade` - ✅ Implemented
-   - `tidy` - ⚠️ Partially implemented via `git stale-branches`
+   - `tidy` - ⚠️ Partially implemented via `git stale-branches` (with `--prune` for interactive cleanup)
    - `track` - ✅ Implemented via `branch depend`
    - `story go`/`pr go` - ✅ Implemented via `jira open` and `github open`
 

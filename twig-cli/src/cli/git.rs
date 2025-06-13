@@ -115,10 +115,6 @@ pub struct StaleBranchesCommand {
   #[arg(long, short = 'd', value_name = "DAYS", default_value = "30")]
   pub days: String,
 
-  /// Check all repositories in the registry
-  #[arg(long, short = 'a')]
-  pub all: bool,
-
   /// Path to a specific repository
   #[arg(long, short = 'r', value_name = "PATH")]
   pub repo: Option<String>,
@@ -162,13 +158,9 @@ pub(crate) fn handle_git_command(git: GitArgs) -> Result<()> {
         .parse::<u32>()
         .map_err(|e| anyhow!("Days must be a positive number: {}", e))?;
 
-      if cmd.all {
-        crate::git::find_stale_branches_all(days, cmd.prune)
-      } else {
-        let repo_arg = cmd.repo.as_deref();
-        let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
-        crate::git::find_stale_branches(repo_path, days, cmd.prune)
-      }
+      let repo_arg = cmd.repo.as_deref();
+      let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
+      crate::git::find_stale_branches(repo_path, days, cmd.prune)
     }
   }
 }

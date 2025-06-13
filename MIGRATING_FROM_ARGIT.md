@@ -24,21 +24,14 @@ Here's how argit commands map to their twig equivalents:
 | `argit flow <issue>`    | `twig switch <issue>`           | Creates/switches to branch for issue                                                         |
 | `argit cascade`         | `twig cascade`                  | Rebases child branches                                                                       |
 | No equivalent           | `twig rebase`                   | Rebases current branch on its ancestors (upward rebasing)                                    |
-| `argit tidy`            | Coming soon                     | A direct equivalent is planned; currently use `twig git stale-branches`                      |
+| `argit tidy`            | `twig git stale-branches`       | ⚠️ Partial equivalent - use `--prune` for interactive cleanup (e.g., `--days 30 --prune`)   |
 | `argit ignore <branch>` | `twig branch root add <branch>` | Mark branches as special; a direct equivalent to `argit ignore` might be added in the future |
 
 ## Migration Steps
 
 ### 1. Install twig
 
-Download and install twig from the [GitHub Releases](https://github.com/eddieland/twig/releases) page:
-
-```bash
-# Example for Linux/macOS
-tar -xzf twig-*.tar.gz
-chmod +x twig
-sudo mv twig /usr/local/bin/
-```
+Download and install twig from the [GitHub Releases](https://github.com/eddieland/twig/releases) page.
 
 ### 2. Initialize twig
 
