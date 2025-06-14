@@ -38,6 +38,8 @@ tabled.workspace = true
 
 # Interactive UI
 skim = "0.10"
+ratatui = "0.28"
+crossterm = "0.28"
 
 # Tracing and logging
 tracing.workspace = true

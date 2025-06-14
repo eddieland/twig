@@ -7,3 +7,4 @@ pub mod commit_collector;
 pub mod creator;
 pub mod scorer;
 pub mod selector;
+pub mod selector_ratatui;
