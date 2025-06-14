@@ -49,7 +49,7 @@ struct CommitItem {
 }
 
 impl SkimItem for CommitItem {
-  fn text(&self) -> Cow<str> {
+  fn text(&self) -> Cow<'_, str> {
     Cow::Borrowed(&self.display_text)
   }
 }
