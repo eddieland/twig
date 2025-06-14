@@ -3,3 +3,5 @@ This is a Rust workspace project. Use `cargo build -p <crate-name>` for workspac
 Always use nextest for testing with `cargo nextest run`, never use `cargo test`.
 
 Use `make` targets for common tasks like `make test`, `make fmt`, `make check`.
+
+Files in the docs/ directory are auto-generated and should not be edited manually.

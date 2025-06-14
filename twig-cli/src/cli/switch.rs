@@ -37,10 +37,11 @@ pub struct SwitchArgs {
 
   #[arg(
     long = "root",
-    long_help = "Switch to the default root branch\n\n\
-                Switches to the default root branch as defined in the repository configuration.\n\
-                Requires a default root to be configured with 'twig branch root add <branch> --default'.\n\
-                This provides the same functionality as argit's 'flow --root' command."
+    long_help = "Switch to the current branch's dependency tree root\n\n\
+                Traverses up the dependency chain from the current branch to find and switch to\n\
+                the topmost parent branch. If the current branch has no dependencies, it will\n\
+                remain on the current branch. This helps navigate to the root of a feature\n\
+                branch dependency tree."
   )]
   pub root: bool,
 
@@ -342,35 +343,45 @@ fn handle_branch_switch(
 
 /// Handle switching to the root branch
 fn handle_root_switch(repo_path: &std::path::Path) -> Result<()> {
-  tracing::info!("Looking for default root branch");
+  tracing::info!("Looking for current branch's dependency tree root");
 
-  // Load repository state to check for user-defined default root
-  let repo_state = RepoState::load(repo_path)?;
+  // Get the current branch
+  let repo = Git2Repository::open(repo_path)?;
+  let head = repo.head()?;
 
-  // Only use the user-defined default root, no fallbacks
-  if let Some(default_root) = repo_state.get_default_root() {
-    tracing::info!("Found user-defined default root: {}", default_root);
-
-    // Check if the branch actually exists
-    let repo = Git2Repository::open(repo_path)?;
-    if repo.find_branch(default_root, git2::BranchType::Local).is_err() {
-      return Err(anyhow::anyhow!(
-        "Default root branch '{default_root}' does not exist locally.\n\
-         Please either:\n\
-         • Create the branch: git checkout -b {default_root}\n\
-         • Set a different default root: twig branch root add <existing-branch> --default\n\
-         • Remove the current default: twig branch root remove {default_root}"
-      ));
-    }
-
-    return switch_to_branch(repo_path, default_root);
+  if !head.is_branch() {
+    return Err(anyhow::anyhow!(
+      "HEAD is not on a branch. Cannot determine dependency tree root."
+    ));
   }
 
-  // No default root configured
-  Err(anyhow::anyhow!(
-    "No default root branch configured.\n\
-     Please set a default root with: twig branch root add <branch-name> --default"
-  ))
+  let current_branch = head.shorthand().unwrap_or_default();
+  tracing::info!("Current branch: {}", current_branch);
+
+  // Load repository state to find dependency tree root
+  let repo_state = RepoState::load(repo_path)?;
+
+  // Find the root of the current branch's dependency tree
+  let dependency_root = repo_state.find_dependency_tree_root(current_branch);
+  tracing::info!("Found dependency tree root: {}", dependency_root);
+
+  // If the dependency root is the same as current branch, we're already at the
+  // root
+  if dependency_root == current_branch {
+    print_info(&format!("Already at dependency tree root: {current_branch}"));
+    return Ok(());
+  }
+
+  // Check if the root branch actually exists
+  if repo.find_branch(&dependency_root, git2::BranchType::Local).is_err() {
+    return Err(anyhow::anyhow!(
+      "Dependency tree root branch '{}' does not exist locally.\n\
+       This may indicate a broken dependency chain.",
+      dependency_root
+    ));
+  }
+
+  switch_to_branch(repo_path, &dependency_root)
 }
 
 /// Switch to an existing branch

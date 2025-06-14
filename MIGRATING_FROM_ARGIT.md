@@ -13,7 +13,7 @@ Both argit and twig are tools designed to enhance Git workflows by providing bra
 | **Implementation** | Python                                     | Rust                                        |
 | **Architecture**   | Monolithic Python CLI app built with Click | Modular Rust workspace, CLI built with Clap |
 | **Distribution**   | Internal PyPI repository                   | GitHub releases with pre-built binaries     |
-| **Performance**    | ~500ms+ startup time (even with .pyc)     | Sub-100ms startup time                      |
+| **Performance**    | ~500ms+ startup time (even with .pyc)      | Sub-100ms startup time                      |
 
 ### Performance Benefits
 
@@ -36,8 +36,8 @@ Here's how argit commands map to their twig equivalents:
 | `argit flow <issue>`    | `twig switch <issue>`           | Creates/switches to branch for issue                                                         |
 | `argit cascade`         | `twig cascade`                  | Rebases child branches                                                                       |
 | No equivalent           | `twig rebase`                   | Rebases current branch on its ancestors (upward rebasing)                                    |
-| `argit flow --root`     | `twig switch --root`            | Switch to default root branch (requires configured default root)                            |
-| `argit tidy`            | `twig git stale-branches`       | ⚠️ Partial equivalent - use `--prune` for interactive cleanup (e.g., `--days 30 --prune`)   |
+| `argit flow --root`     | `twig switch --root`            | Switch to current branch's root                                                              |
+| `argit tidy`            | `twig git stale-branches`       | ⚠️ Partial equivalent - use `--prune` for interactive cleanup (e.g., `--days 30 --prune`)    |
 | `argit ignore <branch>` | `twig branch root add <branch>` | Mark branches as special; a direct equivalent to `argit ignore` might be added in the future |
 
 ## Migration Steps

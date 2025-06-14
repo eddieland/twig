@@ -562,6 +562,43 @@ impl RepoState {
   pub fn get_root_branches(&self) -> Vec<String> {
     self.root_branches.iter().map(|r| r.branch.clone()).collect()
   }
+
+  /// Find the root of a branch's dependency tree
+  ///
+  /// Traverses up the dependency chain to find the topmost parent.
+  /// If the branch has no dependencies, returns the branch itself.
+  /// If there are multiple paths to different roots, returns the first one
+  /// found.
+  pub fn find_dependency_tree_root(&self, branch: &str) -> String {
+    use std::collections::HashSet;
+
+    let mut current = branch;
+    let mut visited = HashSet::new();
+
+    // Traverse up the dependency chain
+    loop {
+      // Prevent infinite loops in case of cycles (shouldn't happen due to cycle
+      // detection)
+      if visited.contains(current) {
+        break;
+      }
+      visited.insert(current);
+
+      // Get parents of current branch
+      let parents = self.get_dependency_parents(current);
+
+      if parents.is_empty() {
+        // No parents found, this is the root
+        break;
+      }
+
+      // Take the first parent (in case of multiple parents, which shouldn't happen in
+      // a tree)
+      current = parents[0];
+    }
+
+    current.to_string()
+  }
 }
 
 /// Create a new worktree
@@ -1194,5 +1231,34 @@ mod tests {
     assert!(gitignore_content.contains("*.log"));
     assert!(gitignore_content.contains("target/"));
     assert!(gitignore_content.contains(".twig/"));
+  }
+
+  #[test]
+  fn test_find_dependency_tree_root() {
+    let mut state = RepoState::default();
+
+    // Test case 1: Branch with no dependencies should return itself
+    let root = state.find_dependency_tree_root("main");
+    assert_eq!(root, "main");
+
+    // Test case 2: Simple chain - feature -> main
+    state.add_dependency("feature".to_string(), "main".to_string()).unwrap();
+    let root = state.find_dependency_tree_root("feature");
+    assert_eq!(root, "main");
+
+    // Test case 3: Longer chain - bugfix -> feature -> main
+    state
+      .add_dependency("bugfix".to_string(), "feature".to_string())
+      .unwrap();
+    let root = state.find_dependency_tree_root("bugfix");
+    assert_eq!(root, "main");
+
+    // Test case 4: Root of chain should return itself
+    let root = state.find_dependency_tree_root("main");
+    assert_eq!(root, "main");
+
+    // Test case 5: Middle of chain should return root
+    let root = state.find_dependency_tree_root("feature");
+    assert_eq!(root, "main");
   }
 }

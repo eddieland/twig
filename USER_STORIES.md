@@ -24,8 +24,9 @@ The user stories are categorized into:
 
    **Implementation Status**: ✅ Fully implemented
 
-   - Twig provides `twig switch --root` command that switches to the user-defined default root branch
-   - Requires a default root to be configured: `twig branch root add <branch-name> --default`
+   - Twig provides `twig switch --root` command that switches to the current branch's dependency tree root
+   - Automatically traverses up the dependency chain to find the topmost parent branch
+   - If the current branch has no dependencies, it remains on the current branch
 
 3. I want to quickly open the web browser to view Jira issues or GitHub PRs (`story go`/`pr go`) so that I can easily access their details.
 
