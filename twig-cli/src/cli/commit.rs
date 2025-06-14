@@ -158,7 +158,7 @@ fn create_fixup_commit(repo_path: &std::path::Path, message: &str) -> Result<()>
     })
     .context("Could not find the original commit to fix")?;
 
-  print_info(&format!("Creating fixup commit for commit {commit_hash}"));
+  tracing::info!("Creating fixup commit for commit {commit_hash}");
 
   let output = std::process::Command::new(consts::GIT_EXECUTABLE)
     .args(["commit", "--fixup", &commit_hash])
@@ -168,11 +168,13 @@ fn create_fixup_commit(repo_path: &std::path::Path, message: &str) -> Result<()>
 
   if output.status.success() {
     print_success("Fixup commit created successfully.");
-    println!("{}", String::from_utf8_lossy(&output.stdout));
+    // Only show git output with -vv or higher
+    tracing::debug!("{}", String::from_utf8_lossy(&output.stdout));
     Ok(())
   } else {
     print_error("Failed to create fixup commit.");
-    println!("{}", String::from_utf8_lossy(&output.stderr));
+    // Show error details with -v or higher
+    tracing::warn!("{}", String::from_utf8_lossy(&output.stderr));
     Err(anyhow::anyhow!("Git commit --fixup command failed"))
   }
 }
