@@ -11,6 +11,7 @@ pub mod completion;
 pub mod consts;
 pub mod creds;
 pub mod diagnostics;
+pub mod fixup;
 pub mod git;
 pub mod plugin;
 pub mod user_defined_dependency_resolver;

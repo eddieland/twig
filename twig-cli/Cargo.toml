@@ -36,6 +36,9 @@ indicatif.workspace = true
 owo-colors.workspace = true
 tabled.workspace = true
 
+# Interactive UI
+skim = "0.10"
+
 # Tracing and logging
 tracing.workspace = true
 tracing-subscriber.workspace = true

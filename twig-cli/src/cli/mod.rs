@@ -11,6 +11,7 @@ mod completion;
 mod config;
 mod creds;
 mod dashboard;
+pub mod fixup;
 mod git;
 mod github;
 mod jira;
@@ -112,6 +113,18 @@ pub enum Commands {
             Use --no-fixup to disable this behavior and always create a normal commit."
   )]
   Commit(commit::CommitArgs),
+
+  /// Create fixup commits interactively
+  #[command(long_about = "Interactively select and create fixup commits for recent work.\n\n\
+            This command helps you quickly find and create fixup commits by presenting\n\
+            an interactive fuzzy finder with recent commits from your current branch.\n\
+            Commits are intelligently scored based on recency, authorship, and Jira\n\
+            issue association to surface the most relevant candidates first.\n\n\
+            The interactive selector allows you to search and filter commits using\n\
+            fuzzy matching. Once you select a target commit, a fixup commit will be\n\
+            created automatically using 'git commit --fixup'.")]
+  #[command(alias = "fix")]
+  Fixup(fixup::FixupArgs),
 
   /// Generate shell completions
   #[command(long_about = "Generates shell completion scripts for twig commands.\n\n\
@@ -278,6 +291,7 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
       Commands::Tree(tree) => tree::handle_tree_command(tree),
       Commands::Worktree(worktree) => worktree::handle_worktree_command(worktree),
       Commands::Commit(args) => commit::handle_commit_command(args),
+      Commands::Fixup(fixup) => fixup::handle_fixup_command(fixup),
     },
     None => handle_plugin_fallback(cli),
   }
