@@ -5,14 +5,15 @@
 //! implementation replaces the skim-based selector to achieve Windows
 //! compatibility.
 //!
-//! ## Phase 1 Implementation
+//! ## Phase 2 Implementation
 //!
-//! This is the Phase 1 implementation focusing on basic UI foundation:
-//! - Simple layout with commit list (no search input yet)
-//! - Basic commit display formatting
-//! - Terminal setup and cleanup
-//! - Arrow key navigation (up/down)
-//! - Enter to select, Escape to cancel
+//! This is the Phase 2 implementation adding search functionality:
+//! - Enhanced UI layout with search input field at top
+//! - Split layout between search input and results list
+//! - Basic text filtering with simple substring matching
+//! - Real-time filtering as user types
+//! - Enhanced event handling for text input and navigation switching
+//! - Clear search functionality
 
 use std::io;
 
@@ -24,36 +25,57 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState};
+use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use ratatui::{Frame, Terminal};
 
 use crate::fixup::commit_collector::CommitCandidate;
 
+/// Input mode for the selector
+#[derive(Debug, Clone, PartialEq)]
+pub enum InputMode {
+  /// User is typing in the search input
+  Search,
+  /// User is navigating the commit list
+  Navigation,
+}
+
 /// Navigation state for the commit selector
 #[derive(Debug, Clone)]
 pub struct SelectorState {
-  candidates: Vec<CommitCandidate>,
+  all_candidates: Vec<CommitCandidate>,
+  filtered_candidates: Vec<CommitCandidate>,
   selected_index: usize,
+  search_query: String,
+  input_mode: InputMode,
 }
 
 impl SelectorState {
   /// Create a new selector state with the given candidates
   pub fn new(candidates: Vec<CommitCandidate>) -> Self {
+    let filtered_candidates = candidates.clone();
     Self {
-      candidates,
+      all_candidates: candidates,
+      filtered_candidates,
       selected_index: 0,
+      search_query: String::new(),
+      input_mode: InputMode::Search,
     }
   }
 
-  /// Get the number of candidates
+  /// Get the number of filtered candidates
   #[allow(dead_code)]
   pub fn len(&self) -> usize {
-    self.candidates.len()
+    self.filtered_candidates.len()
   }
 
-  /// Check if there are no candidates
+  /// Check if there are no filtered candidates
   pub fn is_empty(&self) -> bool {
-    self.candidates.is_empty()
+    self.filtered_candidates.is_empty()
+  }
+
+  /// Get the total number of all candidates (before filtering)
+  pub fn total_len(&self) -> usize {
+    self.all_candidates.len()
   }
 
   /// Get the currently selected index
@@ -63,26 +85,41 @@ impl SelectorState {
 
   /// Get the currently selected candidate, if any
   pub fn selected_candidate(&self) -> Option<&CommitCandidate> {
-    self.candidates.get(self.selected_index)
+    self.filtered_candidates.get(self.selected_index)
   }
 
-  /// Get all candidates
+  /// Get all filtered candidates
   pub fn candidates(&self) -> &[CommitCandidate] {
-    &self.candidates
+    &self.filtered_candidates
+  }
+
+  /// Get the current search query
+  pub fn search_query(&self) -> &str {
+    &self.search_query
+  }
+
+  /// Get the current input mode
+  pub fn input_mode(&self) -> &InputMode {
+    &self.input_mode
+  }
+
+  /// Set the input mode
+  pub fn set_input_mode(&mut self, mode: InputMode) {
+    self.input_mode = mode;
   }
 
   /// Move to the next item
   pub fn next(&mut self) {
-    if !self.candidates.is_empty() {
-      self.selected_index = (self.selected_index + 1) % self.candidates.len();
+    if !self.filtered_candidates.is_empty() {
+      self.selected_index = (self.selected_index + 1) % self.filtered_candidates.len();
     }
   }
 
   /// Move to the previous item
   pub fn previous(&mut self) {
-    if !self.candidates.is_empty() {
+    if !self.filtered_candidates.is_empty() {
       if self.selected_index == 0 {
-        self.selected_index = self.candidates.len() - 1;
+        self.selected_index = self.filtered_candidates.len() - 1;
       } else {
         self.selected_index -= 1;
       }
@@ -92,29 +129,143 @@ impl SelectorState {
   /// Set the selected index (bounds-checked)
   #[allow(dead_code)]
   pub fn set_selected_index(&mut self, index: usize) {
-    if index < self.candidates.len() {
+    if index < self.filtered_candidates.len() {
       self.selected_index = index;
+    }
+  }
+
+  /// Update the search query and filter candidates
+  #[allow(dead_code)]
+  pub fn update_search(&mut self, query: String) {
+    self.search_query = query;
+    self.filter_candidates();
+    // Reset selection to first item after filtering
+    self.selected_index = 0;
+  }
+
+  /// Clear the search query and show all candidates
+  #[allow(dead_code)]
+  pub fn clear_search(&mut self) {
+    self.search_query.clear();
+    self.filter_candidates();
+    self.selected_index = 0;
+  }
+
+  /// Add a character to the search query
+  pub fn push_char(&mut self, c: char) {
+    self.search_query.push(c);
+    self.filter_candidates();
+    self.selected_index = 0;
+  }
+
+  /// Remove the last character from the search query
+  pub fn pop_char(&mut self) {
+    self.search_query.pop();
+    self.filter_candidates();
+    self.selected_index = 0;
+  }
+
+  /// Filter candidates based on the current search query
+  fn filter_candidates(&mut self) {
+    if self.search_query.is_empty() {
+      self.filtered_candidates = self.all_candidates.clone();
+    } else {
+      let query_lower = self.search_query.to_lowercase();
+      self.filtered_candidates = self
+        .all_candidates
+        .iter()
+        .filter(|candidate| {
+          let display_text = format_candidate_for_display(candidate).to_lowercase();
+          display_text.contains(&query_lower)
+        })
+        .cloned()
+        .collect();
     }
   }
 
   /// Handle key input and return the action to take
   pub fn handle_key(&mut self, key_code: KeyCode, modifiers: KeyModifiers) -> SelectorAction {
     match (key_code, modifiers) {
+      // Global shortcuts that work in any mode
       (KeyCode::Char('c'), KeyModifiers::CONTROL) => SelectorAction::Cancel,
-      (KeyCode::Char('q'), _) | (KeyCode::Esc, _) => SelectorAction::Cancel,
-      (KeyCode::Enter, _) => {
-        if let Some(candidate) = self.selected_candidate() {
-          SelectorAction::Select(candidate.clone())
-        } else {
-          SelectorAction::Cancel
+      (KeyCode::Esc, _) => {
+        match self.input_mode {
+          InputMode::Search => {
+            // In search mode, Esc switches to navigation mode
+            self.set_input_mode(InputMode::Navigation);
+            SelectorAction::Continue
+          }
+          InputMode::Navigation => {
+            // In navigation mode, Esc cancels
+            SelectorAction::Cancel
+          }
         }
       }
-      (KeyCode::Down, _) | (KeyCode::Char('j'), _) => {
+      (KeyCode::Enter, _) => {
+        match self.input_mode {
+          InputMode::Search => {
+            // In search mode, Enter switches to navigation mode
+            self.set_input_mode(InputMode::Navigation);
+            SelectorAction::Continue
+          }
+          InputMode::Navigation => {
+            // In navigation mode, Enter selects the current candidate
+            if let Some(candidate) = self.selected_candidate() {
+              SelectorAction::Select(candidate.clone())
+            } else {
+              SelectorAction::Cancel
+            }
+          }
+        }
+      }
+      // Mode-specific key handling
+      _ => match self.input_mode {
+        InputMode::Search => self.handle_search_key(key_code, modifiers),
+        InputMode::Navigation => self.handle_navigation_key(key_code, modifiers),
+      },
+    }
+  }
+
+  /// Handle key input in search mode
+  fn handle_search_key(&mut self, key_code: KeyCode, _modifiers: KeyModifiers) -> SelectorAction {
+    match key_code {
+      KeyCode::Char(c) => {
+        self.push_char(c);
+        SelectorAction::Continue
+      }
+      KeyCode::Backspace => {
+        self.pop_char();
+        SelectorAction::Continue
+      }
+      KeyCode::Tab => {
+        // Tab switches to navigation mode
+        self.set_input_mode(InputMode::Navigation);
+        SelectorAction::Continue
+      }
+      _ => SelectorAction::Continue,
+    }
+  }
+
+  /// Handle key input in navigation mode
+  fn handle_navigation_key(&mut self, key_code: KeyCode, _modifiers: KeyModifiers) -> SelectorAction {
+    match key_code {
+      KeyCode::Char('q') => SelectorAction::Cancel,
+      KeyCode::Char('/') => {
+        // '/' switches to search mode
+        self.set_input_mode(InputMode::Search);
+        SelectorAction::Continue
+      }
+      KeyCode::Down | KeyCode::Char('j') => {
         self.next();
         SelectorAction::Continue
       }
-      (KeyCode::Up, _) | (KeyCode::Char('k'), _) => {
+      KeyCode::Up | KeyCode::Char('k') => {
         self.previous();
+        SelectorAction::Continue
+      }
+      KeyCode::Tab => {
+        // Tab switches to search mode
+        self.set_input_mode(InputMode::Search);
         SelectorAction::Continue
       }
       _ => SelectorAction::Continue,
@@ -204,12 +355,51 @@ impl CommitSelector {
 
   /// Render the UI
   fn ui(&mut self, f: &mut Frame) {
+    // Split the layout into search input and results list
     let chunks = Layout::default()
       .direction(Direction::Vertical)
-      .constraints([Constraint::Min(0)].as_ref())
+      .constraints([
+        Constraint::Length(3), // Search input
+        Constraint::Min(0),    // Results list
+      ])
       .split(f.area());
 
-    // Create list items
+    // Render search input
+    self.render_search_input(f, chunks[0]);
+
+    // Render results list
+    self.render_results_list(f, chunks[1]);
+  }
+
+  /// Render the search input field
+  fn render_search_input(&mut self, f: &mut Frame, area: ratatui::layout::Rect) {
+    let search_style = match self.state.input_mode() {
+      InputMode::Search => Style::default().fg(Color::Yellow),
+      InputMode::Navigation => Style::default().fg(Color::Gray),
+    };
+
+    let search_block = Block::default()
+      .borders(Borders::ALL)
+      .title("Search (Tab/Enter to switch modes, / to focus search)")
+      .border_style(search_style);
+
+    let search_text = self.state.search_query().to_string();
+    let search_paragraph = Paragraph::new(search_text).block(search_block).style(search_style);
+
+    f.render_widget(search_paragraph, area);
+
+    // Show cursor in search mode
+    if *self.state.input_mode() == InputMode::Search {
+      // Calculate cursor position
+      let cursor_x = area.x + self.state.search_query().len() as u16 + 1;
+      let cursor_y = area.y + 1;
+      f.set_cursor_position((cursor_x, cursor_y));
+    }
+  }
+
+  /// Render the results list
+  fn render_results_list(&mut self, f: &mut Frame, area: ratatui::layout::Rect) {
+    // Create list items from filtered candidates
     let items: Vec<ListItem> = self
       .state
       .candidates()
@@ -220,22 +410,46 @@ impl CommitSelector {
       })
       .collect();
 
+    let list_style = match self.state.input_mode() {
+      InputMode::Navigation => Style::default(),
+      InputMode::Search => Style::default().fg(Color::Gray),
+    };
+
+    let highlight_style = match self.state.input_mode() {
+      InputMode::Navigation => Style::default()
+        .add_modifier(Modifier::BOLD)
+        .bg(Color::Blue)
+        .fg(Color::White),
+      InputMode::Search => Style::default()
+        .add_modifier(Modifier::BOLD)
+        .bg(Color::DarkGray)
+        .fg(Color::White),
+    };
+
+    // Create title with result count
+    let result_count = self.state.candidates().len();
+    let total_count = self.state.total_len();
+    let title = if self.state.search_query().is_empty() {
+      format!("Commits ({result_count} total) - ↑/↓ j/k to navigate, Enter to select, Esc to cancel")
+    } else {
+      format!(
+        "Filtered Commits ({result_count} of {total_count} total) - ↑/↓ j/k to navigate, Enter to select, Esc to clear search"
+      )
+    };
+
     // Create the list widget
     let list = List::new(items)
       .block(
         Block::default()
           .borders(Borders::ALL)
-          .title("Select commit to fixup (↑/↓ to navigate, Enter to select, Esc/Ctrl+C to cancel)"),
+          .title(title)
+          .border_style(list_style),
       )
-      .highlight_style(
-        Style::default()
-          .add_modifier(Modifier::BOLD)
-          .bg(Color::Blue)
-          .fg(Color::White),
-      )
+      .style(list_style)
+      .highlight_style(highlight_style)
       .highlight_symbol("► ");
 
-    f.render_stateful_widget(list, chunks[0], &mut self.list_state);
+    f.render_stateful_widget(list, area, &mut self.list_state);
   }
 }
 
@@ -457,6 +671,8 @@ mod tests {
     let candidates = vec![create_test_candidate("abc123", 1), create_test_candidate("def456", 2)];
 
     let mut state = SelectorState::new(candidates);
+    // Switch to navigation mode for navigation keys to work
+    state.set_input_mode(InputMode::Navigation);
 
     // Test down navigation
     match state.handle_key(KeyCode::Down, KeyModifiers::NONE) {
@@ -490,6 +706,8 @@ mod tests {
   fn test_selector_state_handle_key_selection() {
     let candidates = vec![create_test_candidate("abc123", 1)];
     let mut state = SelectorState::new(candidates);
+    // Switch to navigation mode for Enter to select
+    state.set_input_mode(InputMode::Navigation);
 
     // Test Enter key
     match state.handle_key(KeyCode::Enter, KeyModifiers::NONE) {
@@ -504,6 +722,8 @@ mod tests {
   fn test_selector_state_handle_key_cancel() {
     let candidates = vec![create_test_candidate("abc123", 1)];
     let mut state = SelectorState::new(candidates);
+    // Switch to navigation mode for Esc to cancel
+    state.set_input_mode(InputMode::Navigation);
 
     // Test Escape key
     match state.handle_key(KeyCode::Esc, KeyModifiers::NONE) {
@@ -517,7 +737,8 @@ mod tests {
       _ => panic!("Expected Cancel action"),
     }
 
-    // Test Ctrl+C key
+    // Test Ctrl+C key (works in any mode)
+    state.set_input_mode(InputMode::Search);
     match state.handle_key(KeyCode::Char('c'), KeyModifiers::CONTROL) {
       SelectorAction::Cancel => {}
       _ => panic!("Expected Cancel action"),
@@ -541,5 +762,172 @@ mod tests {
     let state = selector.state();
     assert_eq!(state.len(), 1);
     assert_eq!(state.selected_candidate().unwrap().short_hash, "abc123");
+  }
+
+  // Tests for Phase 2 search functionality
+  #[test]
+  fn test_search_functionality() {
+    let candidates = vec![
+      create_test_candidate_with_details(
+        "abc123",
+        1,
+        "Fix authentication bug",
+        "alice",
+        true,
+        Some("PROJ-123".to_string()),
+      ),
+      create_test_candidate_with_details("def456", 2, "Add user validation", "bob", false, None),
+      create_test_candidate_with_details(
+        "ghi789",
+        3,
+        "Update documentation",
+        "alice",
+        true,
+        Some("PROJ-456".to_string()),
+      ),
+    ];
+
+    let mut state = SelectorState::new(candidates);
+
+    // Initially all candidates should be visible
+    assert_eq!(state.len(), 3);
+    assert_eq!(state.total_len(), 3);
+    assert_eq!(state.search_query(), "");
+
+    // Test search filtering
+    state.push_char('a');
+    state.push_char('l');
+    state.push_char('i');
+    state.push_char('c');
+    state.push_char('e');
+
+    // Should filter to only alice's commits
+    assert_eq!(state.len(), 2);
+    assert_eq!(state.search_query(), "alice");
+    assert_eq!(state.selected_index(), 0);
+
+    // Test backspace
+    state.pop_char();
+    assert_eq!(state.search_query(), "alic");
+    assert_eq!(state.len(), 2); // Still matches alice
+
+    // Test clear search
+    state.clear_search();
+    assert_eq!(state.len(), 3);
+    assert_eq!(state.search_query(), "");
+    assert_eq!(state.selected_index(), 0);
+  }
+
+  #[test]
+  fn test_input_mode_switching() {
+    let candidates = vec![create_test_candidate("abc123", 1)];
+    let mut state = SelectorState::new(candidates);
+
+    // Should start in search mode
+    assert_eq!(*state.input_mode(), InputMode::Search);
+
+    // Test switching to navigation mode
+    state.set_input_mode(InputMode::Navigation);
+    assert_eq!(*state.input_mode(), InputMode::Navigation);
+
+    // Test switching back to search mode
+    state.set_input_mode(InputMode::Search);
+    assert_eq!(*state.input_mode(), InputMode::Search);
+  }
+
+  #[test]
+  fn test_search_key_handling() {
+    let candidates = vec![create_test_candidate("abc123", 1)];
+    let mut state = SelectorState::new(candidates);
+
+    // Start in search mode
+    state.set_input_mode(InputMode::Search);
+
+    // Test character input
+    match state.handle_key(KeyCode::Char('t'), KeyModifiers::NONE) {
+      SelectorAction::Continue => {}
+      _ => panic!("Expected Continue action"),
+    }
+    assert_eq!(state.search_query(), "t");
+
+    // Test backspace
+    match state.handle_key(KeyCode::Backspace, KeyModifiers::NONE) {
+      SelectorAction::Continue => {}
+      _ => panic!("Expected Continue action"),
+    }
+    assert_eq!(state.search_query(), "");
+
+    // Test Tab to switch to navigation mode
+    match state.handle_key(KeyCode::Tab, KeyModifiers::NONE) {
+      SelectorAction::Continue => {}
+      _ => panic!("Expected Continue action"),
+    }
+    assert_eq!(*state.input_mode(), InputMode::Navigation);
+  }
+
+  #[test]
+  fn test_navigation_key_handling() {
+    let candidates = vec![create_test_candidate("abc123", 1), create_test_candidate("def456", 2)];
+    let mut state = SelectorState::new(candidates);
+
+    // Switch to navigation mode
+    state.set_input_mode(InputMode::Navigation);
+
+    // Test navigation keys work in navigation mode
+    match state.handle_key(KeyCode::Down, KeyModifiers::NONE) {
+      SelectorAction::Continue => {}
+      _ => panic!("Expected Continue action"),
+    }
+    assert_eq!(state.selected_index(), 1);
+
+    // Test '/' to switch to search mode
+    match state.handle_key(KeyCode::Char('/'), KeyModifiers::NONE) {
+      SelectorAction::Continue => {}
+      _ => panic!("Expected Continue action"),
+    }
+    assert_eq!(*state.input_mode(), InputMode::Search);
+
+    // Test Tab to switch back to navigation mode
+    match state.handle_key(KeyCode::Tab, KeyModifiers::NONE) {
+      SelectorAction::Continue => {}
+      _ => panic!("Expected Continue action"),
+    }
+    assert_eq!(*state.input_mode(), InputMode::Navigation);
+  }
+
+  #[test]
+  fn test_enter_and_escape_behavior() {
+    let candidates = vec![create_test_candidate("abc123", 1)];
+    let mut state = SelectorState::new(candidates);
+
+    // In search mode, Enter should switch to navigation mode
+    state.set_input_mode(InputMode::Search);
+    match state.handle_key(KeyCode::Enter, KeyModifiers::NONE) {
+      SelectorAction::Continue => {}
+      _ => panic!("Expected Continue action"),
+    }
+    assert_eq!(*state.input_mode(), InputMode::Navigation);
+
+    // In navigation mode, Enter should select
+    match state.handle_key(KeyCode::Enter, KeyModifiers::NONE) {
+      SelectorAction::Select(candidate) => {
+        assert_eq!(candidate.short_hash, "abc123");
+      }
+      _ => panic!("Expected Select action"),
+    }
+
+    // In search mode, Esc should switch to navigation mode
+    state.set_input_mode(InputMode::Search);
+    match state.handle_key(KeyCode::Esc, KeyModifiers::NONE) {
+      SelectorAction::Continue => {}
+      _ => panic!("Expected Continue action"),
+    }
+    assert_eq!(*state.input_mode(), InputMode::Navigation);
+
+    // In navigation mode, Esc should cancel
+    match state.handle_key(KeyCode::Esc, KeyModifiers::NONE) {
+      SelectorAction::Cancel => {}
+      _ => panic!("Expected Cancel action"),
+    }
   }
 }
