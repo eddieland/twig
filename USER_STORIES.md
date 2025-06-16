@@ -167,19 +167,15 @@ Twig offers several features that weren't in the original argit:
    - `twig github pr status`
    - `twig github checks`
 
-3. **Batch Operations**: Execute commands across all tracked repositories
-
-   - `twig git exec "git status"`
-
-4. **Comprehensive Dashboard**: View all branches, PRs, and issues in one place
+3. **Comprehensive Dashboard**: View all branches, PRs, and issues in one place
 
    - `twig dashboard`
 
-5. **Upward Rebasing**: Rebase current branch on its ancestors
+4. **Upward Rebasing**: Rebase current branch on its ancestors
 
    - `twig rebase`
 
-6. **Plugin Architecture**: Extensible kubectl/Docker-inspired plugin system for custom functionality
+5. **Plugin Architecture**: Extensible kubectl/Docker-inspired plugin system for custom functionality
 
    - Plugins are executable files named `twig-<plugin-name>` discovered via `$PATH`
    - Built-in commands take precedence over plugins
@@ -188,4 +184,4 @@ Twig offers several features that weren't in the original argit:
      - Rust plugins can directly use the `twig-core` library for deep integration
      - Other languages can potentially use FFI (Rust has robust FFI support, e.g., Python bindings)
    - Examples: `twig deploy`, `twig backup`, `twig lint`
-   - See [`docs/PLUGINS.md`](docs/PLUGINS.md) for development guide
+   - See [`PLUGINS.md`](PLUGINS.md) for development guide
