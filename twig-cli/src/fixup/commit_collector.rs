@@ -6,12 +6,17 @@
 //! selection.
 
 use std::path::Path;
+use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Duration, Utc};
 use git2::Repository;
+use regex::Regex;
 
 use crate::cli::fixup::FixupArgs;
+
+static JIRA_COMMIT_MESSAGE_REGEX: LazyLock<Regex> =
+  LazyLock::new(|| Regex::new(r"^([A-Z]+-\d+):").expect("Failed to compile Jira commit message regex"));
 
 /// Represents a commit candidate for fixup
 #[derive(Debug, Clone)]
@@ -62,7 +67,7 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
   let since_timestamp = (Utc::now() - Duration::days(args.days as i64)).timestamp();
 
   let mut revwalk = repo.revwalk().context("Failed to create revwalk")?;
-
+  revwalk.set_sorting(git2::Sort::TIME)?; // Chronological order (newest first)
   revwalk.push_head().context("Failed to push HEAD to revwalk")?;
 
   let mut candidates = Vec::new();
@@ -139,8 +144,8 @@ fn get_current_git_user(repo: &Repository) -> Result<String> {
 /// Extract Jira issue key from commit message
 fn extract_jira_issue_from_message(message: &str) -> Option<String> {
   // Look for patterns like "PROJ-123:" at the beginning of the message
-  let re = regex::Regex::new(r"^([A-Z]+-\d+):").ok()?;
-  re.captures(message)
+  JIRA_COMMIT_MESSAGE_REGEX
+    .captures(message)
     .and_then(|caps| caps.get(1))
     .map(|m| m.as_str().to_string())
 }
