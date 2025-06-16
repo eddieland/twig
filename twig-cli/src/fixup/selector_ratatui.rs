@@ -5,13 +5,13 @@
 //! implementation replaces the skim-based selector to achieve Windows
 //! compatibility.
 //!
-//! ## Phase 2 Implementation
+//! ## Phase 3 Implementation
 //!
-//! This is the Phase 2 implementation adding search functionality:
+//! This is the Phase 3 implementation adding fuzzy matching:
 //! - Enhanced UI layout with search input field at top
 //! - Split layout between search input and results list
-//! - Basic text filtering with simple substring matching
-//! - Real-time filtering as user types
+//! - Fuzzy text filtering using nucleo matcher
+//! - Real-time filtering as user types with scoring and ranking
 //! - Enhanced event handling for text input and navigation switching
 //! - Clear search functionality
 
@@ -21,6 +21,7 @@ use anyhow::Result;
 use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode};
+use nucleo::{Config, Matcher, Utf32Str};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
@@ -44,21 +45,27 @@ pub enum InputMode {
 pub struct SelectorState {
   all_candidates: Vec<CommitCandidate>,
   filtered_candidates: Vec<CommitCandidate>,
+  filtered_indices: Vec<(usize, u16)>, // (index, score) pairs for fuzzy matching
   selected_index: usize,
   search_query: String,
   input_mode: InputMode,
+  matcher: Matcher,
 }
 
 impl SelectorState {
   /// Create a new selector state with the given candidates
   pub fn new(candidates: Vec<CommitCandidate>) -> Self {
     let filtered_candidates = candidates.clone();
+    let filtered_indices: Vec<(usize, u16)> = (0..candidates.len()).map(|i| (i, 0)).collect();
+    let matcher = Matcher::new(Config::DEFAULT);
     Self {
       all_candidates: candidates,
       filtered_candidates,
+      filtered_indices,
       selected_index: 0,
       search_query: String::new(),
       input_mode: InputMode::Search,
+      matcher,
     }
   }
 
@@ -165,20 +172,37 @@ impl SelectorState {
     self.selected_index = 0;
   }
 
-  /// Filter candidates based on the current search query
+  /// Filter candidates based on the current search query using fuzzy matching
   fn filter_candidates(&mut self) {
     if self.search_query.is_empty() {
       self.filtered_candidates = self.all_candidates.clone();
+      self.filtered_indices = (0..self.all_candidates.len()).map(|i| (i, 0)).collect();
     } else {
-      let query_lower = self.search_query.to_lowercase();
+      // Perform fuzzy matching with nucleo (case-insensitive)
+      let mut matches: Vec<(usize, u16)> = Vec::new();
+
+      for (index, candidate) in self.all_candidates.iter().enumerate() {
+        let display_text = format_candidate_for_display(candidate).to_lowercase();
+        let search_query_lower = self.search_query.to_lowercase();
+        let mut haystack_buf = Vec::new();
+        let mut needle_buf = Vec::new();
+        let haystack = Utf32Str::new(&display_text, &mut haystack_buf);
+        let needle = Utf32Str::new(&search_query_lower, &mut needle_buf);
+
+        if let Some(score) = self.matcher.fuzzy_match(haystack, needle) {
+          matches.push((index, score));
+        }
+      }
+
+      // Sort by score (higher is better)
+      matches.sort_by(|a, b| b.1.cmp(&a.1));
+
+      // Update filtered candidates and indices
+      self.filtered_indices = matches;
       self.filtered_candidates = self
-        .all_candidates
+        .filtered_indices
         .iter()
-        .filter(|candidate| {
-          let display_text = format_candidate_for_display(candidate).to_lowercase();
-          display_text.contains(&query_lower)
-        })
-        .cloned()
+        .map(|(index, _score)| self.all_candidates[*index].clone())
         .collect();
     }
   }
@@ -929,5 +953,86 @@ mod tests {
       SelectorAction::Cancel => {}
       _ => panic!("Expected Cancel action"),
     }
+  }
+
+  #[test]
+  fn test_fuzzy_matching() {
+    let candidates = vec![
+      create_test_candidate_with_details(
+        "abc123",
+        1,
+        "Fix authentication bug",
+        "john.doe",
+        true,
+        Some("PROJ-123".to_string()),
+      ),
+      create_test_candidate_with_details("def456", 2, "Update documentation", "jane.smith", false, None),
+      create_test_candidate_with_details(
+        "ghi789",
+        3,
+        "Refactor database connection",
+        "john.doe",
+        true,
+        Some("PROJ-456".to_string()),
+      ),
+      create_test_candidate_with_details(
+        "jkl012",
+        4,
+        "Add unit tests",
+        "bob.wilson",
+        false,
+        Some("PROJ-789".to_string()),
+      ),
+    ];
+
+    let mut state = SelectorState::new(candidates.clone());
+
+    // Test that all candidates are initially present
+    assert_eq!(state.len(), 4);
+
+    // Test case-insensitive matching with lowercase
+    state.push_char('f');
+    state.push_char('i');
+    state.push_char('x');
+    // Should match "Fix authentication bug"
+    assert!(state.len() >= 1, "Should find at least one match for 'fix'");
+    let found_fix = state
+      .candidates()
+      .iter()
+      .any(|c| c.message.to_lowercase().contains("fix"));
+    assert!(found_fix, "Should find fix commit with lowercase search");
+
+    // Clear and test case-insensitive matching with uppercase
+    state.clear_search();
+    assert_eq!(state.len(), 4, "Should have all candidates after clearing search");
+
+    state.push_char('F');
+    state.push_char('I');
+    state.push_char('X');
+    // Should match "Fix authentication bug" (case-insensitive)
+    assert!(state.len() >= 1, "Should find at least one match for 'FIX'");
+    let found_fix_upper = state
+      .candidates()
+      .iter()
+      .any(|c| c.message.to_lowercase().contains("fix"));
+    assert!(found_fix_upper, "Should find fix commit with uppercase search");
+
+    // Clear and test mixed case
+    state.clear_search();
+    state.push_char('D');
+    state.push_char('o');
+    state.push_char('C');
+    // Should match "Update documentation"
+    if state.len() > 0 {
+      let found_doc = state
+        .candidates()
+        .iter()
+        .any(|c| c.message.to_lowercase().contains("doc"));
+      assert!(found_doc, "Should find documentation commit with mixed case search");
+    }
+
+    // Test that empty search shows all candidates
+    state.clear_search();
+    assert_eq!(state.len(), 4, "Empty search should show all candidates");
   }
 }

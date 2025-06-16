@@ -83,9 +83,9 @@ pub fn select_commit(candidates: &[CommitCandidate]) -> Result<Option<CommitCand
 
   // Configure skim options
   let options = SkimOptionsBuilder::default()
-    .height(Some("50%"))
+    .height("50%".to_string())
     .multi(false)
-    .prompt(Some("Select commit to fixup: "))
+    .prompt("Select commit to fixup: ".to_string())
     .build()
     .map_err(|e| anyhow::anyhow!("Failed to build skim options: {}", e))?;
 

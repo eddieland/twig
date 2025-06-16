@@ -37,9 +37,10 @@ owo-colors.workspace = true
 tabled.workspace = true
 
 # Interactive UI
-skim = "0.10"
-ratatui = "0.28"
-crossterm = "0.28"
+crossterm.workspace = true
+nucleo.workspace = true
+ratatui.workspace = true
+skim.workspace = true
 
 # Tracing and logging
 tracing.workspace = true
