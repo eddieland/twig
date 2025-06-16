@@ -200,10 +200,6 @@ pub enum Commands {
   #[command(hide = true)]
   Panic,
 
-  /// Test the new ratatui-based commit selector with dummy data
-  #[command(hide = true)]
-  TestRatatui,
-
   /// Rebase the current branch on its parent(s)
   #[command(long_about = "Rebase the current branch on its parent(s).\n\n\
             This command rebases the current branch on its parent(s) based on\n\
@@ -289,7 +285,6 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
       Commands::Panic => {
         panic!("This is an intentional test panic to verify no-worries integration");
       }
-      Commands::TestRatatui => handle_test_ratatui_command(),
       Commands::Rebase(rebase) => rebase::handle_rebase_command(rebase),
       Commands::Switch(switch) => switch::handle_switch_command(switch),
       Commands::Sync(sync) => sync::handle_sync_command(sync),
@@ -300,85 +295,6 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
     },
     None => handle_plugin_fallback(cli),
   }
-}
-
-fn handle_test_ratatui_command() -> Result<()> {
-  use chrono::Utc;
-
-  use crate::fixup::commit_collector::CommitCandidate;
-  use crate::fixup::selector_ratatui::select_commit_ratatui;
-
-  // Create dummy commit candidates for testing
-  let now = Utc::now();
-  let dummy_candidates = vec![
-    CommitCandidate {
-      hash: "a1b2c3d4e5f6789012345678901234567890abcd".to_string(),
-      short_hash: "a1b2c3d".to_string(),
-      message: "Fix authentication bug in user login".to_string(),
-      author: "john.doe".to_string(),
-      date: now - chrono::Duration::hours(2),
-      is_current_user: true,
-      jira_issue: Some("PROJ-123".to_string()),
-      score: 0.9,
-    },
-    CommitCandidate {
-      hash: "b2c3d4e5f6789012345678901234567890abcdef".to_string(),
-      short_hash: "b2c3d4e".to_string(),
-      message: "Update documentation for API endpoints".to_string(),
-      author: "jane.smith".to_string(),
-      date: now - chrono::Duration::hours(5),
-      is_current_user: false,
-      jira_issue: None,
-      score: 0.7,
-    },
-    CommitCandidate {
-      hash: "c3d4e5f6789012345678901234567890abcdef01".to_string(),
-      short_hash: "c3d4e5f".to_string(),
-      message: "Refactor database connection handling".to_string(),
-      author: "john.doe".to_string(),
-      date: now - chrono::Duration::hours(8),
-      is_current_user: true,
-      jira_issue: Some("PROJ-456".to_string()),
-      score: 0.8,
-    },
-    CommitCandidate {
-      hash: "d4e5f6789012345678901234567890abcdef0123".to_string(),
-      short_hash: "d4e5f67".to_string(),
-      message: "Add unit tests for payment processing".to_string(),
-      author: "bob.wilson".to_string(),
-      date: now - chrono::Duration::days(1),
-      is_current_user: false,
-      jira_issue: Some("PROJ-789".to_string()),
-      score: 0.6,
-    },
-    CommitCandidate {
-      hash: "e5f6789012345678901234567890abcdef012345".to_string(),
-      short_hash: "e5f6789".to_string(),
-      message: "Improve error handling in API responses".to_string(),
-      author: "alice.brown".to_string(),
-      date: now - chrono::Duration::days(2),
-      is_current_user: false,
-      jira_issue: None,
-      score: 0.5,
-    },
-  ];
-
-  println!("🧪 Testing ratatui-based commit selector with dummy data...\n");
-
-  match select_commit_ratatui(&dummy_candidates)? {
-    Some(selected) => {
-      println!("✅ Selected commit: {} - {}", selected.short_hash, selected.message);
-      println!("   Author: {}", selected.author);
-      if let Some(jira) = &selected.jira_issue {
-        println!("   Jira: {jira}");
-      }
-    }
-    None => {
-      println!("❌ No commit selected (cancelled)");
-    }
-  }
-
-  Ok(())
 }
 
 fn handle_plugin_fallback(cli: Cli) -> Result<()> {

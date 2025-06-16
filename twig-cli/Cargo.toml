@@ -40,7 +40,6 @@ tabled.workspace = true
 crossterm.workspace = true
 nucleo.workspace = true
 ratatui.workspace = true
-skim.workspace = true
 
 # Tracing and logging
 tracing.workspace = true
