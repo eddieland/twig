@@ -3,9 +3,18 @@
 //! Helper functions for GitHub URL parsing, repository information extraction,
 //! and other common GitHub-related operations.
 
+use std::sync::LazyLock;
+
 use anyhow::{Context, Result};
+use regex::Regex;
 
 use crate::client::GitHubClient;
+
+static GITHUB_REPO_REGEX: LazyLock<Regex> =
+  LazyLock::new(|| Regex::new(r"github\.com[/:]([^/]+)/([^/\.]+)").expect("Failed to compile GitHub repo regex"));
+
+static GITHUB_PR_REGEX: LazyLock<Regex> =
+  LazyLock::new(|| Regex::new(r"github\.com/[^/]+/[^/]+/pull/(\d+)").expect("Failed to compile GitHub PR regex"));
 
 impl GitHubClient {
   /// Extract owner and repo from a GitHub URL
@@ -14,9 +23,7 @@ impl GitHubClient {
     // https://github.com/owner/repo
     // https://github.com/owner/repo.git
     // https://github.com/owner/repo/pull/123
-    let re = regex::Regex::new(r"github\.com[/:]([^/]+)/([^/\.]+)").context("Failed to compile regex")?;
-
-    if let Some(captures) = re.captures(url) {
+    if let Some(captures) = GITHUB_REPO_REGEX.captures(url) {
       let owner = captures.get(1).unwrap().as_str().to_string();
       let repo = captures.get(2).unwrap().as_str().to_string();
       Ok((owner, repo))
@@ -29,9 +36,7 @@ impl GitHubClient {
   pub fn extract_pr_number_from_url(&self, url: &str) -> Result<u32> {
     // Match patterns like:
     // https://github.com/owner/repo/pull/123
-    let re = regex::Regex::new(r"github\.com/[^/]+/[^/]+/pull/(\d+)").context("Failed to compile regex")?;
-
-    if let Some(captures) = re.captures(url) {
+    if let Some(captures) = GITHUB_PR_REGEX.captures(url) {
       let pr_str = captures.get(1).unwrap().as_str();
       let pr_number = pr_str
         .parse::<u32>()

@@ -4,11 +4,13 @@
 //! switching to branches based on various inputs.
 
 use std::path::Path;
+use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use clap::Args;
 use directories::BaseDirs;
 use git2::Repository as Git2Repository;
+use regex::Regex;
 use tokio::runtime::Runtime;
 use twig_core::detect_repository;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
@@ -17,6 +19,15 @@ use twig_gh::GitHubClient;
 use twig_jira::JiraClient;
 
 use crate::clients::{self, get_jira_host};
+
+static JIRA_ISSUE_KEY_REGEX: LazyLock<Regex> =
+  LazyLock::new(|| Regex::new(r"^[A-Z]{2,}-\d+$").expect("Failed to compile Jira issue key regex"));
+
+static GITHUB_PR_URL_REGEX: LazyLock<Regex> =
+  LazyLock::new(|| Regex::new(r"github\.com/[^/]+/[^/]+/pull/(\d+)").expect("Failed to compile GitHub PR URL regex"));
+
+static JIRA_ISSUE_URL_REGEX: LazyLock<Regex> =
+  LazyLock::new(|| Regex::new(r"/browse/([A-Z]{2,}-\d+)").expect("Failed to compile Jira issue URL regex"));
 
 /// Command for intelligently switching to branches based on various inputs
 #[derive(Args)]
@@ -173,15 +184,12 @@ fn detect_input_type(input: &str) -> InputType {
 fn is_jira_issue_key(input: &str) -> bool {
   // Jira issue keys typically follow the pattern: PROJECT-123
   // Where PROJECT is 2+ uppercase letters, followed by hyphen and number
-  let re = regex::Regex::new(r"^[A-Z]{2,}-\d+$").unwrap();
-  re.is_match(input)
+  JIRA_ISSUE_KEY_REGEX.is_match(input)
 }
 
 /// Extract PR number from GitHub URL
 fn extract_pr_number_from_url(url: &str) -> Result<u32> {
-  let re = regex::Regex::new(r"github\.com/[^/]+/[^/]+/pull/(\d+)").context("Failed to compile regex")?;
-
-  if let Some(captures) = re.captures(url) {
+  if let Some(captures) = GITHUB_PR_URL_REGEX.captures(url) {
     let pr_str = captures.get(1).unwrap().as_str();
     let pr_number = pr_str
       .parse::<u32>()
@@ -194,8 +202,8 @@ fn extract_pr_number_from_url(url: &str) -> Result<u32> {
 
 /// Extract Jira issue key from Jira URL
 fn extract_jira_issue_from_url(url: &str) -> Option<String> {
-  let re = regex::Regex::new(r"/browse/([A-Z]{2,}-\d+)").ok()?;
-  re.captures(url)
+  JIRA_ISSUE_URL_REGEX
+    .captures(url)
     .and_then(|captures| captures.get(1))
     .map(|m| m.as_str().to_string())
 }

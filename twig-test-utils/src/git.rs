@@ -169,6 +169,45 @@ pub fn create_commit(repo: &Repository, file_name: &str, content: &str, message:
   Ok(())
 }
 
+/// Helper function to create a commit with a specific author
+pub fn create_commit_with_author(
+  repo: &git2::Repository,
+  file_name: &str,
+  content: &str,
+  message: &str,
+  author_name: &str,
+  author_email: &str,
+) -> anyhow::Result<()> {
+  // Create a file
+  let repo_path = repo.path().parent().unwrap();
+  let file_path = repo_path.join(file_name);
+  fs::write(&file_path, content)?;
+
+  // Stage the file
+  let mut index = repo.index()?;
+  index.add_path(std::path::Path::new(file_name))?;
+  index.write()?;
+
+  // Create a commit
+  let tree_id = index.write_tree()?;
+  let tree = repo.find_tree(tree_id)?;
+
+  let signature = Signature::now(author_name, author_email)?;
+
+  // Handle parent commits
+  if let Ok(head) = repo.head() {
+    if let Ok(parent) = head.peel_to_commit() {
+      repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[&parent])?;
+    } else {
+      repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[])?;
+    }
+  } else {
+    repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[])?;
+  }
+
+  Ok(())
+}
+
 /// Helper function to create a branch in a repository
 pub fn create_branch(repo: &Repository, branch_name: &str, start_point: Option<&str>) -> Result<()> {
   let head = if let Some(start) = start_point {

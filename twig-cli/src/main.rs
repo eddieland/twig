@@ -18,6 +18,7 @@ mod completion;
 mod consts;
 mod creds;
 mod diagnostics;
+mod fixup;
 mod git;
 mod plugin;
 mod user_defined_dependency_resolver;
