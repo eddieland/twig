@@ -67,7 +67,10 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
   let since_timestamp = (Utc::now() - Duration::days(args.days as i64)).timestamp();
 
   let mut revwalk = repo.revwalk().context("Failed to create revwalk")?;
-  revwalk.set_sorting(git2::Sort::TIME)?; // Chronological order (newest first)
+
+  // Use default sorting (topological) which gives newest commits first for linear
+  // history Explicit sorting with git2::Sort::TIME gives oldest first, which is
+  // opposite of what we want
   revwalk.push_head().context("Failed to push HEAD to revwalk")?;
 
   let mut candidates = Vec::new();
