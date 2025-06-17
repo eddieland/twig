@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["commit_collector","creator","scorer","selector"]};

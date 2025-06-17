@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["create_fixup_commit","has_staged_changes"]};

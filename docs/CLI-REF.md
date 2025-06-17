@@ -12,6 +12,7 @@ Commands:
   branch      Branch dependency and root management
   cascade     Perform a cascading rebase from the current branch to its children
   commit      Create a commit using Jira issue information
+  fixup       Create fixup commits interactively
   completion  Generate shell completions
   creds       Credential management
   dashboard   Show a comprehensive dashboard of local branches, PRs, and issues
@@ -21,7 +22,7 @@ Commands:
   init        Initialize twig configuration
   jira        Jira integration
   rebase      Rebase the current branch on its parent(s)
-  switch      Magic branch switching
+  switch      Switch to branches by Jira issue, GitHub PR, or branch name
   sync        Automatically link branches to Jira issues and GitHub PRs
   tree        Show your branch tree with user-defined dependencies
   worktree    Worktree management
@@ -33,14 +34,14 @@ Arguments:
 Options:
   -v, --verbose...
           Sets the level of verbosity for tracing and logging output.
-
+          
           -v: Show info level messages
           -vv: Show debug level messages
           -vvv: Show trace level messages
 
       --colors <COLORS>
           Controls when colored output is used
-
+          
           [default: auto]
 
           Possible values:
@@ -188,7 +189,7 @@ Options:
 
   -f, --format <FORMAT>
           Output format
-
+          
           [default: text]
           [possible values: text, json]
 
@@ -250,6 +251,7 @@ Usage: twig github <COMMAND>
 Commands:
   check   Check GitHub authentication
   checks  View CI/CD checks for a PR
+  open    Open GitHub PR in browser
   pr      Pull request operations
 
 Options:
@@ -271,6 +273,7 @@ and creating branches from issues.
 Usage: twig jira <COMMAND>
 
 Commands:
+  open           Open Jira issue in browser
   create-branch  Create a branch from a Jira issue
   link-branch    Link a branch to a Jira issue
   transition     Transition a Jira issue
@@ -328,31 +331,42 @@ The command will automatically detect the input type and find the
 corresponding branch. By default, missing branches will be created
 automatically. Use --no-create to disable this behavior.
 
-Usage: twig switch [OPTIONS] <INPUT>
+Usage: twig switch [OPTIONS] [INPUT]
 
 Arguments:
-  <INPUT>
+  [INPUT]
           Jira issue, GitHub PR, or branch name
-
+          
           Can be any of the following:
           • Jira issue key (PROJ-123)
           • Jira issue URL (https://company.atlassian.net/browse/PROJ-123)
           • GitHub PR ID (12345 or PR#12345)
           • GitHub PR URL (https://github.com/owner/repo/pull/123)
           • Branch name (feature/my-branch)
+          
+          Not required when using --root flag.
 
 Options:
+      --root
+          Switch to the current branch's dependency tree root
+          
+          Traverses up the dependency chain from the current branch to find and switch to
+          the topmost parent branch. If the current branch has no dependencies, it will
+          remain on the current branch. This helps navigate to the root of a feature
+          branch dependency tree.
+
       --no-create
           Don't create branch if it doesn't exist
-
+          
           Disable the default behavior of creating branches when they don't exist.
           By default, twig switch will create missing branches. Use this flag
           to only switch to existing branches.
 
   -p, --parent [<PARENT>]
-          Set parent dependency for the new branch
-
-          Specify a parent branch to create a dependency relationship.
+          Set parent dependency for the new branch (only applies when creating a new branch)
+          
+          Specify a parent branch to create a dependency relationship when a new branch is created.
+          This option is ignored when switching to existing branches.
           Values can be:
           • 'current' (default if flag used without value): Use current branch
           • A branch name: Use the specified branch

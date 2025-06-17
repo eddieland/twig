@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["collect_commits","extract_jira_issue_from_message","get_current_git_user"],"static":["JIRA_COMMIT_MESSAGE_REGEX"],"struct":["CommitCandidate"]};
