@@ -138,6 +138,7 @@ mod tests {
       limit: 20,
       days: 30,
       all_authors: false,
+      include_fixups: false,
       dry_run: false,
     };
 
@@ -170,6 +171,7 @@ mod tests {
       limit: 20,
       days: 30,
       all_authors: false,
+      include_fixups: false,
       dry_run: false,
     };
 
@@ -203,6 +205,7 @@ mod tests {
       limit: 20,
       days: 30,
       all_authors: false,
+      include_fixups: false,
       dry_run: false,
     };
 

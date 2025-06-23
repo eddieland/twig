@@ -103,6 +103,11 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
     let hash = commit.id().to_string();
     let short_hash = format!("{:.7}", commit.id());
 
+    // Filter out fixup commits unless explicitly requested
+    if !args.include_fixups && is_fixup_commit(&message) {
+      continue;
+    }
+
     // Convert git2::Time to DateTime<Utc>
     let date = DateTime::from_timestamp(commit_time.seconds(), 0)
       .unwrap_or_else(|| {
@@ -151,6 +156,11 @@ fn extract_jira_issue_from_message(message: &str) -> Option<String> {
     .captures(message)
     .and_then(|caps| caps.get(1))
     .map(|m| m.as_str().to_string())
+}
+
+/// Check if a commit message indicates a fixup commit
+fn is_fixup_commit(message: &str) -> bool {
+  message.starts_with("fixup!")
 }
 
 #[cfg(test)]
@@ -275,6 +285,7 @@ mod tests {
       limit: 20,
       days: 30,
       all_authors: true,
+      include_fixups: false,
       dry_run: false,
     };
 
@@ -332,6 +343,7 @@ mod tests {
       limit: 20,
       days: 30,
       all_authors: false,
+      include_fixups: false,
       dry_run: false,
     };
 
@@ -370,6 +382,7 @@ mod tests {
       limit: 3,
       days: 30,
       all_authors: true,
+      include_fixups: false,
       dry_run: false,
     };
 
@@ -386,5 +399,85 @@ mod tests {
     assert_eq!(candidates[0].message, "Commit 5");
     assert_eq!(candidates[1].message, "Commit 4");
     assert_eq!(candidates[2].message, "Commit 3");
+  }
+
+  #[test]
+  fn test_is_fixup_commit() {
+    assert!(is_fixup_commit("fixup! Fix the bug"));
+    assert!(is_fixup_commit("fixup! PROJ-123: Add feature"));
+    assert!(!is_fixup_commit("Fix the bug"));
+    assert!(!is_fixup_commit("PROJ-123: Add feature"));
+    assert!(!is_fixup_commit(""));
+  }
+
+  #[test]
+  fn test_collect_commits_excludes_fixups_by_default() {
+    let git_repo = GitRepoTestGuard::new();
+
+    // Create regular commits and fixup commits
+    create_commit_with_author(
+      &git_repo.repo,
+      "file1.txt",
+      "content1",
+      "Regular commit",
+      "Twig Test User",
+      "test@example.com",
+    )
+    .expect("Failed to create regular commit");
+    create_commit_with_author(
+      &git_repo.repo,
+      "file2.txt",
+      "content2",
+      "fixup! Regular commit",
+      "Twig Test User",
+      "test@example.com",
+    )
+    .expect("Failed to create fixup commit");
+    create_commit_with_author(
+      &git_repo.repo,
+      "file3.txt",
+      "content3",
+      "Another regular commit",
+      "Twig Test User",
+      "test@example.com",
+    )
+    .expect("Failed to create another regular commit");
+
+    // Test with include_fixups = false (default)
+    let args = FixupArgs {
+      limit: 20,
+      days: 30,
+      all_authors: true,
+      include_fixups: false,
+      dry_run: false,
+    };
+
+    let result = collect_commits(git_repo.repo.path().parent().unwrap(), &args);
+    assert!(result.is_ok());
+    let candidates = result.unwrap();
+
+    // Should only have 2 commits (excluding the fixup commit)
+    assert_eq!(candidates.len(), 2);
+    assert_eq!(candidates[0].message, "Another regular commit");
+    assert_eq!(candidates[1].message, "Regular commit");
+
+    // Test with include_fixups = true
+    let args_with_fixups = FixupArgs {
+      limit: 20,
+      days: 30,
+      all_authors: true,
+      include_fixups: true,
+      dry_run: false,
+    };
+
+    let result_with_fixups = collect_commits(git_repo.repo.path().parent().unwrap(), &args_with_fixups);
+    assert!(result_with_fixups.is_ok());
+    let candidates_with_fixups = result_with_fixups.unwrap();
+
+    // Should have all 3 commits (including the fixup commit)
+    assert_eq!(candidates_with_fixups.len(), 3);
+    assert_eq!(candidates_with_fixups[0].message, "Another regular commit");
+    assert_eq!(candidates_with_fixups[1].message, "fixup! Regular commit");
+    assert_eq!(candidates_with_fixups[2].message, "Regular commit");
   }
 }

@@ -25,6 +25,10 @@ pub struct FixupArgs {
   #[arg(long)]
   pub all_authors: bool,
 
+  /// Include existing fixup! commits in suggestions
+  #[arg(long)]
+  pub include_fixups: bool,
+
   /// Show what would be done without creating the fixup commit
   #[arg(long)]
   pub dry_run: bool,
