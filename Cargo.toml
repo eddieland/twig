@@ -87,7 +87,7 @@ wincredentials = "0.2"
 # Testing dependencies
 insta = "1.43"
 tempfile = "3.8"
-wiremock = "0.6.3"
+wiremock = "0.6.4"
 
 [target.'cfg(windows)'.dependencies]
 # Platform-specific git2 features for Windows
