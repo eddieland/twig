@@ -287,6 +287,7 @@ mod tests {
       all_authors: true,
       include_fixups: false,
       dry_run: false,
+      vim_mode: false,
     };
 
     // Test collect_commits
@@ -345,6 +346,7 @@ mod tests {
       all_authors: false,
       include_fixups: false,
       dry_run: false,
+      vim_mode: false,
     };
 
     // Test collect_commits
@@ -384,6 +386,7 @@ mod tests {
       all_authors: true,
       include_fixups: false,
       dry_run: false,
+      vim_mode: false,
     };
 
     // Test collect_commits
@@ -450,6 +453,7 @@ mod tests {
       all_authors: true,
       include_fixups: false,
       dry_run: false,
+      vim_mode: false,
     };
 
     let result = collect_commits(git_repo.repo.path().parent().unwrap(), &args);
@@ -468,6 +472,7 @@ mod tests {
       all_authors: true,
       include_fixups: true,
       dry_run: false,
+      vim_mode: false,
     };
 
     let result_with_fixups = collect_commits(git_repo.repo.path().parent().unwrap(), &args_with_fixups);

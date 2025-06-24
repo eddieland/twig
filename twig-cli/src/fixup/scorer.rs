@@ -140,6 +140,7 @@ mod tests {
       all_authors: false,
       include_fixups: false,
       dry_run: false,
+      vim_mode: false,
     };
 
     // Mock the current Jira issue for testing
@@ -173,6 +174,7 @@ mod tests {
       all_authors: false,
       include_fixups: false,
       dry_run: false,
+      vim_mode: false,
     };
 
     // Test with matching Jira issue
@@ -207,6 +209,7 @@ mod tests {
       all_authors: false,
       include_fixups: false,
       dry_run: false,
+      vim_mode: false,
     };
 
     // Test with PROJ-456 as current issue

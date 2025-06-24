@@ -70,22 +70,26 @@ pub struct SelectorState {
   search_query: String,
   input_mode: InputMode,
   matcher: Matcher,
+  vim_mode: bool,
 }
 
 impl SelectorState {
   /// Create a new selector state with the given candidates
-  pub fn new(candidates: Vec<CommitCandidate>) -> Self {
+  pub fn new(candidates: Vec<CommitCandidate>, vim_mode: bool) -> Self {
     let filtered_candidates = candidates.clone();
     let filtered_indices: Vec<(usize, u16)> = (0..candidates.len()).map(|i| (i, 0)).collect();
     let matcher = Matcher::new(Config::DEFAULT);
+    // Both modes start in Search mode, but handle keys differently
+    let initial_input_mode = InputMode::Search;
     Self {
       all_candidates: candidates,
       filtered_candidates,
       filtered_indices,
       selected_index: 0,
       search_query: String::new(),
-      input_mode: InputMode::Search,
+      input_mode: initial_input_mode,
       matcher,
+      vim_mode,
     }
   }
 
@@ -229,6 +233,16 @@ impl SelectorState {
 
   /// Handle key input and return the action to take
   pub fn handle_key(&mut self, key_code: KeyCode, modifiers: KeyModifiers) -> SelectorAction {
+    if self.vim_mode {
+      self.handle_key_vim_mode(key_code, modifiers)
+    } else {
+      self.handle_key_default_mode(key_code, modifiers)
+    }
+  }
+
+  /// Handle key input in vim mode (original behavior with Search/Navigation
+  /// modes)
+  fn handle_key_vim_mode(&mut self, key_code: KeyCode, modifiers: KeyModifiers) -> SelectorAction {
     match (key_code, modifiers) {
       // Global shortcuts that work in any mode
       (KeyCode::Char('c'), KeyModifiers::CONTROL) => SelectorAction::Cancel,
@@ -267,6 +281,43 @@ impl SelectorState {
         InputMode::Search => self.handle_search_key(key_code, modifiers),
         InputMode::Navigation => self.handle_navigation_key(key_code, modifiers),
       },
+    }
+  }
+
+  /// Handle key input in default mode (no mode switching, always allow typing)
+  fn handle_key_default_mode(&mut self, key_code: KeyCode, modifiers: KeyModifiers) -> SelectorAction {
+    match (key_code, modifiers) {
+      // Global shortcuts
+      (KeyCode::Char('c'), KeyModifiers::CONTROL) => SelectorAction::Cancel,
+      (KeyCode::Esc, _) => SelectorAction::Cancel,
+      (KeyCode::Enter, _) => {
+        // Enter always selects the current candidate
+        if let Some(candidate) = self.selected_candidate() {
+          SelectorAction::Select(candidate.clone())
+        } else {
+          SelectorAction::Cancel
+        }
+      }
+      // Navigation keys (work while typing)
+      (KeyCode::Up, _) => {
+        self.previous();
+        SelectorAction::Continue
+      }
+      (KeyCode::Down, _) => {
+        self.next();
+        SelectorAction::Continue
+      }
+      // Text input
+      (KeyCode::Char(c), _) => {
+        self.push_char(c);
+        SelectorAction::Continue
+      }
+      (KeyCode::Backspace, _) => {
+        self.pop_char();
+        SelectorAction::Continue
+      }
+      // Ignore other keys
+      _ => SelectorAction::Continue,
     }
   }
 
@@ -336,14 +387,14 @@ pub struct CommitSelector {
 
 impl CommitSelector {
   /// Create a new commit selector with the given candidates
-  pub fn new(candidates: Vec<CommitCandidate>) -> Self {
+  pub fn new(candidates: Vec<CommitCandidate>, vim_mode: bool) -> Self {
     let mut list_state = ListState::default();
     if !candidates.is_empty() {
       list_state.select(Some(0));
     }
 
     Self {
-      state: SelectorState::new(candidates),
+      state: SelectorState::new(candidates, vim_mode),
       list_state,
     }
   }
@@ -417,14 +468,26 @@ impl CommitSelector {
 
   /// Render the search input field
   fn render_search_input(&mut self, f: &mut Frame, area: ratatui::layout::Rect) {
-    let search_style = match self.state.input_mode() {
-      InputMode::Search => Style::default().fg(Color::Yellow),
-      InputMode::Navigation => Style::default().fg(Color::Gray),
+    let (search_style, title, show_cursor) = if self.state.vim_mode {
+      // Vim mode: use original behavior with mode-based styling
+      let style = match self.state.input_mode() {
+        InputMode::Search => Style::default().fg(Color::Yellow),
+        InputMode::Navigation => Style::default().fg(Color::Gray),
+      };
+      let title = "Search (Tab/Enter to switch modes, / to focus search)";
+      let show_cursor = *self.state.input_mode() == InputMode::Search;
+      (style, title, show_cursor)
+    } else {
+      // Default mode: always active search styling
+      let style = Style::default().fg(Color::Yellow);
+      let title = "Search (type to filter, ↑/↓ to navigate, Enter to select)";
+      let show_cursor = true;
+      (style, title, show_cursor)
     };
 
     let search_block = Block::default()
       .borders(Borders::ALL)
-      .title("Search (Tab/Enter to switch modes, / to focus search)")
+      .title(title)
       .border_style(search_style);
 
     let search_text = self.state.search_query().to_string();
@@ -432,8 +495,8 @@ impl CommitSelector {
 
     f.render_widget(search_paragraph, area);
 
-    // Show cursor in search mode
-    if *self.state.input_mode() == InputMode::Search {
+    // Show cursor when appropriate
+    if show_cursor {
       // Calculate cursor position
       let cursor_x = area.x + self.state.search_query().len() as u16 + 1;
       let cursor_y = area.y + 1;
@@ -454,31 +517,54 @@ impl CommitSelector {
       })
       .collect();
 
-    let list_style = match self.state.input_mode() {
-      InputMode::Navigation => Style::default(),
-      InputMode::Search => Style::default().fg(Color::Gray),
-    };
-
-    let highlight_style = match self.state.input_mode() {
-      InputMode::Navigation => Style::default()
+    let (list_style, highlight_style) = if self.state.vim_mode {
+      // Vim mode: use original mode-based styling
+      let list_style = match self.state.input_mode() {
+        InputMode::Navigation => Style::default(),
+        InputMode::Search => Style::default().fg(Color::Gray),
+      };
+      let highlight_style = match self.state.input_mode() {
+        InputMode::Navigation => Style::default()
+          .add_modifier(Modifier::BOLD)
+          .bg(Color::Blue)
+          .fg(Color::White),
+        InputMode::Search => Style::default()
+          .add_modifier(Modifier::BOLD)
+          .bg(Color::DarkGray)
+          .fg(Color::White),
+      };
+      (list_style, highlight_style)
+    } else {
+      // Default mode: always use active styling
+      let list_style = Style::default();
+      let highlight_style = Style::default()
         .add_modifier(Modifier::BOLD)
         .bg(Color::Blue)
-        .fg(Color::White),
-      InputMode::Search => Style::default()
-        .add_modifier(Modifier::BOLD)
-        .bg(Color::DarkGray)
-        .fg(Color::White),
+        .fg(Color::White);
+      (list_style, highlight_style)
     };
 
     // Create title with result count
     let result_count = self.state.candidates().len();
     let total_count = self.state.total_len();
-    let title = if self.state.search_query().is_empty() {
-      format!("Commits ({result_count} total) - ↑/↓ j/k to navigate, Enter to select, Esc to cancel")
+    let title = if self.state.vim_mode {
+      // Vim mode: show original help text with j/k navigation
+      if self.state.search_query().is_empty() {
+        format!("Commits ({result_count} total) - ↑/↓ j/k to navigate, Enter to select, Esc to cancel")
+      } else {
+        format!(
+          "Filtered Commits ({result_count} of {total_count} total) - ↑/↓ j/k to navigate, Enter to select, Esc to clear search"
+        )
+      }
     } else {
-      format!(
-        "Filtered Commits ({result_count} of {total_count} total) - ↑/↓ j/k to navigate, Enter to select, Esc to clear search"
-      )
+      // Default mode: show simplified help text without j/k
+      if self.state.search_query().is_empty() {
+        format!("Commits ({result_count} total) - ↑/↓ to navigate, Enter to select, Esc to cancel")
+      } else {
+        format!(
+          "Filtered Commits ({result_count} of {total_count} total) - ↑/↓ to navigate, Enter to select, Esc to cancel"
+        )
+      }
     };
 
     // Create the list widget
@@ -498,12 +584,12 @@ impl CommitSelector {
 }
 
 /// Select a commit interactively using ratatui
-pub fn select_commit(candidates: &[CommitCandidate]) -> Result<Option<CommitCandidate>> {
+pub fn select_commit(candidates: &[CommitCandidate], vim_mode: bool) -> Result<Option<CommitCandidate>> {
   if candidates.is_empty() {
     return Ok(None);
   }
 
-  let selector = CommitSelector::new(candidates.to_vec());
+  let selector = CommitSelector::new(candidates.to_vec(), vim_mode);
   selector.run()
 }
 
@@ -653,7 +739,7 @@ mod tests {
   #[test]
   fn test_selector_state_creation() {
     let candidates = vec![create_test_candidate("abc123", 2)];
-    let state = SelectorState::new(candidates);
+    let state = SelectorState::new(candidates, false);
 
     assert_eq!(state.len(), 1);
     assert_eq!(state.selected_index(), 0);
@@ -663,7 +749,7 @@ mod tests {
   #[test]
   fn test_selector_state_empty() {
     let candidates = vec![];
-    let state = SelectorState::new(candidates);
+    let state = SelectorState::new(candidates, false);
 
     assert_eq!(state.len(), 0);
     assert!(state.is_empty());
@@ -676,7 +762,7 @@ mod tests {
       create_test_candidate("def456", 3),
       create_test_candidate("ghi789", 4),
     ];
-    let mut state = SelectorState::new(candidates);
+    let mut state = SelectorState::new(candidates, true); // Use vim mode for this test
 
     // Test next navigation
     assert_eq!(state.selected_index(), 0);
@@ -699,7 +785,7 @@ mod tests {
   #[test]
   fn test_selector_state_handle_key_navigation() {
     let candidates = vec![create_test_candidate("abc123", 2), create_test_candidate("def456", 3)];
-    let mut state = SelectorState::new(candidates);
+    let mut state = SelectorState::new(candidates, true); // Use vim mode for j/k navigation
     state.set_input_mode(InputMode::Navigation);
 
     // Test down key
@@ -734,7 +820,7 @@ mod tests {
   #[test]
   fn test_selector_state_handle_key_selection() {
     let candidates = vec![create_test_candidate("abc123", 2)];
-    let mut state = SelectorState::new(candidates);
+    let mut state = SelectorState::new(candidates, true); // Use vim mode for this test
     state.set_input_mode(InputMode::Navigation);
 
     // Test Enter key for selection
@@ -749,7 +835,7 @@ mod tests {
   #[test]
   fn test_selector_state_handle_key_cancel() {
     let candidates = vec![create_test_candidate("abc123", 2)];
-    let mut state = SelectorState::new(candidates);
+    let mut state = SelectorState::new(candidates, true); // Use vim mode for 'q' key cancel
 
     // Test Esc key in navigation mode
     state.set_input_mode(InputMode::Navigation);
@@ -774,7 +860,7 @@ mod tests {
   #[test]
   fn test_commit_selector_creation() {
     let candidates = vec![create_test_candidate("abc123", 2)];
-    let selector = CommitSelector::new(candidates);
+    let selector = CommitSelector::new(candidates, false);
 
     assert_eq!(selector.state().len(), 1);
     assert_eq!(selector.state().selected_index(), 0);
@@ -783,7 +869,7 @@ mod tests {
   #[test]
   fn test_commit_selector_navigation() {
     let candidates = vec![create_test_candidate("abc123", 2), create_test_candidate("def456", 3)];
-    let selector = CommitSelector::new(candidates);
+    let selector = CommitSelector::new(candidates, false);
 
     // Test that list state is properly initialized
     assert_eq!(selector.list_state.selected(), Some(0));
@@ -795,7 +881,7 @@ mod tests {
       create_test_candidate_with_details("abc123", 2, true, Some("PROJ-123".to_string())),
       create_test_candidate_with_details("def456", 3, false, None),
     ];
-    let mut state = SelectorState::new(candidates);
+    let mut state = SelectorState::new(candidates, false);
 
     // Initially all candidates should be visible
     assert_eq!(state.len(), 2);
@@ -817,7 +903,7 @@ mod tests {
   #[test]
   fn test_input_mode_switching() {
     let candidates = vec![create_test_candidate("abc123", 2)];
-    let mut state = SelectorState::new(candidates);
+    let mut state = SelectorState::new(candidates, true); // Use vim mode for this test
 
     // Should start in Search mode
     assert_eq!(*state.input_mode(), InputMode::Search);
@@ -840,7 +926,7 @@ mod tests {
   #[test]
   fn test_search_key_handling() {
     let candidates = vec![create_test_candidate("abc123", 2)];
-    let mut state = SelectorState::new(candidates);
+    let mut state = SelectorState::new(candidates, true); // Use vim mode for Tab mode switching
     state.set_input_mode(InputMode::Search);
 
     // Test character input
@@ -868,7 +954,7 @@ mod tests {
   #[test]
   fn test_navigation_key_handling() {
     let candidates = vec![create_test_candidate("abc123", 2), create_test_candidate("def456", 3)];
-    let mut state = SelectorState::new(candidates);
+    let mut state = SelectorState::new(candidates, true); // Use vim mode for '/' key mode switching
     state.set_input_mode(InputMode::Navigation);
 
     // Test down key
@@ -897,7 +983,7 @@ mod tests {
   #[test]
   fn test_enter_and_escape_behavior() {
     let candidates = vec![create_test_candidate("abc123", 2)];
-    let mut state = SelectorState::new(candidates);
+    let mut state = SelectorState::new(candidates, true); // Use vim mode for Enter mode switching
 
     // In search mode, Enter should switch to navigation mode
     state.set_input_mode(InputMode::Search);
@@ -935,7 +1021,7 @@ mod tests {
       create_test_candidate_with_details("def456", 3, false, None),
       create_test_candidate_with_details("xyz789", 4, true, Some("TASK-456".to_string())),
     ];
-    let mut state = SelectorState::new(candidates);
+    let mut state = SelectorState::new(candidates, false);
 
     // Test fuzzy matching with "abc" - should match first candidate
     state.push_char('a');
@@ -962,5 +1048,100 @@ mod tests {
     state.push_char('5');
     assert_eq!(state.len(), 1);
     assert_eq!(state.candidates()[0].short_hash, "def456");
+  }
+
+  #[test]
+  fn test_default_mode_behavior() {
+    let candidates = vec![create_test_candidate("abc123", 2), create_test_candidate("def456", 3)];
+    let mut state = SelectorState::new(candidates, false); // Default mode
+
+    // Should start in Search mode but behave differently
+    assert_eq!(*state.input_mode(), InputMode::Search);
+
+    // Arrow keys should navigate while maintaining search focus
+    match state.handle_key(KeyCode::Down, KeyModifiers::NONE) {
+      SelectorAction::Continue => {}
+      _ => panic!("Expected Continue"),
+    }
+    assert_eq!(state.selected_index(), 1); // Should navigate
+    assert_eq!(state.search_query(), ""); // Should not add text
+
+    // Up arrow should navigate back
+    match state.handle_key(KeyCode::Up, KeyModifiers::NONE) {
+      SelectorAction::Continue => {}
+      _ => panic!("Expected Continue"),
+    }
+    assert_eq!(state.selected_index(), 0); // Should navigate back
+
+    // Text input should work
+    match state.handle_key(KeyCode::Char('a'), KeyModifiers::NONE) {
+      SelectorAction::Continue => {}
+      _ => panic!("Expected Continue"),
+    }
+    assert_eq!(state.search_query(), "a");
+
+    // Enter should select directly, not switch modes
+    match state.handle_key(KeyCode::Enter, KeyModifiers::NONE) {
+      SelectorAction::Select(candidate) => {
+        assert_eq!(candidate.short_hash, "abc123"); // Should select filtered result
+      }
+      _ => panic!("Expected Select"),
+    }
+  }
+
+  #[test]
+  fn test_default_mode_no_mode_switching() {
+    let candidates = vec![create_test_candidate("abc123", 2)];
+    let mut state = SelectorState::new(candidates, false); // Default mode
+
+    // Tab should not switch modes in default mode
+    match state.handle_key(KeyCode::Tab, KeyModifiers::NONE) {
+      SelectorAction::Continue => {}
+      _ => panic!("Expected Continue"),
+    }
+    assert_eq!(*state.input_mode(), InputMode::Search); // Should stay in search mode
+
+    // '/' should be treated as text input, not mode switching
+    match state.handle_key(KeyCode::Char('/'), KeyModifiers::NONE) {
+      SelectorAction::Continue => {}
+      _ => panic!("Expected Continue"),
+    }
+    assert_eq!(state.search_query(), "/");
+    assert_eq!(*state.input_mode(), InputMode::Search);
+
+    // 'q' should be treated as text input, not cancel
+    match state.handle_key(KeyCode::Char('q'), KeyModifiers::NONE) {
+      SelectorAction::Continue => {}
+      _ => panic!("Expected Continue"),
+    }
+    assert_eq!(state.search_query(), "/q");
+  }
+
+  #[test]
+  fn test_vim_mode_vs_default_mode() {
+    let candidates = vec![create_test_candidate("abc123", 2), create_test_candidate("def456", 3)];
+
+    // Test vim mode behavior
+    let mut vim_state = SelectorState::new(candidates.clone(), true);
+    vim_state.set_input_mode(InputMode::Navigation);
+
+    // In vim mode, j should navigate
+    match vim_state.handle_key(KeyCode::Char('j'), KeyModifiers::NONE) {
+      SelectorAction::Continue => {}
+      _ => panic!("Expected Continue"),
+    }
+    assert_eq!(vim_state.selected_index(), 1);
+    assert_eq!(vim_state.search_query(), ""); // No text input
+
+    // Test default mode behavior
+    let mut default_state = SelectorState::new(candidates, false);
+
+    // In default mode, j should be text input
+    match default_state.handle_key(KeyCode::Char('j'), KeyModifiers::NONE) {
+      SelectorAction::Continue => {}
+      _ => panic!("Expected Continue"),
+    }
+    assert_eq!(default_state.selected_index(), 0); // No navigation
+    assert_eq!(default_state.search_query(), "j"); // Text input
   }
 }

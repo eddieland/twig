@@ -32,6 +32,10 @@ pub struct FixupArgs {
   /// Show what would be done without creating the fixup commit
   #[arg(long)]
   pub dry_run: bool,
+
+  /// Enable vim-style modal interface (Search/Navigation modes)
+  #[arg(long)]
+  pub vim_mode: bool,
 }
 
 /// Handle the fixup command
@@ -64,7 +68,7 @@ pub fn handle_fixup_command(args: FixupArgs) -> Result<()> {
   tracing::debug!("Found {} commit candidates", candidates.len());
 
   // Launch interactive selector
-  let selected_commit = match selector::select_commit(&candidates)? {
+  let selected_commit = match selector::select_commit(&candidates, args.vim_mode)? {
     Some(commit) => commit,
     None => {
       // User cancelled selection - exit silently
