@@ -58,7 +58,7 @@ console = "0.15.11"
 dialoguer = "0.11.0"
 emojis = "0.6"
 indicatif = "0.17"
-owo-colors = { version = "4.1", features = ["supports-colors"] }
+owo-colors = { version = "4.2", features = ["supports-colors"] }
 tabled = "0.20"
 
 # Interactive UI
@@ -87,7 +87,7 @@ wincredentials = "0.2"
 # Testing dependencies
 insta = "1.43"
 tempfile = "3.8"
-wiremock = "0.6.3"
+wiremock = "0.6.4"
 
 [target.'cfg(windows)'.dependencies]
 # Platform-specific git2 features for Windows
