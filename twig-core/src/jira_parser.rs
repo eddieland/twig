@@ -19,7 +19,7 @@ pub struct JiraParsingConfig {
 impl Default for JiraParsingConfig {
   fn default() -> Self {
     Self {
-      mode: JiraParsingMode::Strict,
+      mode: JiraParsingMode::Flexible,
     }
   }
 }
@@ -27,7 +27,7 @@ impl Default for JiraParsingConfig {
 /// Parsing mode for Jira tickets
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum JiraParsingMode {
-  /// Strict mode: Only accepts ME-1234 format (current behavior)
+  /// Strict mode: Only accepts ME-1234 format (old behavior)
   Strict,
   /// Flexible mode: Accepts ME-1234, ME1234, me1234, Me1234, etc.
   Flexible,
@@ -81,6 +81,13 @@ impl JiraTicketParser {
   pub fn new_flexible() -> Self {
     Self::new(JiraParsingConfig {
       mode: JiraParsingMode::Flexible,
+    })
+  }
+
+  /// Create a new parser in strict mode
+  pub fn new_strict() -> Self {
+    Self::new(JiraParsingConfig {
+      mode: JiraParsingMode::Strict,
     })
   }
 
@@ -176,7 +183,7 @@ mod tests {
 
   #[test]
   fn test_strict_mode_valid_formats() {
-    let parser = JiraTicketParser::new_default();
+    let parser = JiraTicketParser::new_strict();
 
     assert_eq!(parser.parse("ME-1234").unwrap(), "ME-1234");
     assert_eq!(parser.parse("PROJECT-999").unwrap(), "PROJECT-999");
@@ -185,7 +192,7 @@ mod tests {
 
   #[test]
   fn test_strict_mode_invalid_formats() {
-    let parser = JiraTicketParser::new_default();
+    let parser = JiraTicketParser::new_strict();
 
     assert!(parser.parse("me-1234").is_err());
     assert!(parser.parse("ME1234").is_err());
@@ -227,7 +234,7 @@ mod tests {
 
   #[test]
   fn test_commit_message_extraction_strict() {
-    let parser = JiraTicketParser::new_default();
+    let parser = JiraTicketParser::new_strict();
 
     assert_eq!(
       parser.extract_from_commit_message("ME-1234: Fix bug in parser"),
@@ -259,7 +266,7 @@ mod tests {
 
   #[test]
   fn test_is_valid() {
-    let parser = JiraTicketParser::new_flexible();
+    let parser = JiraTicketParser::new_default();
 
     assert!(parser.is_valid("ME-1234"));
     assert!(parser.is_valid("me1234"));
@@ -268,7 +275,7 @@ mod tests {
 
   #[test]
   fn test_long_project_names() {
-    let parser = JiraTicketParser::new_flexible();
+    let parser = JiraTicketParser::new_default();
 
     assert_eq!(parser.parse("VERYLONGPROJECT-123").unwrap(), "VERYLONGPROJECT-123");
     assert_eq!(parser.parse("verylongproject123").unwrap(), "VERYLONGPROJECT-123");
@@ -276,7 +283,7 @@ mod tests {
 
   #[test]
   fn test_leading_zeros() {
-    let parser = JiraTicketParser::new_flexible();
+    let parser = JiraTicketParser::new_default();
 
     assert_eq!(parser.parse("ME-0123").unwrap(), "ME-0123");
     assert_eq!(parser.parse("me0123").unwrap(), "ME-0123");
