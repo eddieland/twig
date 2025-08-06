@@ -17,10 +17,11 @@ default-members = ["twig-cli"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.28"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.87.0"
 authors = ["Edward Jones <e@eddie.land>"]
+license = "MIT"
 readme = "README.md"
 repository = "https://github.com/eddieland/twig"
 
@@ -30,6 +31,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
+license.workspace = true
 repository.workspace = true
 
 [dependencies]
