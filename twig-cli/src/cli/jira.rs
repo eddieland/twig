@@ -8,8 +8,12 @@ use clap::{Args, Subcommand};
 use directories::BaseDirs;
 use git2::Repository as Git2Repository;
 use owo_colors::OwoColorize;
+use twig_core::jira_parser::JiraTicketParser;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
-use twig_core::{BranchMetadata, RepoState, create_worktree, detect_repository, get_current_branch_jira_issue};
+use twig_core::{
+  BranchMetadata, RepoState, create_jira_parser, create_worktree, detect_repository, get_config_dirs,
+  get_current_branch_jira_issue,
+};
 
 use crate::clients;
 use crate::clients::get_jira_host;
@@ -30,7 +34,7 @@ pub enum JiraSubcommands {
                          If no issue key is provided, opens the issue associated with the current branch.\n\
                          The command will construct the Jira URL using the configured host and open it using the system's default browser.")]
   Open {
-    /// The Jira issue key (e.g., PROJ-123)
+    /// The Jira issue key (e.g., PROJ-123, proj123, Me-1234)
     #[arg(index = 1)]
     issue_key: Option<String>,
   },
@@ -40,7 +44,7 @@ pub enum JiraSubcommands {
                       This command creates a branch with a name derived from the Jira issue key\n\
                       and summary, and associates the branch with the issue in the repository state.")]
   CreateBranch {
-    /// The Jira issue key (e.g., PROJ-123)
+    /// The Jira issue key (e.g., PROJ-123, proj123, Me-1234)
     #[arg(required = true, index = 1)]
     issue_key: String,
 
@@ -97,6 +101,37 @@ pub enum JiraSubcommands {
     )]
     issue_key: Option<String>,
   },
+
+  /// Configure Jira parsing settings
+  #[command(long_about = "Configure Jira ticket parsing behavior.\n\n\
+                         Allows you to set parsing mode (strict/flexible) and other preferences.")]
+  Config {
+    /// Set the parsing mode
+    #[arg(long, value_enum)]
+    mode: Option<JiraParsingModeArg>,
+
+    /// Show current configuration
+    #[arg(long)]
+    show: bool,
+  },
+}
+
+/// Jira parsing mode argument for CLI
+#[derive(clap::ValueEnum, Clone, Debug)]
+pub enum JiraParsingModeArg {
+  /// Strict mode: Only accepts ME-1234 format
+  Strict,
+  /// Flexible mode: Accepts ME-1234, ME1234, me1234, etc.
+  Flexible,
+}
+
+impl From<JiraParsingModeArg> for twig_core::jira_parser::JiraParsingMode {
+  fn from(mode: JiraParsingModeArg) -> Self {
+    match mode {
+      JiraParsingModeArg::Strict => twig_core::jira_parser::JiraParsingMode::Strict,
+      JiraParsingModeArg::Flexible => twig_core::jira_parser::JiraParsingMode::Flexible,
+    }
+  }
 }
 
 /// Handle the Jira command
@@ -104,15 +139,42 @@ pub enum JiraSubcommands {
 /// This function processes the Jira subcommands and executes the appropriate
 /// actions based on the subcommand provided.
 pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
+  // Create Jira parser once for the entire command
+  let jira_parser = create_jira_parser();
+
   match jira.subcommand {
-    JiraSubcommands::Open { issue_key } => handle_jira_open_command(issue_key.as_deref()),
+    JiraSubcommands::Open { issue_key } => handle_jira_open_command(jira_parser.as_ref(), issue_key.as_deref()),
     JiraSubcommands::CreateBranch {
       issue_key,
       with_worktree,
-    } => handle_create_branch_command(&issue_key, with_worktree),
+    } => {
+      // Parse and normalize the issue key
+      match jira_parser
+        .as_ref()
+        .and_then(|parser| parse_and_validate_issue_key(parser, &issue_key))
+      {
+        Some(normalized_key) => handle_create_branch_command(&normalized_key, with_worktree),
+        None => {
+          print_error(&format!("Invalid Jira issue key format: '{issue_key}'"));
+          Ok(())
+        }
+      }
+    }
     JiraSubcommands::LinkBranch { issue_key, branch_name } => {
       match issue_key {
-        Some(key) => handle_link_branch_command(&key, branch_name.as_deref()),
+        Some(key) => {
+          // Parse and normalize the issue key
+          match jira_parser
+            .as_ref()
+            .and_then(|parser| parse_and_validate_issue_key(parser, &key))
+          {
+            Some(normalized_key) => handle_link_branch_command(&normalized_key, branch_name.as_deref()),
+            None => {
+              print_error(&format!("Invalid Jira issue key format: '{key}'"));
+              Ok(())
+            }
+          }
+        }
         None => {
           // Try to get the Jira issue from the current branch
           match get_current_branch_jira_issue() {
@@ -131,7 +193,19 @@ pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
     }
     JiraSubcommands::Transition { issue_key, transition } => {
       match issue_key {
-        Some(key) => handle_transition_issue_command(&key, transition.as_deref()),
+        Some(key) => {
+          // Parse and normalize the issue key
+          match jira_parser
+            .as_ref()
+            .and_then(|parser| parse_and_validate_issue_key(parser, &key))
+          {
+            Some(normalized_key) => handle_transition_issue_command(&normalized_key, transition.as_deref()),
+            None => {
+              print_error(&format!("Invalid Jira issue key format: '{key}'"));
+              Ok(())
+            }
+          }
+        }
         None => {
           // Try to get the Jira issue from the current branch
           match get_current_branch_jira_issue() {
@@ -151,7 +225,19 @@ pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
     JiraSubcommands::View { issue_key } => {
       // If issue_key is None, try to get it from the current branch
       match issue_key {
-        Some(key) => handle_view_issue_command(&key),
+        Some(key) => {
+          // Parse and normalize the issue key
+          match jira_parser
+            .as_ref()
+            .and_then(|parser| parse_and_validate_issue_key(parser, &key))
+          {
+            Some(normalized_key) => handle_view_issue_command(&normalized_key),
+            None => {
+              print_error(&format!("Invalid Jira issue key format: '{key}'"));
+              Ok(())
+            }
+          }
+        }
         None => {
           // Try to get the Jira issue from the current branch
           match get_current_branch_jira_issue() {
@@ -168,7 +254,42 @@ pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
         }
       }
     }
+    JiraSubcommands::Config { mode, show } => {
+      if show {
+        handle_show_jira_config()
+      } else if let Some(mode) = mode {
+        handle_set_jira_config(mode)
+      } else {
+        print_error("Please specify --mode or --show");
+        Ok(())
+      }
+    }
   }
+}
+
+/// Handle showing current Jira configuration
+fn handle_show_jira_config() -> Result<()> {
+  let config_dirs = get_config_dirs()?;
+  let jira_config = config_dirs.load_jira_config()?;
+
+  print_info("Current Jira configuration:");
+  println!("  Jira Ticket Parsing: {:?}", jira_config.mode);
+
+  Ok(())
+}
+
+/// Handle setting Jira configuration
+fn handle_set_jira_config(mode: JiraParsingModeArg) -> Result<()> {
+  let config_dirs = get_config_dirs()?;
+  let mut jira_config = config_dirs.load_jira_config().unwrap_or_default();
+
+  jira_config.mode = mode.into();
+
+  config_dirs.save_jira_config(&jira_config)?;
+
+  print_success(&format!("Jira parsing mode set to: {:?}", jira_config.mode));
+
+  Ok(())
 }
 
 /// Handle the view issue command
@@ -526,13 +647,25 @@ fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Res
   })
 }
 
+/// Parse and validate a Jira issue key using the provided parser
+fn parse_and_validate_issue_key(parser: &JiraTicketParser, input: &str) -> Option<String> {
+  parser.parse(input).ok()
+}
+
 /// Handle the Jira open command
-fn handle_jira_open_command(issue_key: Option<&str>) -> Result<()> {
+fn handle_jira_open_command(jira_parser: Option<&JiraTicketParser>, issue_key: Option<&str>) -> Result<()> {
   use twig_core::open_url_in_browser;
 
   // Determine issue key (from arg or current branch)
   let issue_key = if let Some(key) = issue_key {
-    key.to_string()
+    // Parse and normalize the provided key
+    match jira_parser.and_then(|parser| parse_and_validate_issue_key(parser, key)) {
+      Some(normalized_key) => normalized_key,
+      None => {
+        print_error(&format!("Invalid Jira issue key format: '{key}'"));
+        return Ok(());
+      }
+    }
   } else {
     // Try to get the Jira issue from the current branch
     match get_current_branch_jira_issue() {

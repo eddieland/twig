@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
 
+use crate::jira_parser::JiraParsingConfig;
+
 /// Represents the configuration directories for the twig application
 #[derive(Debug, Clone)]
 pub struct ConfigDirs {
@@ -78,6 +80,45 @@ impl ConfigDirs {
   /// Get the path to the repository-local state file
   pub fn repo_state_path<P: AsRef<Path>>(&self, repo_path: P) -> PathBuf {
     self.repo_state_dir(repo_path).join("state.json")
+  }
+
+  /// Get the path to the Jira configuration file
+  pub fn jira_config_path(&self) -> PathBuf {
+    self.config_dir.join("jira.toml")
+  }
+
+  /// Load Jira parsing configuration from file or return default
+  pub fn load_jira_config(&self) -> Result<JiraParsingConfig> {
+    let config_path = self.jira_config_path();
+
+    if config_path.exists() {
+      let content = fs::read_to_string(&config_path)
+        .with_context(|| format!("Failed to read Jira config from {}", config_path.display()))?;
+
+      let config: JiraParsingConfig = toml::from_str(&content)
+        .with_context(|| format!("Failed to parse Jira config from {}", config_path.display()))?;
+
+      Ok(config)
+    } else {
+      Ok(JiraParsingConfig::default())
+    }
+  }
+
+  /// Save Jira parsing configuration to file
+  pub fn save_jira_config(&self, config: &JiraParsingConfig) -> Result<()> {
+    let config_path = self.jira_config_path();
+
+    // Ensure config directory exists
+    if let Some(parent) = config_path.parent() {
+      fs::create_dir_all(parent).with_context(|| format!("Failed to create config directory {}", parent.display()))?;
+    }
+
+    let content = toml::to_string_pretty(config).context("Failed to serialize Jira config to TOML")?;
+
+    fs::write(&config_path, content)
+      .with_context(|| format!("Failed to write Jira config to {}", config_path.display()))?;
+
+    Ok(())
   }
 }
 

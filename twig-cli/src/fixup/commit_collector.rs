@@ -6,17 +6,12 @@
 //! selection.
 
 use std::path::Path;
-use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Duration, Utc};
 use git2::Repository;
-use regex::Regex;
 
 use crate::cli::fixup::FixupArgs;
-
-static JIRA_COMMIT_MESSAGE_REGEX: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"^([A-Z]+-\d+):").expect("Failed to compile Jira commit message regex"));
 
 /// Represents a commit candidate for fixup
 #[derive(Debug, Clone)]
@@ -59,6 +54,9 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
 
   let current_user = get_current_git_user(&repo)?;
   let current_jira_issue = twig_core::get_current_branch_jira_issue().unwrap_or(None);
+
+  // Create Jira parser once for the entire collection process
+  let jira_parser = twig_core::create_jira_parser();
 
   tracing::debug!("Current git user: {}", current_user);
   tracing::debug!("Current branch Jira issue: {:?}", current_jira_issue);
@@ -117,7 +115,9 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
       .with_timezone(&Utc);
 
     // Extract Jira issue from commit message
-    let jira_issue = extract_jira_issue_from_message(&message);
+    let jira_issue = jira_parser
+      .as_ref()
+      .and_then(|parser| extract_jira_issue_from_message(parser, &message));
 
     let candidate = CommitCandidate {
       hash,
@@ -149,13 +149,10 @@ fn get_current_git_user(repo: &Repository) -> Result<String> {
   Ok(user_name)
 }
 
-/// Extract Jira issue key from commit message
-fn extract_jira_issue_from_message(message: &str) -> Option<String> {
-  // Look for patterns like "PROJ-123:" at the beginning of the message
-  JIRA_COMMIT_MESSAGE_REGEX
-    .captures(message)
-    .and_then(|caps| caps.get(1))
-    .map(|m| m.as_str().to_string())
+/// Extract Jira issue key from commit message using the provided parser
+fn extract_jira_issue_from_message(parser: &twig_core::jira_parser::JiraTicketParser, message: &str) -> Option<String> {
+  // Use the parser's commit message extraction method
+  parser.extract_from_commit_message(message)
 }
 
 /// Check if a commit message indicates a fixup commit
@@ -171,20 +168,27 @@ mod tests {
 
   #[test]
   fn test_extract_jira_issue_from_message() {
+    use twig_core::jira_parser::{JiraParsingConfig, JiraTicketParser};
+
+    let parser = JiraTicketParser::new(JiraParsingConfig::default());
+
     assert_eq!(
-      extract_jira_issue_from_message("PROJ-123: Fix the bug"),
+      extract_jira_issue_from_message(&parser, "PROJ-123: Fix the bug"),
       Some("PROJ-123".to_string())
     );
 
     assert_eq!(
-      extract_jira_issue_from_message("TEAM-456: Add new feature"),
+      extract_jira_issue_from_message(&parser, "TEAM-456: Add new feature"),
       Some("TEAM-456".to_string())
     );
 
-    assert_eq!(extract_jira_issue_from_message("Fix the bug without issue"), None);
+    assert_eq!(
+      extract_jira_issue_from_message(&parser, "Fix the bug without issue"),
+      None
+    );
 
     assert_eq!(
-      extract_jira_issue_from_message("Some text PROJ-123: not at start"),
+      extract_jira_issue_from_message(&parser, "Some text PROJ-123: not at start"),
       None
     );
   }
