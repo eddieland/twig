@@ -66,13 +66,17 @@ static FLEXIBLE_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
 static COMMIT_MESSAGE_PATTERN: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r"^([A-Za-z]{2,}[-]?\d+):").expect("Failed to compile commit message Jira regex"));
 
+// Pattern for extracting from commit messages (strict version)
+static COMMIT_MESSAGE_STRICT_PATTERN: LazyLock<Regex> =
+  LazyLock::new(|| Regex::new(r"^([A-Z]{2,}-\d+):").expect("Failed to compile strict commit message Jira regex"));
+
 impl JiraTicketParser {
   /// Create a new parser with the given configuration
   pub fn new(config: JiraParsingConfig) -> Self {
     Self { config }
   }
 
-  /// Create a new parser with default configuration (strict mode)
+  /// Create a new parser with default configuration (flexible mode)
   pub fn new_default() -> Self {
     Self::new(JiraParsingConfig::default())
   }
@@ -135,14 +139,10 @@ impl JiraTicketParser {
   /// Extract Jira ticket from commit message
   pub fn extract_from_commit_message(&self, message: &str) -> Option<String> {
     match &self.config.mode {
-      JiraParsingMode::Strict => {
-        // Use the original strict pattern for commit messages
-        let pattern = Regex::new(r"^([A-Z]+-\d+):").ok()?;
-        pattern
-          .captures(message)
-          .and_then(|caps| caps.get(1))
-          .map(|m| m.as_str().to_string())
-      }
+      JiraParsingMode::Strict => COMMIT_MESSAGE_STRICT_PATTERN
+        .captures(message)
+        .and_then(|caps| caps.get(1))
+        .map(|m| m.as_str().to_string()),
       JiraParsingMode::Flexible => {
         COMMIT_MESSAGE_PATTERN
           .captures(message)
@@ -175,6 +175,25 @@ impl JiraTicketParser {
   pub fn set_config(&mut self, config: JiraParsingConfig) {
     self.config = config;
   }
+}
+
+/// Create a Jira parser with configuration loaded from the config directories.
+/// Returns `None` if no configuration is found or if config loading fails.
+///
+/// This is a convenience function that encapsulates the common pattern of:
+/// 1. Getting config directories
+/// 2. Loading Jira configuration
+/// 3. Creating a parser with that configuration
+///
+/// # Returns
+/// - `Some(JiraTicketParser)` if configuration is successfully loaded
+/// - `None` if no config directories are available or Jira config loading fails
+pub fn create_jira_parser() -> Option<JiraTicketParser> {
+  use crate::get_config_dirs;
+
+  let config_dirs = get_config_dirs().ok()?;
+  let jira_config = config_dirs.load_jira_config().ok()?;
+  Some(JiraTicketParser::new(jira_config))
 }
 
 #[cfg(test)]

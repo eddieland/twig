@@ -94,14 +94,7 @@ pub(crate) fn handle_switch_command(switch: SwitchArgs) -> Result<()> {
   let repo_path = detect_repository().context("Not in a git repository")?;
 
   // Create Jira parser once for the entire command
-  let jira_parser = {
-    use twig_core::get_config_dirs;
-    use twig_core::jira_parser::JiraTicketParser;
-
-    let config_dirs = get_config_dirs().ok();
-    let jira_config = config_dirs.and_then(|dirs| dirs.load_jira_config().ok());
-    jira_config.map(JiraTicketParser::new)
-  };
+  let jira_parser = twig_core::create_jira_parser();
 
   // Handle --root flag
   if switch.root {

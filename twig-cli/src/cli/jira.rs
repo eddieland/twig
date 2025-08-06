@@ -11,7 +11,8 @@ use owo_colors::OwoColorize;
 use twig_core::jira_parser::JiraTicketParser;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::{
-  BranchMetadata, RepoState, create_worktree, detect_repository, get_config_dirs, get_current_branch_jira_issue,
+  BranchMetadata, RepoState, create_jira_parser, create_worktree, detect_repository, get_config_dirs,
+  get_current_branch_jira_issue,
 };
 
 use crate::clients;
@@ -139,11 +140,7 @@ impl From<JiraParsingModeArg> for twig_core::jira_parser::JiraParsingMode {
 /// actions based on the subcommand provided.
 pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
   // Create Jira parser once for the entire command
-  let jira_parser = {
-    let config_dirs = get_config_dirs().ok();
-    let jira_config = config_dirs.and_then(|dirs| dirs.load_jira_config().ok());
-    jira_config.map(JiraTicketParser::new)
-  };
+  let jira_parser = create_jira_parser();
 
   match jira.subcommand {
     JiraSubcommands::Open { issue_key } => handle_jira_open_command(jira_parser.as_ref(), issue_key.as_deref()),
