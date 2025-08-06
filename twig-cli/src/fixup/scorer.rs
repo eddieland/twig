@@ -69,10 +69,10 @@ pub fn score_commits(
     }
 
     // Jira association score (15% weight)
-    if let (Some(current_issue), Some(commit_issue)) = (&current_jira_issue, &candidate.jira_issue) {
-      if current_issue == commit_issue {
-        score += 0.15;
-      }
+    if let (Some(current_issue), Some(commit_issue)) = (&current_jira_issue, &candidate.jira_issue)
+      && current_issue == commit_issue
+    {
+      score += 0.15;
     }
 
     candidate.score = score;

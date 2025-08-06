@@ -85,12 +85,12 @@ fn sync_branches(
   // Collect branch names to get total count for progress bar
   let branch_names: Vec<String> = branches
     .filter_map(|branch_result| {
-      if let Ok((branch, _)) = branch_result {
-        if let Ok(Some(name)) = branch.name() {
-          // Skip detached HEAD and remote tracking branches
-          if name != "HEAD" && !name.contains("origin/") {
-            return Some(name.to_string());
-          }
+      if let Ok((branch, _)) = branch_result
+        && let Ok(Some(name)) = branch.name()
+      {
+        // Skip detached HEAD and remote tracking branches
+        if name != "HEAD" && !name.contains("origin/") {
+          return Some(name.to_string());
         }
       }
       None
@@ -225,10 +225,10 @@ fn detect_jira_issue_from_branch(branch_name: &str) -> Option<String> {
   // 4. feature-PROJ-123-description (issue key in middle)
   // 5. PROJ-123 (just the issue key)
   for pattern in JIRA_PATTERNS.iter() {
-    if let Some(captures) = pattern.captures(branch_name) {
-      if let Some(issue_match) = captures.get(1) {
-        return Some(issue_match.as_str().to_string());
-      }
+    if let Some(captures) = pattern.captures(branch_name)
+      && let Some(issue_match) = captures.get(1)
+    {
+      return Some(issue_match.as_str().to_string());
     }
   }
 
@@ -296,10 +296,10 @@ fn print_sync_summary(
     print_success(&format!("{} {} new associations:", action, detected.len()));
     for assoc in detected {
       let mut parts = Vec::new();
-      if let Some(ref jira_issue) = assoc.jira_issue {
-        if !jira_issue.as_str().is_empty() {
-          parts.push(format!("Jira: {jira_issue}",));
-        }
+      if let Some(ref jira_issue) = assoc.jira_issue
+        && !jira_issue.as_str().is_empty()
+      {
+        parts.push(format!("Jira: {jira_issue}",));
       }
       if let Some(pr) = assoc.github_pr {
         parts.push(format!("PR: #{pr}",));

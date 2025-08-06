@@ -281,10 +281,10 @@ fn get_all_descendants(repo_state: &RepoState, branch: &str, max_depth: Option<u
 
   while let Some((current, depth)) = queue.pop_front() {
     // Check if we've reached the maximum depth
-    if let Some(max) = max_depth {
-      if depth > max {
-        continue;
-      }
+    if let Some(max) = max_depth
+      && depth > max
+    {
+      continue;
     }
 
     // Add to descendants if not already visited

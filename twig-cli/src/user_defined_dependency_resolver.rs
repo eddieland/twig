@@ -99,17 +99,17 @@ impl UserDefinedDependencyResolver {
       // Only process if both branches exist in our branch nodes
       if branch_nodes.contains_key(child_name) && branch_nodes.contains_key(parent_name) {
         // Add parent to child's parents list
-        if let Some(child_node) = branch_nodes.get_mut(child_name) {
-          if !child_node.parents.contains(parent_name) {
-            child_node.parents.push(parent_name.clone());
-          }
+        if let Some(child_node) = branch_nodes.get_mut(child_name)
+          && !child_node.parents.contains(parent_name)
+        {
+          child_node.parents.push(parent_name.clone());
         }
 
         // Add child to parent's children list
-        if let Some(parent_node) = branch_nodes.get_mut(parent_name) {
-          if !parent_node.children.contains(child_name) {
-            parent_node.children.push(child_name.clone());
-          }
+        if let Some(parent_node) = branch_nodes.get_mut(parent_name)
+          && !parent_node.children.contains(child_name)
+        {
+          parent_node.children.push(child_name.clone());
         }
       }
     }
@@ -185,10 +185,10 @@ impl UserDefinedDependencyResolver {
     branch_nodes: &HashMap<String, BranchNode>,
   ) -> Option<String> {
     // First check for user-defined default root
-    if let Some(default_root) = repo_state.get_default_root() {
-      if branch_nodes.contains_key(default_root) {
-        return Some(default_root.to_string());
-      }
+    if let Some(default_root) = repo_state.get_default_root()
+      && branch_nodes.contains_key(default_root)
+    {
+      return Some(default_root.to_string());
     }
 
     // Look for common root branch names

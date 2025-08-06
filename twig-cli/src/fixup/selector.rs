@@ -433,16 +433,16 @@ impl CommitSelector {
     loop {
       terminal.draw(|f| self.ui(f))?;
 
-      if let Event::Key(key) = event::read()? {
-        if key.kind == KeyEventKind::Press {
-          match self.state.handle_key(key.code, key.modifiers) {
-            SelectorAction::Continue => {
-              // Update the list state to match the internal state
-              self.list_state.select(Some(self.state.selected_index()));
-            }
-            SelectorAction::Cancel => return Ok(None),
-            SelectorAction::Select(candidate) => return Ok(Some(candidate)),
+      if let Event::Key(key) = event::read()?
+        && key.kind == KeyEventKind::Press
+      {
+        match self.state.handle_key(key.code, key.modifiers) {
+          SelectorAction::Continue => {
+            // Update the list state to match the internal state
+            self.list_state.select(Some(self.state.selected_index()));
           }
+          SelectorAction::Cancel => return Ok(None),
+          SelectorAction::Select(candidate) => return Ok(Some(candidate)),
         }
       }
     }

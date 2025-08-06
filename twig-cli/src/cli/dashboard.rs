@@ -200,12 +200,12 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
                 }
 
                 // Skip if we're only showing recent PRs
-                if dashboard.recent {
-                  if let Ok(created_date) = chrono::DateTime::parse_from_rfc3339(&pr.created_at) {
-                    let seven_days_ago = chrono::Utc::now() - chrono::Duration::days(7);
-                    if created_date < seven_days_ago {
-                      continue;
-                    }
+                if dashboard.recent
+                  && let Ok(created_date) = chrono::DateTime::parse_from_rfc3339(&pr.created_at)
+                {
+                  let seven_days_ago = chrono::Utc::now() - chrono::Duration::days(7);
+                  if created_date < seven_days_ago {
+                    continue;
                   }
                 }
 
@@ -239,12 +239,12 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
         Ok(jira_issues) => {
           for issue in jira_issues {
             // Skip if we're only showing recent issues
-            if dashboard.recent {
-              if let Ok(updated_date) = chrono::DateTime::parse_from_rfc3339(&issue.fields.updated) {
-                let seven_days_ago = chrono::Utc::now() - chrono::Duration::days(7);
-                if updated_date < seven_days_ago {
-                  continue;
-                }
+            if dashboard.recent
+              && let Ok(updated_date) = chrono::DateTime::parse_from_rfc3339(&issue.fields.updated)
+            {
+              let seven_days_ago = chrono::Utc::now() - chrono::Duration::days(7);
+              if updated_date < seven_days_ago {
+                continue;
               }
             }
 

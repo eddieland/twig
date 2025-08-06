@@ -894,10 +894,10 @@ fn display_pr_status(status: &PullRequestStatus) {
   println!("  URL: {}", pr.html_url);
   println!("  State: {}", pr.state);
 
-  if let Some(draft) = pr.draft {
-    if draft {
-      println!("  Draft: Yes");
-    }
+  if let Some(draft) = pr.draft
+    && draft
+  {
+    println!("  Draft: Yes");
   }
 
   println!("  Created: {}", pr.created_at);

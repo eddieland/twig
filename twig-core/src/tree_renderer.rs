@@ -67,10 +67,10 @@ impl<'a> TreeRenderer<'a> {
     visited: &mut HashSet<String>,
   ) -> usize {
     // Check max depth
-    if let Some(max_depth) = self.max_depth {
-      if depth > max_depth {
-        return 0;
-      }
+    if let Some(max_depth) = self.max_depth
+      && depth > max_depth
+    {
+      return 0;
     }
 
     // Check if we've already visited this branch
@@ -148,10 +148,10 @@ impl<'a> TreeRenderer<'a> {
   /// Helper method to render trees from root branches
   pub fn render<W: Write>(&mut self, writer: &mut W, roots: &[String], delimeter: Option<&str>) -> io::Result<()> {
     for (i, root) in roots.iter().enumerate() {
-      if let Some(delim) = delimeter {
-        if i > 0 {
-          write!(writer, "{delim}")?; // Add delimiter between trees
-        }
+      if let Some(delim) = delimeter
+        && i > 0
+      {
+        write!(writer, "{delim}")?; // Add delimiter between trees
       }
       let is_last_root = i == roots.len() - 1;
       self.render_tree(writer, root, 0, &[], is_last_root)?;
@@ -169,10 +169,10 @@ impl<'a> TreeRenderer<'a> {
     is_last_sibling: bool,
   ) -> io::Result<()> {
     // Check max depth
-    if let Some(max_depth) = self.max_depth {
-      if depth > max_depth {
-        return Ok(());
-      }
+    if let Some(max_depth) = self.max_depth
+      && depth > max_depth
+    {
+      return Ok(());
     }
 
     // Check if we've already visited this branch
@@ -309,28 +309,28 @@ impl<'a> TreeRenderer<'a> {
       }
 
       // Add cross-references with alignment (only if they exist)
-      if let Some(parents) = self.cross_refs.get(&node.name) {
-        if parents.len() > 1 {
-          // Filter out parents that are already shown in the current branch path
-          let other_parents: Vec<&String> = parents.iter().filter(|parent| !node.parents.contains(parent)).collect();
+      if let Some(parents) = self.cross_refs.get(&node.name)
+        && parents.len() > 1
+      {
+        // Filter out parents that are already shown in the current branch path
+        let other_parents: Vec<&String> = parents.iter().filter(|parent| !node.parents.contains(parent)).collect();
 
-          if !other_parents.is_empty() {
-            let current_width_final = self.display_width(&line);
-            let spaces_needed = cross_ref_column_pos.saturating_sub(current_width_final);
-            line.push_str(&" ".repeat(spaces_needed));
+        if !other_parents.is_empty() {
+          let current_width_final = self.display_width(&line);
+          let spaces_needed = cross_ref_column_pos.saturating_sub(current_width_final);
+          line.push_str(&" ".repeat(spaces_needed));
 
-            let other_parents_str = other_parents
-              .iter()
-              .map(|s| s.as_str())
-              .collect::<Vec<&str>>()
-              .join(", ");
-            let cross_ref_display = if self.no_color {
-              format!("[also: {other_parents_str}]")
-            } else {
-              format!("[also: {}]", other_parents_str.dimmed())
-            };
-            line.push_str(&cross_ref_display);
-          }
+          let other_parents_str = other_parents
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<&str>>()
+            .join(", ");
+          let cross_ref_display = if self.no_color {
+            format!("[also: {other_parents_str}]")
+          } else {
+            format!("[also: {}]", other_parents_str.dimmed())
+          };
+          line.push_str(&cross_ref_display);
         }
       }
     }

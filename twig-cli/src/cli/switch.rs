@@ -171,17 +171,18 @@ enum InputType {
 /// Detect the type of input provided
 fn detect_input_type(jira_parser: Option<&JiraTicketParser>, input: &str) -> InputType {
   // Check for GitHub PR URL
-  if input.contains("github.com") && input.contains("/pull/") {
-    if let Ok(pr_number) = extract_pr_number_from_url(input) {
-      return InputType::GitHubPrUrl(pr_number);
-    }
+  if input.contains("github.com")
+    && input.contains("/pull/")
+    && let Ok(pr_number) = extract_pr_number_from_url(input)
+  {
+    return InputType::GitHubPrUrl(pr_number);
   }
 
   // Check for Jira issue URL
-  if input.contains("atlassian.net/browse/") || (input.starts_with("http") && input.contains("/browse/")) {
-    if let Some(issue_key) = extract_jira_issue_from_url(input) {
-      return InputType::JiraIssueUrl(issue_key);
-    }
+  if (input.contains("atlassian.net/browse/") || (input.starts_with("http") && input.contains("/browse/")))
+    && let Some(issue_key) = extract_jira_issue_from_url(input)
+  {
+    return InputType::JiraIssueUrl(issue_key);
   }
 
   // Check for GitHub PR ID patterns (123, PR#123, #123)
@@ -191,10 +192,10 @@ fn detect_input_type(jira_parser: Option<&JiraTicketParser>, input: &str) -> Inp
   }
 
   // Check for Jira issue key pattern (PROJ-123, ABC-456, etc.)
-  if let Some(parser) = jira_parser {
-    if let Some(normalized_key) = parse_jira_issue_key(parser, input) {
-      return InputType::JiraIssueKey(normalized_key);
-    }
+  if let Some(parser) = jira_parser
+    && let Some(normalized_key) = parse_jira_issue_key(parser, input)
+  {
+    return InputType::JiraIssueKey(normalized_key);
   }
 
   // Default to branch name
@@ -334,12 +335,12 @@ fn handle_github_pr_switch(
 
   // Look for existing branch association
   for branch_issue in repo_state.list_branch_issues() {
-    if let Some(github_pr) = branch_issue.github_pr {
-      if github_pr == pr_number {
-        let branch_name = &branch_issue.branch;
-        tracing::info!("Found associated branch: {}", branch_name);
-        return switch_to_branch(repo_path, branch_name);
-      }
+    if let Some(github_pr) = branch_issue.github_pr
+      && github_pr == pr_number
+    {
+      let branch_name = &branch_issue.branch;
+      tracing::info!("Found associated branch: {}", branch_name);
+      return switch_to_branch(repo_path, branch_name);
     }
   }
 
