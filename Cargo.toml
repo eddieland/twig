@@ -24,6 +24,10 @@ authors = ["Edward Jones <e@eddie.land>"]
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/eddieland/twig"
+homepage = "https://github.com/eddieland/twig"
+description = "A Git-based developer productivity tool that enhances workflows by integrating git repository management with Jira issue tracking and GitHub pull request workflows"
+keywords = ["git", "productivity", "jira", "github", "cli"]
+categories = ["command-line-utilities", "development-tools"]
 
 [package]
 name = "twig"

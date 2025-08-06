@@ -1,6 +1,6 @@
 [package]
 name = "twig-cli"
-description = "A Git-based developer productivity tool that enhances workflows by integrating git repository management with Jira issue tracking and GitHub pull request workflows"
+description.workspace = true
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
