@@ -12,16 +12,14 @@ use directories::BaseDirs;
 use git2::Repository as Git2Repository;
 use regex::Regex;
 use tokio::runtime::Runtime;
-use twig_core::detect_repository;
+use twig_core::jira_parser::JiraTicketParser;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::state::{BranchMetadata, RepoState};
+use twig_core::{detect_repository, get_config_dirs};
 use twig_gh::GitHubClient;
 use twig_jira::JiraClient;
 
 use crate::clients::{self, get_jira_host};
-
-static JIRA_ISSUE_KEY_REGEX: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"^[A-Z]{2,}-\d+$").expect("Failed to compile Jira issue key regex"));
 
 static GITHUB_PR_URL_REGEX: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r"github\.com/[^/]+/[^/]+/pull/(\d+)").expect("Failed to compile GitHub PR URL regex"));
@@ -172,19 +170,22 @@ fn detect_input_type(input: &str) -> InputType {
   }
 
   // Check for Jira issue key pattern (PROJ-123, ABC-456, etc.)
-  if is_jira_issue_key(input) {
-    return InputType::JiraIssueKey(input.to_string());
+  if let Some(normalized_key) = parse_jira_issue_key(input) {
+    return InputType::JiraIssueKey(normalized_key);
   }
 
   // Default to branch name
   InputType::BranchName(input.to_string())
 }
 
-/// Check if input matches Jira issue key pattern
-fn is_jira_issue_key(input: &str) -> bool {
-  // Jira issue keys typically follow the pattern: PROJECT-123
-  // Where PROJECT is 2+ uppercase letters, followed by hyphen and number
-  JIRA_ISSUE_KEY_REGEX.is_match(input)
+/// Parse and normalize a Jira issue key using flexible parser
+fn parse_jira_issue_key(input: &str) -> Option<String> {
+  // Load Jira configuration and create parser
+  let config_dirs = get_config_dirs().ok()?;
+  let jira_config = config_dirs.load_jira_config().ok()?;
+  let parser = JiraTicketParser::new(jira_config);
+
+  parser.parse(input).ok()
 }
 
 /// Extract PR number from GitHub URL
@@ -227,8 +228,9 @@ fn resolve_parent_branch(repo_path: &std::path::Path, parent_option: Option<&str
     Some("none") => Ok(None), // Explicitly no parent
     Some(parent) => {
       // Check if it's a Jira issue key
-      if is_jira_issue_key(parent) {
-        // Look up branch by Jira issue
+      if let Some(normalized_key) = parse_jira_issue_key(parent) {
+        // Look up branch by Jira issue (using normalized key)
+        let parent = &normalized_key;
         let repo_state = RepoState::load(repo_path)?;
         if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(parent) {
           Ok(Some(branch_issue.branch.clone()))
@@ -625,15 +627,15 @@ mod tests {
   use super::*;
 
   #[test]
-  fn test_is_jira_issue_key() {
-    assert!(is_jira_issue_key("PROJ-123"));
-    assert!(is_jira_issue_key("ABC-456"));
-    assert!(is_jira_issue_key("LONGPROJECT-999"));
-    assert!(!is_jira_issue_key("proj-123")); // lowercase
-    assert!(!is_jira_issue_key("P-123")); // too short
-    assert!(!is_jira_issue_key("PROJ123")); // no hyphen
-    assert!(!is_jira_issue_key("PROJ-")); // no number
-    assert!(!is_jira_issue_key("123-PROJ")); // wrong order
+  fn test_parse_jira_issue_key() {
+    assert_eq!(parse_jira_issue_key("PROJ-123"), Some("PROJ-123".to_string()));
+    assert_eq!(parse_jira_issue_key("ABC-456"), Some("ABC-456".to_string()));
+    assert_eq!(
+      parse_jira_issue_key("LONGPROJECT-999"),
+      Some("LONGPROJECT-999".to_string())
+    );
+    assert_eq!(parse_jira_issue_key("PROJ-"), None); // no number
+    assert_eq!(parse_jira_issue_key("123-PROJ"), None); // wrong order
   }
 
   #[test]

@@ -6,17 +6,12 @@
 //! selection.
 
 use std::path::Path;
-use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Duration, Utc};
 use git2::Repository;
-use regex::Regex;
 
 use crate::cli::fixup::FixupArgs;
-
-static JIRA_COMMIT_MESSAGE_REGEX: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"^([A-Z]+-\d+):").expect("Failed to compile Jira commit message regex"));
 
 /// Represents a commit candidate for fixup
 #[derive(Debug, Clone)]
@@ -149,13 +144,18 @@ fn get_current_git_user(repo: &Repository) -> Result<String> {
   Ok(user_name)
 }
 
-/// Extract Jira issue key from commit message
+/// Extract Jira issue key from commit message using flexible parser
 fn extract_jira_issue_from_message(message: &str) -> Option<String> {
-  // Look for patterns like "PROJ-123:" at the beginning of the message
-  JIRA_COMMIT_MESSAGE_REGEX
-    .captures(message)
-    .and_then(|caps| caps.get(1))
-    .map(|m| m.as_str().to_string())
+  use twig_core::get_config_dirs;
+  use twig_core::jira_parser::JiraTicketParser;
+
+  // Load Jira configuration and create parser
+  let config_dirs = get_config_dirs().ok()?;
+  let jira_config = config_dirs.load_jira_config().ok()?;
+  let parser = JiraTicketParser::new(jira_config);
+
+  // Use the parser's commit message extraction method
+  parser.extract_from_commit_message(message)
 }
 
 /// Check if a commit message indicates a fixup commit
