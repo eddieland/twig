@@ -47,7 +47,7 @@ pub enum JiraSubcommands {
     #[arg(required = true, index = 1)]
     issue_key: String,
 
-    /// Create a worktree for the branchD
+    /// Create a worktree for the branch
     #[arg(long, short = 'w')]
     with_worktree: bool,
   },
