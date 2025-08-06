@@ -55,6 +55,16 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
   let current_user = get_current_git_user(&repo)?;
   let current_jira_issue = twig_core::get_current_branch_jira_issue().unwrap_or(None);
 
+  // Create Jira parser once for the entire collection process
+  let jira_parser = {
+    use twig_core::get_config_dirs;
+    use twig_core::jira_parser::JiraTicketParser;
+
+    let config_dirs = get_config_dirs().ok();
+    let jira_config = config_dirs.and_then(|dirs| dirs.load_jira_config().ok());
+    jira_config.map(JiraTicketParser::new)
+  };
+
   tracing::debug!("Current git user: {}", current_user);
   tracing::debug!("Current branch Jira issue: {:?}", current_jira_issue);
 
@@ -112,7 +122,9 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
       .with_timezone(&Utc);
 
     // Extract Jira issue from commit message
-    let jira_issue = extract_jira_issue_from_message(&message);
+    let jira_issue = jira_parser
+      .as_ref()
+      .and_then(|parser| extract_jira_issue_from_message(parser, &message));
 
     let candidate = CommitCandidate {
       hash,
@@ -144,16 +156,8 @@ fn get_current_git_user(repo: &Repository) -> Result<String> {
   Ok(user_name)
 }
 
-/// Extract Jira issue key from commit message using flexible parser
-fn extract_jira_issue_from_message(message: &str) -> Option<String> {
-  use twig_core::get_config_dirs;
-  use twig_core::jira_parser::JiraTicketParser;
-
-  // Load Jira configuration and create parser
-  let config_dirs = get_config_dirs().ok()?;
-  let jira_config = config_dirs.load_jira_config().ok()?;
-  let parser = JiraTicketParser::new(jira_config);
-
+/// Extract Jira issue key from commit message using the provided parser
+fn extract_jira_issue_from_message(parser: &twig_core::jira_parser::JiraTicketParser, message: &str) -> Option<String> {
   // Use the parser's commit message extraction method
   parser.extract_from_commit_message(message)
 }
@@ -171,20 +175,27 @@ mod tests {
 
   #[test]
   fn test_extract_jira_issue_from_message() {
+    use twig_core::jira_parser::{JiraParsingConfig, JiraTicketParser};
+
+    let parser = JiraTicketParser::new(JiraParsingConfig::default());
+
     assert_eq!(
-      extract_jira_issue_from_message("PROJ-123: Fix the bug"),
+      extract_jira_issue_from_message(&parser, "PROJ-123: Fix the bug"),
       Some("PROJ-123".to_string())
     );
 
     assert_eq!(
-      extract_jira_issue_from_message("TEAM-456: Add new feature"),
+      extract_jira_issue_from_message(&parser, "TEAM-456: Add new feature"),
       Some("TEAM-456".to_string())
     );
 
-    assert_eq!(extract_jira_issue_from_message("Fix the bug without issue"), None);
+    assert_eq!(
+      extract_jira_issue_from_message(&parser, "Fix the bug without issue"),
+      None
+    );
 
     assert_eq!(
-      extract_jira_issue_from_message("Some text PROJ-123: not at start"),
+      extract_jira_issue_from_message(&parser, "Some text PROJ-123: not at start"),
       None
     );
   }

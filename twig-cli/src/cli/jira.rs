@@ -138,14 +138,24 @@ impl From<JiraParsingModeArg> for twig_core::jira_parser::JiraParsingMode {
 /// This function processes the Jira subcommands and executes the appropriate
 /// actions based on the subcommand provided.
 pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
+  // Create Jira parser once for the entire command
+  let jira_parser = {
+    let config_dirs = get_config_dirs().ok();
+    let jira_config = config_dirs.and_then(|dirs| dirs.load_jira_config().ok());
+    jira_config.map(JiraTicketParser::new)
+  };
+
   match jira.subcommand {
-    JiraSubcommands::Open { issue_key } => handle_jira_open_command(issue_key.as_deref()),
+    JiraSubcommands::Open { issue_key } => handle_jira_open_command(jira_parser.as_ref(), issue_key.as_deref()),
     JiraSubcommands::CreateBranch {
       issue_key,
       with_worktree,
     } => {
       // Parse and normalize the issue key
-      match parse_and_validate_issue_key(&issue_key) {
+      match jira_parser
+        .as_ref()
+        .and_then(|parser| parse_and_validate_issue_key(parser, &issue_key))
+      {
         Some(normalized_key) => handle_create_branch_command(&normalized_key, with_worktree),
         None => {
           print_error(&format!("Invalid Jira issue key format: '{issue_key}'"));
@@ -157,7 +167,10 @@ pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
       match issue_key {
         Some(key) => {
           // Parse and normalize the issue key
-          match parse_and_validate_issue_key(&key) {
+          match jira_parser
+            .as_ref()
+            .and_then(|parser| parse_and_validate_issue_key(parser, &key))
+          {
             Some(normalized_key) => handle_link_branch_command(&normalized_key, branch_name.as_deref()),
             None => {
               print_error(&format!("Invalid Jira issue key format: '{key}'"));
@@ -185,7 +198,10 @@ pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
       match issue_key {
         Some(key) => {
           // Parse and normalize the issue key
-          match parse_and_validate_issue_key(&key) {
+          match jira_parser
+            .as_ref()
+            .and_then(|parser| parse_and_validate_issue_key(parser, &key))
+          {
             Some(normalized_key) => handle_transition_issue_command(&normalized_key, transition.as_deref()),
             None => {
               print_error(&format!("Invalid Jira issue key format: '{key}'"));
@@ -214,7 +230,10 @@ pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
       match issue_key {
         Some(key) => {
           // Parse and normalize the issue key
-          match parse_and_validate_issue_key(&key) {
+          match jira_parser
+            .as_ref()
+            .and_then(|parser| parse_and_validate_issue_key(parser, &key))
+          {
             Some(normalized_key) => handle_view_issue_command(&normalized_key),
             None => {
               print_error(&format!("Invalid Jira issue key format: '{key}'"));
@@ -631,23 +650,19 @@ fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Res
   })
 }
 
-/// Parse and validate a Jira issue key using the flexible parser
-fn parse_and_validate_issue_key(input: &str) -> Option<String> {
-  let config_dirs = get_config_dirs().ok()?;
-  let jira_config = config_dirs.load_jira_config().ok()?;
-  let parser = JiraTicketParser::new(jira_config);
-
+/// Parse and validate a Jira issue key using the provided parser
+fn parse_and_validate_issue_key(parser: &JiraTicketParser, input: &str) -> Option<String> {
   parser.parse(input).ok()
 }
 
 /// Handle the Jira open command
-fn handle_jira_open_command(issue_key: Option<&str>) -> Result<()> {
+fn handle_jira_open_command(jira_parser: Option<&JiraTicketParser>, issue_key: Option<&str>) -> Result<()> {
   use twig_core::open_url_in_browser;
 
   // Determine issue key (from arg or current branch)
   let issue_key = if let Some(key) = issue_key {
     // Parse and normalize the provided key
-    match parse_and_validate_issue_key(key) {
+    match jira_parser.and_then(|parser| parse_and_validate_issue_key(parser, key)) {
       Some(normalized_key) => normalized_key,
       None => {
         print_error(&format!("Invalid Jira issue key format: '{key}'"));

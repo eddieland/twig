@@ -12,10 +12,10 @@ use directories::BaseDirs;
 use git2::Repository as Git2Repository;
 use regex::Regex;
 use tokio::runtime::Runtime;
+use twig_core::detect_repository;
 use twig_core::jira_parser::JiraTicketParser;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::state::{BranchMetadata, RepoState};
-use twig_core::{detect_repository, get_config_dirs};
 use twig_gh::GitHubClient;
 use twig_jira::JiraClient;
 
@@ -93,6 +93,16 @@ pub(crate) fn handle_switch_command(switch: SwitchArgs) -> Result<()> {
   // Get the current repository
   let repo_path = detect_repository().context("Not in a git repository")?;
 
+  // Create Jira parser once for the entire command
+  let jira_parser = {
+    use twig_core::get_config_dirs;
+    use twig_core::jira_parser::JiraTicketParser;
+
+    let config_dirs = get_config_dirs().ok();
+    let jira_config = config_dirs.and_then(|dirs| dirs.load_jira_config().ok());
+    jira_config.map(JiraTicketParser::new)
+  };
+
   // Handle --root flag
   if switch.root {
     if switch.input.is_some() {
@@ -114,7 +124,7 @@ pub(crate) fn handle_switch_command(switch: SwitchArgs) -> Result<()> {
   };
 
   // Detect input type and handle accordingly
-  match detect_input_type(input) {
+  match detect_input_type(jira_parser.as_ref(), input) {
     InputType::JiraIssueKey(issue_key) | InputType::JiraIssueUrl(issue_key) => {
       let jira_host = get_jira_host().context("Failed to get Jira host")?;
 
@@ -122,18 +132,36 @@ pub(crate) fn handle_switch_command(switch: SwitchArgs) -> Result<()> {
       let jira = clients::create_jira_client_from_netrc(base_dirs.home_dir(), &jira_host)
         .context("Failed to create Jira client")?;
 
-      handle_jira_switch(&jira, &repo_path, &issue_key, create_if_missing, parent_option)
+      handle_jira_switch(
+        &jira,
+        &repo_path,
+        &issue_key,
+        create_if_missing,
+        parent_option,
+        jira_parser.as_ref(),
+      )
     }
     InputType::GitHubPrId(pr_number) | InputType::GitHubPrUrl(pr_number) => {
       let base_dirs = BaseDirs::new().context("Failed to get $HOME")?;
       let gh =
         clients::create_github_client_from_netrc(base_dirs.home_dir()).context("Failed to create GitHub client")?;
 
-      handle_github_pr_switch(&gh, &repo_path, pr_number, create_if_missing, parent_option)
+      handle_github_pr_switch(
+        &gh,
+        &repo_path,
+        pr_number,
+        create_if_missing,
+        parent_option,
+        jira_parser.as_ref(),
+      )
     }
-    InputType::BranchName(branch_name) => {
-      handle_branch_switch(&repo_path, &branch_name, create_if_missing, parent_option)
-    }
+    InputType::BranchName(branch_name) => handle_branch_switch(
+      &repo_path,
+      &branch_name,
+      create_if_missing,
+      parent_option,
+      jira_parser.as_ref(),
+    ),
   }
 }
 
@@ -148,7 +176,7 @@ enum InputType {
 }
 
 /// Detect the type of input provided
-fn detect_input_type(input: &str) -> InputType {
+fn detect_input_type(jira_parser: Option<&JiraTicketParser>, input: &str) -> InputType {
   // Check for GitHub PR URL
   if input.contains("github.com") && input.contains("/pull/") {
     if let Ok(pr_number) = extract_pr_number_from_url(input) {
@@ -170,21 +198,18 @@ fn detect_input_type(input: &str) -> InputType {
   }
 
   // Check for Jira issue key pattern (PROJ-123, ABC-456, etc.)
-  if let Some(normalized_key) = parse_jira_issue_key(input) {
-    return InputType::JiraIssueKey(normalized_key);
+  if let Some(parser) = jira_parser {
+    if let Some(normalized_key) = parse_jira_issue_key(parser, input) {
+      return InputType::JiraIssueKey(normalized_key);
+    }
   }
 
   // Default to branch name
   InputType::BranchName(input.to_string())
 }
 
-/// Parse and normalize a Jira issue key using flexible parser
-fn parse_jira_issue_key(input: &str) -> Option<String> {
-  // Load Jira configuration and create parser
-  let config_dirs = get_config_dirs().ok()?;
-  let jira_config = config_dirs.load_jira_config().ok()?;
-  let parser = JiraTicketParser::new(jira_config);
-
+/// Parse and normalize a Jira issue key using the provided parser
+fn parse_jira_issue_key(parser: &JiraTicketParser, input: &str) -> Option<String> {
   parser.parse(input).ok()
 }
 
@@ -210,7 +235,11 @@ fn extract_jira_issue_from_url(url: &str) -> Option<String> {
 }
 
 /// Resolve parent branch based on the provided option
-fn resolve_parent_branch(repo_path: &std::path::Path, parent_option: Option<&str>) -> Result<Option<String>> {
+fn resolve_parent_branch(
+  repo_path: &std::path::Path,
+  parent_option: Option<&str>,
+  jira_parser: Option<&JiraTicketParser>,
+) -> Result<Option<String>> {
   match parent_option {
     None => Ok(None), // No parent specified
     Some("current") => {
@@ -228,15 +257,26 @@ fn resolve_parent_branch(repo_path: &std::path::Path, parent_option: Option<&str
     Some("none") => Ok(None), // Explicitly no parent
     Some(parent) => {
       // Check if it's a Jira issue key
-      if let Some(normalized_key) = parse_jira_issue_key(parent) {
-        // Look up branch by Jira issue (using normalized key)
-        let parent = &normalized_key;
-        let repo_state = RepoState::load(repo_path)?;
-        if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(parent) {
-          Ok(Some(branch_issue.branch.clone()))
+      if let Some(parser) = jira_parser.as_ref() {
+        if let Some(normalized_key) = parse_jira_issue_key(parser, parent) {
+          // Look up branch by Jira issue (using normalized key)
+          let parent = &normalized_key;
+          let repo_state = RepoState::load(repo_path)?;
+          if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(parent) {
+            Ok(Some(branch_issue.branch.clone()))
+          } else {
+            print_warning(&format!("No branch found for Jira issue {parent}"));
+            Ok(None)
+          }
         } else {
-          print_warning(&format!("No branch found for Jira issue {parent}"));
-          Ok(None)
+          // Not a valid Jira issue, treat as branch name
+          let repo = Git2Repository::open(repo_path)?;
+          if repo.find_branch(parent, git2::BranchType::Local).is_ok() {
+            Ok(Some(parent.to_string()))
+          } else {
+            print_warning(&format!("Branch '{parent}' not found"));
+            Ok(None)
+          }
         }
       } else {
         // Assume it's a branch name, verify it exists
@@ -259,6 +299,7 @@ fn handle_jira_switch(
   issue_key: &str,
   create_if_missing: bool,
   parent_option: Option<&str>,
+  jira_parser: Option<&JiraTicketParser>,
 ) -> Result<()> {
   tracing::info!("Looking for branch associated with Jira issue: {}", issue_key);
 
@@ -275,7 +316,7 @@ fn handle_jira_switch(
   // No existing association found
   if create_if_missing {
     print_info("No associated branch found. Creating new branch from Jira issue...");
-    create_branch_from_jira_issue(jira, repo_path, issue_key, parent_option)
+    create_branch_from_jira_issue(jira, repo_path, issue_key, parent_option, jira_parser)
   } else {
     print_warning(&format!(
       "No branch found for Jira issue {issue_key}. Use --create to create a new branch.",
@@ -291,6 +332,7 @@ fn handle_github_pr_switch(
   pr_number: u32,
   create_if_missing: bool,
   parent_option: Option<&str>,
+  jira_parser: Option<&JiraTicketParser>,
 ) -> Result<()> {
   tracing::info!("Looking for branch associated with GitHub PR: #{}", pr_number);
 
@@ -311,7 +353,7 @@ fn handle_github_pr_switch(
   // No existing association found
   if create_if_missing {
     print_info("No associated branch found. Creating new branch from GitHub PR...");
-    create_branch_from_github_pr(gh, repo_path, pr_number, parent_option)
+    create_branch_from_github_pr(gh, repo_path, pr_number, parent_option, jira_parser)
   } else {
     print_warning(&format!(
       "No branch found for GitHub PR #{pr_number}. Use --create to create a new branch.",
@@ -326,6 +368,7 @@ fn handle_branch_switch(
   branch_name: &str,
   create_if_missing: bool,
   parent_option: Option<&str>,
+  jira_parser: Option<&JiraTicketParser>,
 ) -> Result<()> {
   let repo = Git2Repository::open(repo_path)?;
 
@@ -340,7 +383,7 @@ fn handle_branch_switch(
     print_info(&format!("Branch '{branch_name}' doesn't exist. Creating it...",));
 
     // Resolve parent branch
-    let parent_branch = resolve_parent_branch(repo_path, parent_option)?;
+    let parent_branch = resolve_parent_branch(repo_path, parent_option, jira_parser)?;
 
     create_and_switch_to_branch(repo_path, branch_name, parent_branch.as_deref())
   } else {
@@ -482,6 +525,7 @@ fn create_branch_from_jira_issue(
   repo_path: &std::path::Path,
   issue_key: &str,
   parent_option: Option<&str>,
+  jira_parser: Option<&JiraTicketParser>,
 ) -> Result<()> {
   let rt = Runtime::new().context("Failed to create async runtime")?;
   rt.block_on(async {
@@ -516,7 +560,7 @@ fn create_branch_from_jira_issue(
     print_info(&format!("Creating branch: {branch_name}",));
 
     // Resolve parent branch
-    let parent_branch = resolve_parent_branch(repo_path, parent_option)?;
+    let parent_branch = resolve_parent_branch(repo_path, parent_option, jira_parser)?;
 
     // Create and switch to the branch
     create_and_switch_to_branch(repo_path, &branch_name, parent_branch.as_deref())?;
@@ -537,6 +581,7 @@ fn create_branch_from_github_pr(
   repo_path: &Path,
   pr_number: u32,
   parent_option: Option<&str>,
+  jira_parser: Option<&JiraTicketParser>,
 ) -> Result<()> {
   let rt = Runtime::new().context("Failed to create async runtime")?;
   rt.block_on(async {
@@ -565,7 +610,7 @@ fn create_branch_from_github_pr(
     print_info(&format!("Creating branch: {branch_name}",));
 
     // Resolve parent branch
-    let parent_branch = resolve_parent_branch(repo_path, parent_option)?;
+    let parent_branch = resolve_parent_branch(repo_path, parent_option, jira_parser)?;
 
     // Create and switch to the branch
     create_and_switch_to_branch(repo_path, &branch_name, parent_branch.as_deref())?;
@@ -628,14 +673,18 @@ mod tests {
 
   #[test]
   fn test_parse_jira_issue_key() {
-    assert_eq!(parse_jira_issue_key("PROJ-123"), Some("PROJ-123".to_string()));
-    assert_eq!(parse_jira_issue_key("ABC-456"), Some("ABC-456".to_string()));
+    use twig_core::jira_parser::{JiraParsingConfig, JiraTicketParser};
+
+    let parser = JiraTicketParser::new(JiraParsingConfig::default());
+
+    assert_eq!(parse_jira_issue_key(&parser, "PROJ-123"), Some("PROJ-123".to_string()));
+    assert_eq!(parse_jira_issue_key(&parser, "ABC-456"), Some("ABC-456".to_string()));
     assert_eq!(
-      parse_jira_issue_key("LONGPROJECT-999"),
+      parse_jira_issue_key(&parser, "LONGPROJECT-999"),
       Some("LONGPROJECT-999".to_string())
     );
-    assert_eq!(parse_jira_issue_key("PROJ-"), None); // no number
-    assert_eq!(parse_jira_issue_key("123-PROJ"), None); // wrong order
+    assert_eq!(parse_jira_issue_key(&parser, "PROJ-"), None); // no number
+    assert_eq!(parse_jira_issue_key(&parser, "123-PROJ"), None); // wrong order
   }
 
   #[test]
@@ -662,42 +711,48 @@ mod tests {
 
   #[test]
   fn test_detect_input_type() {
+    use twig_core::jira_parser::{JiraParsingConfig, JiraTicketParser};
+
+    let parser = JiraTicketParser::new(JiraParsingConfig::default());
+
     // Jira issue keys
-    if let InputType::JiraIssueKey(key) = detect_input_type("PROJ-123") {
+    if let InputType::JiraIssueKey(key) = detect_input_type(Some(&parser), "PROJ-123") {
       assert_eq!(key, "PROJ-123");
     } else {
       panic!("Expected JiraIssueKey");
     }
 
     // Jira URLs
-    if let InputType::JiraIssueUrl(key) = detect_input_type("https://company.atlassian.net/browse/PROJ-123") {
+    if let InputType::JiraIssueUrl(key) =
+      detect_input_type(Some(&parser), "https://company.atlassian.net/browse/PROJ-123")
+    {
       assert_eq!(key, "PROJ-123");
     } else {
       panic!("Expected JiraIssueUrl");
     }
 
     // GitHub PR IDs
-    if let InputType::GitHubPrId(pr) = detect_input_type("123") {
+    if let InputType::GitHubPrId(pr) = detect_input_type(Some(&parser), "123") {
       assert_eq!(pr, 123);
     } else {
       panic!("Expected GitHubPrId");
     }
 
-    if let InputType::GitHubPrId(pr) = detect_input_type("PR#123") {
+    if let InputType::GitHubPrId(pr) = detect_input_type(Some(&parser), "PR#123") {
       assert_eq!(pr, 123);
     } else {
       panic!("Expected GitHubPrId");
     }
 
     // GitHub PR URLs
-    if let InputType::GitHubPrUrl(pr) = detect_input_type("https://github.com/owner/repo/pull/123") {
+    if let InputType::GitHubPrUrl(pr) = detect_input_type(Some(&parser), "https://github.com/owner/repo/pull/123") {
       assert_eq!(pr, 123);
     } else {
       panic!("Expected GitHubPrUrl");
     }
 
     // Branch names
-    if let InputType::BranchName(name) = detect_input_type("feature/my-branch") {
+    if let InputType::BranchName(name) = detect_input_type(Some(&parser), "feature/my-branch") {
       assert_eq!(name, "feature/my-branch");
     } else {
       panic!("Expected BranchName");
