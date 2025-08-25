@@ -55,7 +55,7 @@ chrono = { version = "0.4", features = ["serde"] }
 directories = "6.0"
 git2 = { version = "0.20", features = ["https"] }
 open = "5.3"
-regex = "1.10"
+regex = "1.11"
 thiserror = "2"
 
 # CLI and UI dependencies
@@ -95,7 +95,7 @@ wincredentials = "0.2"
 # Testing dependencies
 insta = "1.43"
 tempfile = "3.8"
-wiremock = "0.6.4"
+wiremock = "0.6.5"
 
 [target.'cfg(windows)'.dependencies]
 # Platform-specific git2 features for Windows
