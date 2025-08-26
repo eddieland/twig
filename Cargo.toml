@@ -94,7 +94,7 @@ wincredentials = "0.2"
 
 # Testing dependencies
 insta = "1.43"
-tempfile = "3.8"
+tempfile = "3.21"
 wiremock = "0.6.5"
 
 [target.'cfg(windows)'.dependencies]
