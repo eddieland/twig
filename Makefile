@@ -134,7 +134,8 @@ vscode-package: ## Package VS Code extension
 
 .PHONY: install-dev-tools
 install-dev-tools: ## Install development tools
-	rustup show # Ensures rust-toolchain.toml is applied
+  # Ensures rust-toolchain.toml is applied
+	rustup show 
 	cargo install cargo-watch
 	cargo install cargo-outdated
 	cargo install cargo-nextest

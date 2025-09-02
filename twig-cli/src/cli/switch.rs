@@ -304,7 +304,7 @@ fn handle_jira_switch(
   if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(issue_key) {
     let branch_name = &branch_issue.branch;
     tracing::info!("Found associated branch: {}", branch_name);
-    
+
     // Verify the branch actually exists in Git before trying to switch to it
     let repo = Git2Repository::open(repo_path)?;
     if repo.find_branch(branch_name, git2::BranchType::Local).is_ok() {
@@ -326,7 +326,7 @@ fn handle_jira_switch(
     if repo_state.get_branch_issue_by_jira(issue_key).is_none() {
       print_info("No associated branch found. Creating new branch from Jira issue...");
     }
-    create_branch_from_jira_issue(jira, repo_path, issue_key, parent_option, jira_parser)
+    create_or_switch_to_jira_branch(jira, repo_path, issue_key, parent_option, jira_parser)
   } else {
     print_warning(&format!(
       "No branch found for Jira issue {issue_key}. Use --create to create a new branch.",
@@ -474,37 +474,33 @@ fn switch_to_branch(repo_path: &std::path::Path, branch_name: &str) -> Result<()
   if has_uncommitted_changes {
     // Try to checkout with merge strategy to preserve uncommitted changes
     let mut checkout_builder = git2::build::CheckoutBuilder::new();
-    checkout_builder
-      .allow_conflicts(true)
-      .conflict_style_merge(true);
+    checkout_builder.allow_conflicts(true).conflict_style_merge(true);
 
     match repo.checkout_tree(target_commit.as_object(), Some(&mut checkout_builder)) {
       Ok(()) => {
         // Checkout succeeded, now update HEAD and index
         repo.set_head(&format!("refs/heads/{branch_name}"))?;
-        
+
         // Reset index to match the target commit
         repo.reset(target_commit.as_object(), git2::ResetType::Mixed, None)?;
-        
+
         print_success(&format!("Switched to branch '{branch_name}'"));
         Ok(())
       }
-      Err(e) => {
-        Err(anyhow::anyhow!(
-          "Cannot switch to branch '{branch_name}' due to uncommitted changes that would be overwritten.\n\n\
+      Err(e) => Err(anyhow::anyhow!(
+        "Cannot switch to branch '{branch_name}' due to uncommitted changes that would be overwritten.\n\n\
            Error: {}\n\n\
            Please commit or stash your changes first, or use 'git checkout --force' if you want to discard them.",
-          e
-        ))
-      }
+        e
+      )),
     }
   } else {
     // No uncommitted changes, safe to switch
     repo.set_head(&format!("refs/heads/{branch_name}"))?;
-    
+
     // Reset both index and working tree to match the target commit
     repo.reset(target_commit.as_object(), git2::ResetType::Hard, None)?;
-    
+
     print_success(&format!("Switched to branch '{branch_name}'"));
     Ok(())
   }
@@ -560,8 +556,8 @@ fn add_branch_dependency(repo_path: &std::path::Path, child: &str, parent: &str)
   }
 }
 
-/// Create a branch from a Jira issue
-fn create_branch_from_jira_issue(
+/// Create a branch from a Jira issue, or switch to it if it already exists
+fn create_or_switch_to_jira_branch(
   jira_client: &JiraClient,
   repo_path: &std::path::Path,
   issue_key: &str,
@@ -597,6 +593,19 @@ fn create_branch_from_jira_issue(
 
     // Create the branch name in the format "PROJ-123/add-feature"
     let branch_name = format!("{issue_key}/{sanitized_summary}");
+
+    // Check if the branch already exists in Git
+    let repo = Git2Repository::open(repo_path)?;
+    if repo.find_branch(&branch_name, git2::BranchType::Local).is_ok() {
+      // Branch exists, just switch to it and store the association
+      print_info(&format!("Found existing branch: {branch_name}"));
+      switch_to_branch(repo_path, &branch_name)?;
+      store_jira_association(repo_path, &branch_name, issue_key)?;
+      print_success(&format!(
+        "Switched to existing branch '{branch_name}' and associated with Jira issue {issue_key}",
+      ));
+      return Ok(());
+    }
 
     print_info(&format!("Creating branch: {branch_name}",));
 

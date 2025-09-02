@@ -55,6 +55,17 @@ pub fn handle_rebase_command(args: RebaseArgs) -> Result<()> {
 
 /// Rebase current branch on its parent(s)
 fn rebase_upstream(repo_path: &Path, force: bool, show_graph: bool, autostash: bool) -> Result<()> {
+  // Check if there's already a rebase in progress
+  if is_rebase_in_progress(repo_path) {
+    print_warning("A rebase is already in progress.");
+    print_info("You can:");
+    print_info("  • Continue the rebase: git rebase --continue");
+    print_info("  • Abort the rebase: git rebase --abort");
+    print_info("  • Skip the current commit: git rebase --skip");
+    print_info("  • Or run 'twig rebase' again after resolving the current rebase");
+    return Ok(());
+  }
+
   // Open the repository
   let repo =
     Git2Repository::open(repo_path).context(format!("Failed to open git repository at {}", repo_path.display()))?;
@@ -164,10 +175,10 @@ fn rebase_upstream(repo_path: &Path, force: bool, show_graph: bool, autostash: b
             // Skip the current commit
             let skip_result = execute_git_command(repo_path, &["rebase", "--skip"])?;
             print_info(&skip_result);
-            
+
             // Clean up any unmerged entries in the index after skip
             cleanup_index_after_skip(repo_path)?;
-            
+
             print_info(&format!(
               "Skipped commit during rebase of {current_branch_name} onto {parent}",
             ));
@@ -364,7 +375,24 @@ fn handle_rebase_conflict(_repo_path: &Path, _branch: &str) -> Result<ConflictRe
   }
 }
 
-/// Execute a git command and handle output
+/// Check if a rebase is currently in progress
+fn is_rebase_in_progress(repo_path: &Path) -> bool {
+  // Check for the existence of .git/rebase-merge directory
+  let rebase_merge_dir = repo_path.join(".git").join("rebase-merge");
+  if rebase_merge_dir.exists() {
+    return true;
+  }
+
+  // Check for the existence of .git/rebase-apply directory (used by git am and some rebase operations)
+  let rebase_apply_dir = repo_path.join(".git").join("rebase-apply");
+  if rebase_apply_dir.exists() {
+    return true;
+  }
+
+  false
+}
+
+/// Execute a git command and return the output as a string
 fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<String> {
   let output = Command::new(consts::GIT_EXECUTABLE)
     .args(args)
@@ -395,18 +423,17 @@ fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<String> {
 /// This removes any unmerged entries that might be left in the index
 fn cleanup_index_after_skip(repo_path: &Path) -> Result<()> {
   // Open the repository using git2
-  let repo = Git2Repository::open(repo_path)
-    .context("Failed to open repository for index cleanup")?;
-  
+  let repo = Git2Repository::open(repo_path).context("Failed to open repository for index cleanup")?;
+
   // Get the current HEAD commit
   let head = repo.head()?;
   let head_commit = head.peel_to_commit()?;
   let head_tree = head_commit.tree()?;
-  
+
   // Reset the index to match the HEAD tree, clearing any unmerged entries
   let mut index = repo.index()?;
   index.read_tree(&head_tree)?;
   index.write()?;
-  
+
   Ok(())
 }

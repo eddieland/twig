@@ -33,12 +33,14 @@ pub enum BranchSubcommands {
   RemoveDep(RemoveDepCommand),
 
   /// Reparent all orphaned branches to a specific parent
-  #[command(long_about = "Add all orphaned branches as children of the specified parent branch.\n\n\
+  #[command(
+    long_about = "Add all orphaned branches as children of the specified parent branch.\n\n\
                      This command finds all branches that have no dependencies defined and\n\
                      creates parent-child relationships with the specified parent branch.\n\
                      This is useful for organizing branches that were created without\n\
                      explicit dependencies. Use --dry-run to see which branches would be\n\
-                     affected without making actual changes.")]
+                     affected without making actual changes."
+  )]
   Reparent(ReparentCommand),
 
   /// Root branch management
@@ -246,9 +248,7 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
 
       Ok(())
     }
-    BranchSubcommands::Reparent(cmd) => {
-      handle_reparent_command(cmd)
-    }
+    BranchSubcommands::Reparent(cmd) => handle_reparent_command(cmd),
     BranchSubcommands::Root(root_cmd) => match root_cmd.subcommand {
       RootSubcommands::Add(cmd) => {
         // Get the repository path
@@ -332,9 +332,7 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
         Ok(())
       }
     },
-    BranchSubcommands::Clear(cmd) => {
-      handle_clear_command(cmd)
-    }
+    BranchSubcommands::Clear(cmd) => handle_clear_command(cmd),
   }
 }
 
@@ -343,9 +341,10 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
 /// This function finds all orphaned branches (branches with no dependencies)
 /// and creates parent-child relationships with the specified parent branch.
 fn handle_reparent_command(cmd: ReparentCommand) -> Result<()> {
-  use git2::Repository as Git2Repository;
   use std::io::{self, Write};
-  
+
+  use git2::Repository as Git2Repository;
+
   // Get the repository path
   let repo_path = if let Some(repo_arg) = cmd.repo {
     crate::utils::resolve_repository_path(Some(&repo_arg))?
@@ -354,18 +353,18 @@ fn handle_reparent_command(cmd: ReparentCommand) -> Result<()> {
   };
 
   // Open the repository to get branch information
-  let repo = Git2Repository::open(&repo_path)
-    .context(format!("Failed to open git repository at {}", repo_path.display()))?;
+  let repo =
+    Git2Repository::open(&repo_path).context(format!("Failed to open git repository at {}", repo_path.display()))?;
 
   // Load repository state
   let mut repo_state = RepoState::load(&repo_path).unwrap_or_default();
 
   // Create the user-defined dependency resolver to identify orphaned branches
   let resolver = crate::user_defined_dependency_resolver::UserDefinedDependencyResolver;
-  
+
   // Build the branch node tree structure
   let branch_nodes = resolver.resolve_user_dependencies(&repo, &repo_state)?;
-  
+
   if branch_nodes.is_empty() {
     print_warning("No local branches found.");
     return Ok(());
@@ -373,7 +372,7 @@ fn handle_reparent_command(cmd: ReparentCommand) -> Result<()> {
 
   // Get orphaned branches
   let (_, orphaned_branches) = resolver.build_tree_from_user_dependencies(&branch_nodes, &repo_state);
-  
+
   if orphaned_branches.is_empty() {
     print_info("No orphaned branches found. All branches already have dependencies or are root branches.");
     return Ok(());
@@ -398,12 +397,15 @@ fn handle_reparent_command(cmd: ReparentCommand) -> Result<()> {
 
   // Confirmation prompt (unless --force is specified)
   if !cmd.force {
-    print!("\nProceed with reparenting {} branch(es)? [y/N]: ", orphaned_branches.len());
+    print!(
+      "\nProceed with reparenting {} branch(es)? [y/N]: ",
+      orphaned_branches.len()
+    );
     io::stdout().flush()?;
-    
+
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
-    
+
     if !matches!(input.trim().to_lowercase().as_str(), "y" | "yes") {
       print_info("Reparent operation cancelled.");
       return Ok(());
@@ -428,7 +430,10 @@ fn handle_reparent_command(cmd: ReparentCommand) -> Result<()> {
   // Save the state if any changes were made
   if changes_made > 0 {
     repo_state.save(&repo_path)?;
-    print_success(&format!("Successfully reparented {} branch(es) to '{}'", changes_made, cmd.parent));
+    print_success(&format!(
+      "Successfully reparented {} branch(es) to '{}'",
+      changes_made, cmd.parent
+    ));
   }
 
   // Report any failures
@@ -444,11 +449,12 @@ fn handle_reparent_command(cmd: ReparentCommand) -> Result<()> {
 
 /// Handle the clear command
 ///
-/// This function removes all branch dependencies and root branch configurations,
-/// effectively resetting the dependency structure and making all branches orphaned.
+/// This function removes all branch dependencies and root branch
+/// configurations, effectively resetting the dependency structure and making
+/// all branches orphaned.
 fn handle_clear_command(cmd: ClearCommand) -> Result<()> {
   use std::io::{self, Write};
-  
+
   // Get the repository path
   let repo_path = if let Some(repo_arg) = cmd.repo {
     crate::utils::resolve_repository_path(Some(&repo_arg))?
@@ -497,10 +503,10 @@ fn handle_clear_command(cmd: ClearCommand) -> Result<()> {
     print_warning("This will completely reset your twig dependency structure!");
     print!("Continue and clear all dependencies and root branches? [y/N]: ");
     io::stdout().flush()?;
-    
+
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
-    
+
     if !matches!(input.trim().to_lowercase().as_str(), "y" | "yes") {
       print_info("Clear operation cancelled.");
       return Ok(());
@@ -510,10 +516,10 @@ fn handle_clear_command(cmd: ClearCommand) -> Result<()> {
   // Clear all dependencies and root branches
   let dependencies_cleared = repo_state.dependencies.len();
   let roots_cleared = repo_state.root_branches.len();
-  
+
   // Clear dependencies by removing all entries
   repo_state.dependencies.clear();
-  
+
   // Clear root branches by removing all entries
   repo_state.root_branches.clear();
 

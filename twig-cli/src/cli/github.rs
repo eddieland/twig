@@ -6,20 +6,21 @@
 
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
-use chrono;
 use directories::BaseDirs;
 use git2::Repository as Git2Repository;
 use owo_colors::OwoColorize;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
+use twig_core::git::current_branch;
 use twig_core::output::{
   format_check_status, format_command, format_pr_review_status, print_error, print_info, print_success, print_warning,
 };
 use twig_core::state::BranchMetadata;
-use twig_core::{RepoState, detect_repository, detect_repository_from_path, get_current_branch_github_pr, open_url_in_browser};
-use twig_core::git::current_branch;
-use twig_gh::{GitHubIssue, PullRequestStatus};
+use twig_core::{
+  RepoState, detect_repository, detect_repository_from_path, get_current_branch_github_pr, open_url_in_browser,
+};
+use twig_gh::{GitHubIssue, PullRequestStatus, CreatePullRequestParams};
 
 use crate::clients;
 
@@ -1071,8 +1072,7 @@ fn handle_create_pr_command(cmd: CreatePrCommand) -> Result<()> {
   };
 
   // Open the repository
-  let repo = Git2Repository::open(&repo_path)
-    .context("Failed to open git repository")?;
+  let repo = Git2Repository::open(&repo_path).context("Failed to open git repository")?;
 
   // Get current branch name
   let current_branch = match current_branch() {
@@ -1086,34 +1086,41 @@ fn handle_create_pr_command(cmd: CreatePrCommand) -> Result<()> {
       return Ok(());
     }
   };
-  
+
   print_info(&format!("Creating PR for branch: {}", current_branch));
 
-  // Determine base branch
+  // Determine base branch - be more conservative about when to specify one
   let base_branch = if let Some(base) = &cmd.base {
     base.clone()
   } else {
-    // Try to get parent from dependencies
+    // Try to get parent from dependencies first
     let repo_state = RepoState::load(&repo_path).unwrap_or_default();
     let parents = repo_state.get_dependency_parents(&current_branch);
-    
+
     if let Some(parent) = parents.first() {
+      print_info(&format!("Using parent dependency as base: {}", parent));
       parent.to_string()
     } else {
-      // Get repository's default branch
-      match repo.head() {
-        Ok(head) => {
-          if let Some(default_branch) = head.shorthand() {
-            if default_branch != current_branch {
-              default_branch.to_string()
-            } else {
-              "main".to_string() // Fallback
-            }
-          } else {
-            "main".to_string()
-          }
+      // No explicit base and no parent dependency
+      // Check if we're on the repository's default branch by looking at origin/HEAD
+      if let Some(default_branch) = get_repository_default_branch(&repo) {
+        if default_branch == current_branch {
+          print_error(&format!(
+            "Cannot create PR: current branch '{}' is the repository's default branch",
+            current_branch
+          ));
+          print_info("Specify a different base branch with --base");
+          return Ok(());
         }
-        Err(_) => "main".to_string(),
+
+        // Use the repository's actual default branch
+        print_info(&format!("Using repository default branch as base: {}", default_branch));
+        default_branch
+      } else {
+        // Can't determine default branch, use common fallback
+        print_warning("Could not determine repository default branch, using 'main' as base");
+        print_info("Specify a base branch with --base if 'main' is not correct");
+        "main".to_string()
       }
     }
   };
@@ -1152,19 +1159,24 @@ fn handle_create_pr_command(cmd: CreatePrCommand) -> Result<()> {
   };
 
   // Create the pull request
-  match rt.block_on(client.create_pull_request(
-    &owner,
-    &repo_name,
-    &title,
-    cmd.body.as_deref(),
-    &current_branch,
-    &base_branch,
-    Some(cmd.draft),
-  )) {
+  let params = CreatePullRequestParams {
+    owner: &owner,
+    repo: &repo_name,
+    title: &title,
+    body: cmd.body.as_deref(),
+    head: &current_branch,
+    base: &base_branch,
+    draft: Some(cmd.draft),
+  };
+
+  match rt.block_on(client.create_pull_request(params)) {
     Ok(pr) => {
-      print_success(&format!("Successfully created pull request #{}: {}", pr.number, pr.title));
+      print_success(&format!(
+        "Successfully created pull request #{}: {}",
+        pr.number, pr.title
+      ));
       print_info(&format!("URL: {}", pr.html_url));
-      
+
       // Link the PR to the current branch
       let mut repo_state = RepoState::load(&repo_path).unwrap_or_default();
       let metadata = BranchMetadata {
@@ -1181,11 +1193,10 @@ fn handle_create_pr_command(cmd: CreatePrCommand) -> Result<()> {
       }
 
       // Open in browser if requested
-      if cmd.open {
-        if let Err(e) = open_url_in_browser(&pr.html_url) {
+      if cmd.open
+        && let Err(e) = open_url_in_browser(&pr.html_url) {
           print_warning(&format!("Failed to open PR in browser: {e}"));
         }
-      }
 
       Ok(())
     }
@@ -1216,8 +1227,7 @@ fn handle_create_branch_from_issue_command(cmd: CreateBranchFromIssueCommand) ->
   };
 
   // Open the repository
-  let repo = Git2Repository::open(&repo_path)
-    .context("Failed to open git repository")?;
+  let repo = Git2Repository::open(&repo_path).context("Failed to open git repository")?;
 
   // Parse issue ID from input
   let issue_id = parse_github_issue_id(&cmd.issue_id_or_url)?;
@@ -1292,18 +1302,16 @@ fn handle_create_branch_from_issue_command(cmd: CreateBranchFromIssueCommand) ->
   match repo.branch(&branch_name, &base_commit, false) {
     Ok(_) => {
       print_success(&format!("Created branch: {}", branch_name));
-      
+
       // Set parent dependency if requested
       if cmd.set_parent {
         let mut repo_state = RepoState::load(&repo_path).unwrap_or_default();
         if let Err(e) = repo_state.add_dependency(branch_name.clone(), base_branch.clone()) {
           print_warning(&format!("Failed to set parent dependency: {e}"));
+        } else if let Err(e) = repo_state.save(&repo_path) {
+          print_warning(&format!("Failed to save dependency: {e}"));
         } else {
-          if let Err(e) = repo_state.save(&repo_path) {
-            print_warning(&format!("Failed to save dependency: {e}"));
-          } else {
-            print_info(&format!("Set {} as parent of {}", base_branch, branch_name));
-          }
+          print_info(&format!("Set {} as parent of {}", base_branch, branch_name));
         }
       }
 
@@ -1355,18 +1363,18 @@ fn parse_github_issue_id(input: &str) -> Result<u32> {
 
   // Try to parse from GitHub URL
   let url_regex = regex::Regex::new(r"github\.com/[^/]+/[^/]+/issues/(\d+)")?;
-  if let Some(captures) = url_regex.captures(input) {
-    if let Some(id_str) = captures.get(1) {
+  if let Some(captures) = url_regex.captures(input)
+    && let Some(id_str) = captures.get(1) {
       return Ok(id_str.as_str().parse()?);
     }
-  }
 
   Err(anyhow::anyhow!("Could not parse GitHub issue ID from: {}", input))
 }
 
 /// Generate a branch name from a GitHub issue
 fn generate_branch_name_from_issue(issue: &GitHubIssue) -> String {
-  let title = issue.title
+  let title = issue
+    .title
     .to_lowercase()
     .chars()
     .map(|c| if c.is_alphanumeric() || c == ' ' { c } else { ' ' })
@@ -1379,17 +1387,38 @@ fn generate_branch_name_from_issue(issue: &GitHubIssue) -> String {
   format!("issue-{}-{}", issue.number, title)
 }
 
+/// Get the repository's default branch by checking the remote HEAD
+fn get_repository_default_branch(repo: &Git2Repository) -> Option<String> {
+  // Try to get the default branch from origin/HEAD
+  if let Ok(reference) = repo.find_reference("refs/remotes/origin/HEAD")
+    && let Some(target) = reference.symbolic_target() {
+      // Extract branch name from refs/remotes/origin/branch_name
+      if let Some(branch_name) = target.strip_prefix("refs/remotes/origin/") {
+        return Some(branch_name.to_string());
+      }
+    }
+
+  // Fallback: try common default branch names
+  for default in &["main", "master", "develop"] {
+    if repo.find_branch(default, git2::BranchType::Local).is_ok() {
+      return Some(default.to_string());
+    }
+  }
+
+  None
+}
+
 /// Get repository owner and name from Git remote
 fn get_repo_owner_and_name(repo: &Git2Repository) -> Option<(String, String)> {
   let remote = repo.find_remote("origin").ok()?;
   let url = remote.url()?;
-  
+
   // Parse GitHub URL
   let github_regex = regex::Regex::new(r"github\.com[:/]([^/]+)/([^/.]+)").ok()?;
   let captures = github_regex.captures(url)?;
-  
+
   let owner = captures.get(1)?.as_str().to_string();
   let repo_name = captures.get(2)?.as_str().to_string();
-  
+
   Some((owner, repo_name))
 }

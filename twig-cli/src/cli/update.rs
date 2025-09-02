@@ -1,7 +1,8 @@
 //! # Update Command
 //!
 //! Implementation of the update command that switches to the root branch,
-//! fetches from origin, pulls the latest commits, and runs the twig cascade command.
+//! fetches from origin, pulls the latest commits, and runs the twig cascade
+//! command.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -50,12 +51,12 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
 
   // Check for uncommitted changes and stash if autostash is enabled
   let mut stash_created = false;
-  if args.autostash {
-    if has_uncommitted_changes(&repo_path)? {
+  if args.autostash
+    && has_uncommitted_changes(&repo_path)? {
       print_info("💾 Stashing uncommitted changes...");
       let stash_result = Command::new("git")
         .current_dir(&repo_path)
-        .args(&["stash", "push", "-m", "twig update autostash"])
+        .args(["stash", "push", "-m", "twig update autostash"])
         .output()
         .context("Failed to execute git stash")?;
 
@@ -68,7 +69,6 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
         stash_created = true;
       }
     }
-  }
 
   // Load repository state to find root branches
   let repo_state = RepoState::load(&repo_path).unwrap_or_default();
@@ -83,12 +83,15 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
     } else {
       root_branches[0].clone()
     };
-    
+
     // Verify the root branch actually exists
     if branch_exists(&repo_path, &candidate)? {
       candidate
     } else {
-      print_warning(&format!("Configured root branch '{}' does not exist, falling back to default", candidate));
+      print_warning(&format!(
+        "Configured root branch '{}' does not exist, falling back to default",
+        candidate
+      ));
       // Fall back to common default branches
       if branch_exists(&repo_path, "main")? {
         "main".to_string()
@@ -121,13 +124,16 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
   // Switch to the root branch
   let switch_result = Command::new("git")
     .current_dir(&repo_path)
-    .args(&["checkout", &target_branch])
+    .args(["checkout", &target_branch])
     .output()
     .context("Failed to execute git checkout")?;
 
   if !switch_result.status.success() {
     let error_output = String::from_utf8_lossy(&switch_result.stderr);
-    print_error(&format!("Failed to switch to branch '{}': {}", target_branch, error_output));
+    print_error(&format!(
+      "Failed to switch to branch '{}': {}",
+      target_branch, error_output
+    ));
     return Err(anyhow::anyhow!("Git checkout failed"));
   }
 
@@ -137,7 +143,7 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
   print_info("🌐 Fetching from origin...");
   let fetch_result = Command::new("git")
     .current_dir(&repo_path)
-    .args(&["fetch", "origin"])
+    .args(["fetch", "origin"])
     .output()
     .context("Failed to execute git fetch")?;
 
@@ -152,7 +158,7 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
   print_info("⬇️  Pulling latest commits...");
   let pull_result = Command::new("git")
     .current_dir(&repo_path)
-    .args(&["pull", "origin", &target_branch])
+    .args(["pull", "origin", &target_branch])
     .output()
     .context("Failed to execute git pull")?;
 
@@ -176,7 +182,7 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
   // Run cascade command if not disabled
   if !args.no_cascade {
     print_info("🌊 Running cascade to update dependent branches...");
-    
+
     let cascade_args = CascadeArgs {
       max_depth: None,
       force: args.force_cascade,
@@ -199,7 +205,7 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
     print_info("📤 Restoring stashed changes...");
     let pop_result = Command::new("git")
       .current_dir(&repo_path)
-      .args(&["stash", "pop"])
+      .args(["stash", "pop"])
       .output()
       .context("Failed to execute git stash pop")?;
 
@@ -220,7 +226,12 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
 fn branch_exists(repo_path: &PathBuf, branch_name: &str) -> Result<bool> {
   let result = Command::new("git")
     .current_dir(repo_path)
-    .args(&["show-ref", "--verify", "--quiet", &format!("refs/heads/{}", branch_name)])
+    .args([
+      "show-ref",
+      "--verify",
+      "--quiet",
+      &format!("refs/heads/{}", branch_name),
+    ])
     .output()
     .context("Failed to check if branch exists")?;
 
@@ -231,7 +242,7 @@ fn branch_exists(repo_path: &PathBuf, branch_name: &str) -> Result<bool> {
 fn has_uncommitted_changes(repo_path: &PathBuf) -> Result<bool> {
   let result = Command::new("git")
     .current_dir(repo_path)
-    .args(&["diff-index", "--quiet", "HEAD", "--"])
+    .args(["diff-index", "--quiet", "HEAD", "--"])
     .output()
     .context("Failed to check for uncommitted changes")?;
 
@@ -241,25 +252,27 @@ fn has_uncommitted_changes(repo_path: &PathBuf) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
   use std::fs;
-  use tempfile::TempDir;
+
   use git2::Repository;
+  use tempfile::TempDir;
+
+  use super::*;
 
   fn create_test_repo() -> (TempDir, PathBuf) {
     let temp_dir = TempDir::new().unwrap();
     let repo_path = temp_dir.path().to_path_buf();
-    
+
     // Initialize git repository
     Repository::init(&repo_path).unwrap();
-    
+
     // Configure git user (required for commits)
     Command::new("git")
       .current_dir(&repo_path)
       .args(&["config", "user.name", "Test User"])
       .output()
       .unwrap();
-    
+
     Command::new("git")
       .current_dir(&repo_path)
       .args(&["config", "user.email", "test@example.com"])
@@ -290,7 +303,7 @@ mod tests {
     // But let's check for master first as it might be the default
     let has_main = branch_exists(&repo_path, "main").unwrap();
     let has_master = branch_exists(&repo_path, "master").unwrap();
-    
+
     // At least one should exist
     assert!(has_main || has_master);
 

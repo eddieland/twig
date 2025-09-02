@@ -3,10 +3,11 @@
 //! Implementation of the tidy command for cleaning up branches and maintaining
 //! the twig tree structure.
 
+use std::collections::HashSet;
+
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use git2::Repository as Git2Repository;
-use std::collections::HashSet;
 use twig_core::detect_repository;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::state::RepoState;
@@ -39,7 +40,8 @@ pub struct TidyArgs {
 /// Subcommands for the tidy command
 #[derive(Subcommand)]
 pub enum TidyCommand {
-  /// Clean up branches with no unique commits and no children (default behavior)
+  /// Clean up branches with no unique commits and no children (default
+  /// behavior)
   #[command(
     long_about = "Clean up branches that have no unique commits compared to their parent\n\
                 and have no child dependencies.\n\n\
@@ -158,7 +160,7 @@ fn handle_clean_command(clean: CleanArgs) -> Result<()> {
 
     // Find the parent branch
     let parent_branch = find_parent_branch(&repo_state, &repo, &branch_name)?;
-    
+
     if let Some(parent) = parent_branch {
       // Check if branch has unique commits compared to parent
       if !has_unique_commits(&repo, &branch_name, &parent)? {
@@ -189,10 +191,10 @@ fn handle_clean_command(clean: CleanArgs) -> Result<()> {
     print!("Continue? (y/N): ");
     use std::io::{self, Write};
     io::stdout().flush()?;
-    
+
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
-    
+
     if !input.trim().to_lowercase().starts_with('y') {
       print_info("Operation cancelled.");
       return Ok(());
@@ -202,13 +204,13 @@ fn handle_clean_command(clean: CleanArgs) -> Result<()> {
   // Delete the branches and clean up configuration
   let mut deleted_count = 0;
   let mut repo_state = repo_state; // Make it mutable
-  
+
   for branch_name in branches_to_delete {
     match delete_branch(&repo, &branch_name) {
       Ok(()) => {
         // Remove branch from twig configuration
         cleanup_branch_from_config(&mut repo_state, &branch_name);
-        
+
         print_success(&format!("Deleted branch: {}", branch_name));
         deleted_count += 1;
       }
@@ -234,7 +236,8 @@ fn handle_clean_command(clean: CleanArgs) -> Result<()> {
 /// Handle the prune subcommand
 ///
 /// This function finds branches that are referenced in the twig configuration
-/// but no longer exist in the Git repository, then removes these stale references.
+/// but no longer exist in the Git repository, then removes these stale
+/// references.
 fn handle_prune_command(prune: PruneArgs) -> Result<()> {
   let repo_path = detect_repository().context("Not in a git repository")?;
   let repo = Git2Repository::open(&repo_path)?;
@@ -246,9 +249,9 @@ fn handle_prune_command(prune: PruneArgs) -> Result<()> {
   let existing_branches: HashSet<String> = repo
     .branches(Some(git2::BranchType::Local))?
     .filter_map(|branch_result| {
-      branch_result.ok().and_then(|(branch, _)| {
-        branch.name().ok().flatten().map(|name| name.to_string())
-      })
+      branch_result
+        .ok()
+        .and_then(|(branch, _)| branch.name().ok().flatten().map(|name| name.to_string()))
     })
     .collect();
 
@@ -280,7 +283,7 @@ fn handle_prune_command(prune: PruneArgs) -> Result<()> {
   }
 
   // Check metadata for non-existent branches
-  for (branch_name, _) in &repo_state.branches {
+  for branch_name in repo_state.branches.keys() {
     if !existing_branches.contains(branch_name) {
       metadata_to_remove.push(branch_name.clone());
       branches_to_remove.push(branch_name.clone());
@@ -297,19 +300,31 @@ fn handle_prune_command(prune: PruneArgs) -> Result<()> {
   }
 
   // Show what would be removed
-  print_info(&format!("Found {} deleted branches to remove from twig configuration:", branches_to_remove.len()));
+  print_info(&format!(
+    "Found {} deleted branches to remove from twig configuration:",
+    branches_to_remove.len()
+  ));
   for branch in &branches_to_remove {
     println!("  • {}", branch);
   }
 
   if !dependencies_to_remove.is_empty() {
-    print_info(&format!("  {} dependencies will be removed", dependencies_to_remove.len()));
+    print_info(&format!(
+      "  {} dependencies will be removed",
+      dependencies_to_remove.len()
+    ));
   }
   if !roots_to_remove.is_empty() {
-    print_info(&format!("  {} root branch entries will be removed", roots_to_remove.len()));
+    print_info(&format!(
+      "  {} root branch entries will be removed",
+      roots_to_remove.len()
+    ));
   }
   if !metadata_to_remove.is_empty() {
-    print_info(&format!("  {} metadata entries will be removed", metadata_to_remove.len()));
+    print_info(&format!(
+      "  {} metadata entries will be removed",
+      metadata_to_remove.len()
+    ));
   }
 
   if prune.dry_run {
@@ -323,10 +338,10 @@ fn handle_prune_command(prune: PruneArgs) -> Result<()> {
     print!("Continue? (y/N): ");
     use std::io::{self, Write};
     io::stdout().flush()?;
-    
+
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
-    
+
     if !input.trim().to_lowercase().starts_with('y') {
       print_info("Operation cancelled.");
       return Ok(());
@@ -360,12 +375,15 @@ fn handle_prune_command(prune: PruneArgs) -> Result<()> {
   if removed_count > 0 {
     match repo_state.save(&repo_path) {
       Ok(()) => {
-        print_success(&format!("Prune complete: removed {} stale references from twig configuration.", removed_count));
+        print_success(&format!(
+          "Prune complete: removed {} stale references from twig configuration.",
+          removed_count
+        ));
         print_info("Twig configuration updated successfully.");
       }
       Err(e) => {
         print_error(&format!("Failed to save updated configuration: {}", e));
-        return Err(e.into());
+        return Err(e);
       }
     }
   } else {
@@ -387,15 +405,11 @@ fn is_current_branch(repo: &Git2Repository, branch_name: &str) -> Result<bool> {
 
 /// Check if a branch has child branches in the dependency tree
 fn has_child_branches(repo_state: &RepoState, branch_name: &str) -> bool {
-  repo_state.get_dependency_children(branch_name).len() > 0
+  !repo_state.get_dependency_children(branch_name).is_empty()
 }
 
 /// Find the parent branch for a given branch
-fn find_parent_branch(
-  repo_state: &RepoState,
-  repo: &Git2Repository,
-  branch_name: &str,
-) -> Result<Option<String>> {
+fn find_parent_branch(repo_state: &RepoState, repo: &Git2Repository, branch_name: &str) -> Result<Option<String>> {
   // First check if there's an explicit dependency
   let parents = repo_state.get_dependency_parents(branch_name);
   if let Some(parent) = parents.first() {
@@ -404,7 +418,7 @@ fn find_parent_branch(
 
   // Fall back to trying common parent branches
   let potential_parents = vec!["main", "master", "develop"];
-  
+
   for parent in potential_parents {
     if repo.find_branch(parent, git2::BranchType::Local).is_ok() {
       return Ok(Some(parent.to_string()));
@@ -415,11 +429,7 @@ fn find_parent_branch(
 }
 
 /// Check if a branch has unique commits compared to its parent
-fn has_unique_commits(
-  repo: &Git2Repository,
-  branch_name: &str,
-  parent_name: &str,
-) -> Result<bool> {
+fn has_unique_commits(repo: &Git2Repository, branch_name: &str, parent_name: &str) -> Result<bool> {
   let branch = repo.find_branch(branch_name, git2::BranchType::Local)?;
   let parent = repo.find_branch(parent_name, git2::BranchType::Local)?;
 
@@ -460,10 +470,10 @@ fn delete_branch(repo: &Git2Repository, branch_name: &str) -> Result<()> {
 fn cleanup_branch_from_config(repo_state: &mut RepoState, branch_name: &str) {
   // Remove all dependencies for this branch (both as child and parent)
   let removed_dependencies = repo_state.remove_all_dependencies_for_branch(branch_name);
-  
+
   // Remove the branch from root branches if it was marked as one
   let removed_from_roots = repo_state.remove_root(branch_name);
-  
+
   if removed_dependencies > 0 || removed_from_roots {
     print_info(&format!(
       "Cleaned up twig config for '{}': {} dependencies, {} root branch entries removed",

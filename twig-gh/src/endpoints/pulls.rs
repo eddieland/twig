@@ -21,6 +21,18 @@ impl Default for PaginationOptions {
   }
 }
 
+/// Parameters for creating a pull request
+#[derive(Debug, Clone)]
+pub struct CreatePullRequestParams<'a> {
+  pub owner: &'a str,
+  pub repo: &'a str,
+  pub title: &'a str,
+  pub body: Option<&'a str>,
+  pub head: &'a str,
+  pub base: &'a str,
+  pub draft: Option<bool>,
+}
+
 impl GitHubClient {
   /// List pull requests for a repository with pagination support
   #[instrument(skip(self), level = "debug")]
@@ -212,34 +224,25 @@ impl GitHubClient {
 
   /// Create a new pull request
   #[instrument(skip(self), level = "debug")]
-  pub async fn create_pull_request(
-    &self,
-    owner: &str,
-    repo: &str,
-    title: &str,
-    body: Option<&str>,
-    head: &str,
-    base: &str,
-    draft: Option<bool>,
-  ) -> Result<GitHubPullRequest> {
+  pub async fn create_pull_request(&self, params: CreatePullRequestParams<'_>) -> Result<GitHubPullRequest> {
     info!(
       "Creating pull request for {}/{}: {} -> {}",
-      owner, repo, head, base
+      params.owner, params.repo, params.head, params.base
     );
 
-    let url = format!("{}/repos/{}/{}/pulls", self.base_url, owner, repo);
+    let url = format!("{}/repos/{}/{}/pulls", self.base_url, params.owner, params.repo);
 
     let mut request_body = serde_json::json!({
-      "title": title,
-      "head": head,
-      "base": base
+      "title": params.title,
+      "head": params.head,
+      "base": params.base
     });
 
-    if let Some(body_text) = body {
+    if let Some(body_text) = params.body {
       request_body["body"] = serde_json::Value::String(body_text.to_string());
     }
 
-    if let Some(is_draft) = draft {
+    if let Some(is_draft) = params.draft {
       request_body["draft"] = serde_json::Value::Bool(is_draft);
     }
 
@@ -277,11 +280,9 @@ impl GitHubClient {
           error_text
         ))
       }
-      reqwest::StatusCode::FORBIDDEN => {
-        Err(anyhow::anyhow!(
-          "Pull request creation failed - insufficient permissions"
-        ))
-      }
+      reqwest::StatusCode::FORBIDDEN => Err(anyhow::anyhow!(
+        "Pull request creation failed - insufficient permissions"
+      )),
       _ => {
         let error_text = response.text().await.unwrap_or_default();
         Err(anyhow::anyhow!(

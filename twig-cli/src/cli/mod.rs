@@ -240,8 +240,7 @@ pub enum Commands {
   Sync(sync::SyncArgs),
 
   /// Clean up branches and manage twig tree configuration
-  #[command(
-    long_about = "Clean up branches and manage the twig tree configuration.\n\n\
+  #[command(long_about = "Clean up branches and manage the twig tree configuration.\n\n\
             Available subcommands:\n\
             • clean: Remove branches with no unique commits and no child dependencies\n\
             • prune: Remove deleted branches from twig configuration\n\n\
@@ -253,8 +252,7 @@ pub enum Commands {
             The 'prune' subcommand removes references to branches that:\n\
             • Are referenced in twig configuration but no longer exist in Git\n\
             • May have been deleted outside of twig (e.g., via 'git branch -d')\n\n\
-            Use --dry-run to preview changes before applying them."
-  )]
+            Use --dry-run to preview changes before applying them.")]
   Tidy(tidy::TidyArgs),
 
   /// Show your branch tree with user-defined dependencies
@@ -270,8 +268,7 @@ pub enum Commands {
   Tree(tree::TreeArgs),
 
   /// Update repository by switching to root branch, fetching, and pulling
-  #[command(
-    long_about = "Update the repository by performing a complete refresh workflow.\n\n\
+  #[command(long_about = "Update the repository by performing a complete refresh workflow.\n\n\
             This command performs the following operations in sequence:\n\
             1. Switch to the root branch (or main/master if no root branch is configured)\n\
             2. Fetch the latest changes from origin\n\
@@ -279,8 +276,7 @@ pub enum Commands {
             4. Run 'twig cascade' to update all dependent branches (unless --no-cascade is used)\n\n\
             This is useful for keeping your repository and all dependent branches up to date\n\
             with the latest changes from the remote repository. The cascade operation ensures\n\
-            that all your feature branches are rebased on the latest changes."
-  )]
+            that all your feature branches are rebased on the latest changes.")]
   #[command(alias = "up")]
   Update(update::UpdateArgs),
 

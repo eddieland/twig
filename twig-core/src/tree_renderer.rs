@@ -329,10 +329,12 @@ impl<'a> TreeRenderer<'a> {
           if self.no_color {
             format!("[+{}/-{}]", commit_info.ahead, commit_info.behind)
           } else {
-            format!("[{}{}{}]", 
+            format!(
+              "[{}{}{}]",
               format!("+{}", commit_info.ahead).green(),
               "/".dimmed(),
-              format!("-{}", commit_info.behind).red())
+              format!("-{}", commit_info.behind).red()
+            )
           }
         } else if commit_info.ahead > 0 {
           if self.no_color {
@@ -346,12 +348,10 @@ impl<'a> TreeRenderer<'a> {
           } else {
             format!("[{}]", format!("-{}", commit_info.behind).red())
           }
+        } else if self.no_color {
+          "[up-to-date]".to_string()
         } else {
-          if self.no_color {
-            "[up-to-date]".to_string()
-          } else {
-            "[up-to-date]".dimmed().to_string()
-          }
+          "[up-to-date]".dimmed().to_string()
         };
         line.push_str(&commit_display);
       }

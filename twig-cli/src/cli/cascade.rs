@@ -213,10 +213,10 @@ fn rebase_downstream(
               // Skip the current commit
               let skip_result = execute_git_command(repo_path, &["rebase", "--skip"])?;
               print_info(&skip_result);
-              
+
               // Clean up any unmerged entries in the index after skip
               cleanup_index_after_skip(repo_path)?;
-              
+
               print_info(&format!("Skipped commit during rebase of {branch} onto {parent}",));
             }
           }
@@ -559,19 +559,18 @@ fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<String> {
 /// This removes any unmerged entries that might be left in the index
 fn cleanup_index_after_skip(repo_path: &Path) -> Result<()> {
   // Open the repository using git2
-  let repo = Git2Repository::open(repo_path)
-    .context("Failed to open repository for index cleanup")?;
-  
+  let repo = Git2Repository::open(repo_path).context("Failed to open repository for index cleanup")?;
+
   // Get the current HEAD commit
   let head = repo.head()?;
   let head_commit = head.peel_to_commit()?;
   let head_tree = head_commit.tree()?;
-  
+
   // Reset the index to match the HEAD tree, clearing any unmerged entries
   let mut index = repo.index()?;
   index.read_tree(&head_tree)?;
   index.write()?;
-  
+
   Ok(())
 }
 
@@ -579,7 +578,12 @@ fn cleanup_index_after_skip(repo_path: &Path) -> Result<()> {
 fn branch_exists(repo_path: &Path, branch_name: &str) -> Result<bool> {
   let result = Command::new(consts::GIT_EXECUTABLE)
     .current_dir(repo_path)
-    .args(&["show-ref", "--verify", "--quiet", &format!("refs/heads/{}", branch_name)])
+    .args([
+      "show-ref",
+      "--verify",
+      "--quiet",
+      &format!("refs/heads/{}", branch_name),
+    ])
     .output()
     .context("Failed to check if branch exists")?;
 
