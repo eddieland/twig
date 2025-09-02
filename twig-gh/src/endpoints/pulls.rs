@@ -210,6 +210,89 @@ impl GitHubClient {
     Ok(status)
   }
 
+  /// Create a new pull request
+  #[instrument(skip(self), level = "debug")]
+  pub async fn create_pull_request(
+    &self,
+    owner: &str,
+    repo: &str,
+    title: &str,
+    body: Option<&str>,
+    head: &str,
+    base: &str,
+    draft: Option<bool>,
+  ) -> Result<GitHubPullRequest> {
+    info!(
+      "Creating pull request for {}/{}: {} -> {}",
+      owner, repo, head, base
+    );
+
+    let url = format!("{}/repos/{}/{}/pulls", self.base_url, owner, repo);
+
+    let mut request_body = serde_json::json!({
+      "title": title,
+      "head": head,
+      "base": base
+    });
+
+    if let Some(body_text) = body {
+      request_body["body"] = serde_json::Value::String(body_text.to_string());
+    }
+
+    if let Some(is_draft) = draft {
+      request_body["draft"] = serde_json::Value::Bool(is_draft);
+    }
+
+    trace!("Create PR request body: {}", request_body);
+
+    let response = self
+      .client
+      .post(&url)
+      .header(header::ACCEPT, ACCEPT)
+      .header(header::USER_AGENT, USER_AGENT)
+      .header(header::CONTENT_TYPE, "application/json")
+      .basic_auth(&self.auth.username, Some(&self.auth.token))
+      .json(&request_body)
+      .send()
+      .await
+      .context(format!("POST {url} failed"))?;
+
+    let status = response.status();
+    debug!("GitHub API response status: {}", status);
+
+    match status {
+      reqwest::StatusCode::CREATED => {
+        info!("Successfully created pull request");
+        let pr = response
+          .json::<GitHubPullRequest>()
+          .await
+          .context("Failed to parse GitHub PR creation response")?;
+        trace!("Created PR: {:?}", pr);
+        Ok(pr)
+      }
+      reqwest::StatusCode::UNPROCESSABLE_ENTITY => {
+        let error_text = response.text().await.unwrap_or_default();
+        Err(anyhow::anyhow!(
+          "Pull request creation failed - validation error: {}",
+          error_text
+        ))
+      }
+      reqwest::StatusCode::FORBIDDEN => {
+        Err(anyhow::anyhow!(
+          "Pull request creation failed - insufficient permissions"
+        ))
+      }
+      _ => {
+        let error_text = response.text().await.unwrap_or_default();
+        Err(anyhow::anyhow!(
+          "GitHub API returned error status {}: {}",
+          status,
+          error_text
+        ))
+      }
+    }
+  }
+
   /// Find pull requests by head branch name
   #[instrument(skip(self), level = "debug")]
   pub async fn find_pull_requests_by_head_branch(

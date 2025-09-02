@@ -304,12 +304,28 @@ fn handle_jira_switch(
   if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(issue_key) {
     let branch_name = &branch_issue.branch;
     tracing::info!("Found associated branch: {}", branch_name);
-    return switch_to_branch(repo_path, branch_name);
+    
+    // Verify the branch actually exists in Git before trying to switch to it
+    let repo = Git2Repository::open(repo_path)?;
+    if repo.find_branch(branch_name, git2::BranchType::Local).is_ok() {
+      return switch_to_branch(repo_path, branch_name);
+    } else {
+      print_warning(&format!(
+        "Branch '{branch_name}' is associated with {issue_key} but no longer exists in Git."
+      ));
+      if !create_if_missing {
+        print_info("Use --create to create a new branch, or run 'twig tidy prune' to clean up stale associations.");
+        return Ok(());
+      }
+      print_info("Creating a new branch since the associated branch was deleted...");
+    }
   }
 
-  // No existing association found
+  // No existing association found, or associated branch was deleted
   if create_if_missing {
-    print_info("No associated branch found. Creating new branch from Jira issue...");
+    if repo_state.get_branch_issue_by_jira(issue_key).is_none() {
+      print_info("No associated branch found. Creating new branch from Jira issue...");
+    }
     create_branch_from_jira_issue(jira, repo_path, issue_key, parent_option, jira_parser)
   } else {
     print_warning(&format!(
@@ -446,21 +462,52 @@ fn switch_to_branch(repo_path: &std::path::Path, branch_name: &str) -> Result<()
     .target()
     .ok_or_else(|| anyhow::anyhow!("Branch '{branch_name}' has no target commit",))?;
 
-  // Set HEAD to the branch
-  repo
-    .set_head(&format!("refs/heads/{branch_name}",))
-    .with_context(|| format!("Failed to set HEAD to branch '{branch_name}'",))?;
+  let target_commit = repo.find_commit(target)?;
 
-  let object = repo.find_object(target, None)?;
+  // Check for uncommitted changes that might conflict
+  let statuses = repo.statuses(None)?;
+  let has_uncommitted_changes = statuses.iter().any(|status_entry| {
+    let flags = status_entry.status();
+    flags.is_wt_modified() || flags.is_wt_new() || flags.is_wt_deleted()
+  });
 
-  // Checkout the branch
-  let mut builder = git2::build::CheckoutBuilder::new();
-  repo
-    .checkout_tree(&object, Some(&mut builder))
-    .with_context(|| format!("Failed to checkout branch '{branch_name}'",))?;
+  if has_uncommitted_changes {
+    // Try to checkout with merge strategy to preserve uncommitted changes
+    let mut checkout_builder = git2::build::CheckoutBuilder::new();
+    checkout_builder
+      .allow_conflicts(true)
+      .conflict_style_merge(true);
 
-  print_success(&format!("Switched to branch '{branch_name}'",));
-  Ok(())
+    match repo.checkout_tree(target_commit.as_object(), Some(&mut checkout_builder)) {
+      Ok(()) => {
+        // Checkout succeeded, now update HEAD and index
+        repo.set_head(&format!("refs/heads/{branch_name}"))?;
+        
+        // Reset index to match the target commit
+        repo.reset(target_commit.as_object(), git2::ResetType::Mixed, None)?;
+        
+        print_success(&format!("Switched to branch '{branch_name}'"));
+        Ok(())
+      }
+      Err(e) => {
+        Err(anyhow::anyhow!(
+          "Cannot switch to branch '{branch_name}' due to uncommitted changes that would be overwritten.\n\n\
+           Error: {}\n\n\
+           Please commit or stash your changes first, or use 'git checkout --force' if you want to discard them.",
+          e
+        ))
+      }
+    }
+  } else {
+    // No uncommitted changes, safe to switch
+    repo.set_head(&format!("refs/heads/{branch_name}"))?;
+    
+    // Reset both index and working tree to match the target commit
+    repo.reset(target_commit.as_object(), git2::ResetType::Hard, None)?;
+    
+    print_success(&format!("Switched to branch '{branch_name}'"));
+    Ok(())
+  }
 }
 
 /// Create a new branch and switch to it

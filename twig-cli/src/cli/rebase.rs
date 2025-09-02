@@ -164,6 +164,10 @@ fn rebase_upstream(repo_path: &Path, force: bool, show_graph: bool, autostash: b
             // Skip the current commit
             let skip_result = execute_git_command(repo_path, &["rebase", "--skip"])?;
             print_info(&skip_result);
+            
+            // Clean up any unmerged entries in the index after skip
+            cleanup_index_after_skip(repo_path)?;
+            
             print_info(&format!(
               "Skipped commit during rebase of {current_branch_name} onto {parent}",
             ));
@@ -385,4 +389,24 @@ fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<String> {
   }
 
   Ok(result)
+}
+
+/// Clean up the index after a rebase skip operation
+/// This removes any unmerged entries that might be left in the index
+fn cleanup_index_after_skip(repo_path: &Path) -> Result<()> {
+  // Open the repository using git2
+  let repo = Git2Repository::open(repo_path)
+    .context("Failed to open repository for index cleanup")?;
+  
+  // Get the current HEAD commit
+  let head = repo.head()?;
+  let head_commit = head.peel_to_commit()?;
+  let head_tree = head_commit.tree()?;
+  
+  // Reset the index to match the HEAD tree, clearing any unmerged entries
+  let mut index = repo.index()?;
+  index.read_tree(&head_tree)?;
+  index.write()?;
+  
+  Ok(())
 }

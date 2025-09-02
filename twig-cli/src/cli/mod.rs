@@ -18,7 +18,9 @@ mod jira;
 pub mod rebase;
 mod switch;
 mod sync;
+mod tidy;
 mod tree;
+mod update;
 mod worktree;
 
 use anyhow::Result;
@@ -237,6 +239,24 @@ pub enum Commands {
   )]
   Sync(sync::SyncArgs),
 
+  /// Clean up branches and manage twig tree configuration
+  #[command(
+    long_about = "Clean up branches and manage the twig tree configuration.\n\n\
+            Available subcommands:\n\
+            • clean: Remove branches with no unique commits and no child dependencies\n\
+            • prune: Remove deleted branches from twig configuration\n\n\
+            When run without a subcommand, defaults to 'clean' behavior for backward compatibility.\n\n\
+            The 'clean' subcommand identifies branches that:\n\
+            • Have no commits that differ from their parent branch\n\
+            • Have no child branches depending on them\n\
+            • Are not the current branch\n\n\
+            The 'prune' subcommand removes references to branches that:\n\
+            • Are referenced in twig configuration but no longer exist in Git\n\
+            • May have been deleted outside of twig (e.g., via 'git branch -d')\n\n\
+            Use --dry-run to preview changes before applying them."
+  )]
+  Tidy(tidy::TidyArgs),
+
   /// Show your branch tree with user-defined dependencies
   #[command(
     long_about = "Display local branches in a tree-like view based on user-defined dependencies.\n\n\
@@ -248,6 +268,21 @@ pub enum Commands {
   )]
   #[command(alias = "t")]
   Tree(tree::TreeArgs),
+
+  /// Update repository by switching to root branch, fetching, and pulling
+  #[command(
+    long_about = "Update the repository by performing a complete refresh workflow.\n\n\
+            This command performs the following operations in sequence:\n\
+            1. Switch to the root branch (or main/master if no root branch is configured)\n\
+            2. Fetch the latest changes from origin\n\
+            3. Pull the latest commits to update the current branch\n\
+            4. Run 'twig cascade' to update all dependent branches (unless --no-cascade is used)\n\n\
+            This is useful for keeping your repository and all dependent branches up to date\n\
+            with the latest changes from the remote repository. The cascade operation ensures\n\
+            that all your feature branches are rebased on the latest changes."
+  )]
+  #[command(alias = "up")]
+  Update(update::UpdateArgs),
 
   /// Worktree management
   #[command(long_about = "Manage Git worktrees for efficient multi-branch development.\n\n\
@@ -288,7 +323,9 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
       Commands::Rebase(rebase) => rebase::handle_rebase_command(rebase),
       Commands::Switch(switch) => switch::handle_switch_command(switch),
       Commands::Sync(sync) => sync::handle_sync_command(sync),
+      Commands::Tidy(tidy) => tidy::handle_tidy_command(tidy),
       Commands::Tree(tree) => tree::handle_tree_command(tree),
+      Commands::Update(update) => update::handle_update_command(update),
       Commands::Worktree(worktree) => worktree::handle_worktree_command(worktree),
       Commands::Commit(args) => commit::handle_commit_command(args),
       Commands::Fixup(fixup) => fixup::handle_fixup_command(fixup),

@@ -77,6 +77,7 @@ impl UserDefinedDependencyResolver {
           metadata,
           parents: Vec::new(),
           children: Vec::new(),
+          commit_info: None, // Will be populated later with parent relationship info
         };
 
         branch_nodes.insert(name.to_string(), branch_node);
@@ -86,7 +87,29 @@ impl UserDefinedDependencyResolver {
     // Second pass: build parent-child relationships from user-defined dependencies
     self.build_dependencies_from_state(&mut branch_nodes, repo_state);
 
+    // Third pass: calculate commit information for branches with parents
+    self.calculate_commit_info(&mut branch_nodes, repo);
+
     Ok(branch_nodes)
+  }
+
+  /// Calculate commit ahead/behind information for branches relative to their parents
+  fn calculate_commit_info(&self, branch_nodes: &mut HashMap<String, BranchNode>, _repo: &Git2Repository) {
+    for (branch_name, node) in branch_nodes.iter_mut() {
+      // Only calculate for branches that have exactly one parent
+      if node.parents.len() == 1 {
+        let parent_name = &node.parents[0];
+        
+        // Try to calculate commits ahead/behind
+        if let Ok((ahead, behind)) = twig_core::git::get_commits_ahead_behind(branch_name, parent_name) {
+          node.commit_info = Some(twig_core::tree_renderer::CommitInfo {
+            ahead,
+            behind,
+            parent_branch: parent_name.clone(),
+          });
+        }
+      }
+    }
   }
 
   /// Build parent-child relationships from user-defined dependencies
@@ -261,6 +284,7 @@ mod tests {
         metadata: None,
         parents: Vec::new(),
         children: Vec::new(),
+        commit_info: None,
       },
     );
 
@@ -272,6 +296,7 @@ mod tests {
         metadata: None,
         parents: Vec::new(),
         children: Vec::new(),
+        commit_info: None,
       },
     );
 
@@ -283,6 +308,7 @@ mod tests {
         metadata: None,
         parents: Vec::new(),
         children: Vec::new(),
+        commit_info: None,
       },
     );
 
@@ -294,6 +320,7 @@ mod tests {
         metadata: None,
         parents: Vec::new(),
         children: Vec::new(),
+        commit_info: None,
       },
     );
 
