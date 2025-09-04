@@ -539,6 +539,33 @@ fn create_and_switch_to_branch(
   Ok(())
 }
 
+/// Create a new branch and switch to it (without adding dependency)
+fn create_and_switch_to_branch_no_dependency(
+  repo_path: &std::path::Path,
+  branch_name: &str,
+) -> Result<()> {
+  let repo = Git2Repository::open(repo_path)?;
+
+  // Get the HEAD commit to branch from
+  let head = repo.head()?;
+  let target = head
+    .target()
+    .ok_or_else(|| anyhow::anyhow!("HEAD is not a direct reference"))?;
+  let commit = repo.find_commit(target)?;
+
+  // Create the branch
+  repo
+    .branch(branch_name, &commit, false)
+    .with_context(|| format!("Failed to create branch '{branch_name}'",))?;
+
+  print_success(&format!("Created branch '{branch_name}'",));
+
+  // Switch to the new branch
+  switch_to_branch(repo_path, branch_name)?;
+
+  Ok(())
+}
+
 /// Add a branch dependency
 fn add_branch_dependency(repo_path: &std::path::Path, child: &str, parent: &str) -> Result<()> {
   let mut repo_state = RepoState::load(repo_path)?;
@@ -612,11 +639,11 @@ fn create_or_switch_to_jira_branch(
     // Resolve parent branch
     let parent_branch = resolve_parent_branch(repo_path, parent_option, jira_parser)?;
 
-    // Create and switch to the branch
-    create_and_switch_to_branch(repo_path, &branch_name, parent_branch.as_deref())?;
+    // Create and switch to the branch (without adding dependency to avoid race condition)
+    create_and_switch_to_branch_no_dependency(repo_path, &branch_name)?;
 
-    // Store the association
-    store_jira_association(repo_path, &branch_name, issue_key)?;
+    // Store the association and dependency in a single transaction
+    store_jira_association_with_dependency(repo_path, &branch_name, issue_key, parent_branch.as_deref())?;
 
     print_success(&format!(
       "Created and switched to branch '{branch_name}' for Jira issue {issue_key}",
@@ -696,6 +723,49 @@ fn store_jira_association(repo_path: &Path, branch_name: &str, issue_key: &str) 
     created_at: time_str,
   });
 
+  repo_state.save(repo_path)?;
+  Ok(())
+}
+
+/// Store Jira issue association and dependency in a single transaction
+fn store_jira_association_with_dependency(
+  repo_path: &Path, 
+  branch_name: &str, 
+  issue_key: &str, 
+  parent_branch: Option<&str>
+) -> Result<()> {
+  let mut repo_state = RepoState::load(repo_path)?;
+
+  // Add Jira association
+  let now = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap()
+    .as_secs();
+  let time_str = chrono::DateTime::<chrono::Utc>::from_timestamp(now as i64, 0)
+    .unwrap()
+    .to_rfc3339();
+
+  repo_state.add_branch_issue(BranchMetadata {
+    branch: branch_name.to_string(),
+    jira_issue: Some(issue_key.to_string()),
+    github_pr: None,
+    created_at: time_str,
+  });
+
+  // Add dependency if parent is specified
+  if let Some(parent) = parent_branch {
+    match repo_state.add_dependency(branch_name.to_string(), parent.to_string()) {
+      Ok(()) => {
+        print_success(&format!("Added dependency: {branch_name} -> {parent}"));
+      }
+      Err(e) => {
+        print_warning(&format!("Failed to add dependency: {e}"));
+        // Continue despite dependency error
+      }
+    }
+  }
+
+  // Save everything in one transaction
   repo_state.save(repo_path)?;
   Ok(())
 }
