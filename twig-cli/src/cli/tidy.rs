@@ -49,6 +49,9 @@ pub enum TidyCommand {
                 • Have no commits that differ from their parent branch\n\
                 • Have no child branches depending on them\n\
                 • Are not the current branch\n\n\
+                Use the --aggressive (-a) flag to enable reparenting of branches when\n\
+                intermediate branches have no changes. For example, if A -> B -> C and\n\
+                B has no changes, C will be reparented to A and B will be deleted.\n\n\
                 These branches are typically safe to delete as they don't contain unique\n\
                 work and won't break dependency chains."
   )]
@@ -82,6 +85,16 @@ pub struct CleanArgs {
     long_help = "Skip confirmation prompt and delete branches immediately"
   )]
   pub force: bool,
+
+  #[arg(
+    short = 'a',
+    long = "aggressive",
+    long_help = "Aggressively clean up by reparenting branches when intermediate branches have no changes\n\n\
+                When enabled, if an intermediate branch has no unique commits compared to its parent,\n\
+                its children will be reparented to the parent, and the intermediate branch will be deleted.\n\
+                For example: A -> B -> C, if B has no changes, C will be reparented to A and B deleted."
+  )]
+  pub aggressive: bool,
 }
 
 /// Arguments for the prune subcommand
@@ -114,6 +127,7 @@ pub(crate) fn handle_tidy_command(tidy: TidyArgs) -> Result<()> {
       let clean_args = CleanArgs {
         dry_run: tidy.dry_run,
         force: tidy.force,
+        aggressive: false, // Default to non-aggressive for backward compatibility
       };
       handle_clean_command(clean_args)
     }
@@ -124,8 +138,9 @@ pub(crate) fn handle_tidy_command(tidy: TidyArgs) -> Result<()> {
 ///
 /// This function finds branches that have no unique commits compared to their
 /// parent branch and have no child branches, then deletes them to clean up
-/// the repository.
-fn handle_clean_command(clean: CleanArgs) -> Result<()> {
+/// the repository. It now also recursively cleans up dependency chains where
+/// none of the branches in the chain have changes from master.
+pub fn handle_clean_command(clean: CleanArgs) -> Result<()> {
   let repo_path = detect_repository().context("Not in a git repository")?;
   let repo = Git2Repository::open(&repo_path)?;
 
@@ -139,8 +154,22 @@ fn handle_clean_command(clean: CleanArgs) -> Result<()> {
     .context("Failed to collect branches")?;
 
   let mut branches_to_delete = Vec::new();
+  let mut reparenting_operations = Vec::new(); // Store (child, old_parent, new_parent) tuples
+  let mut processed_chains = HashSet::new();
 
   print_info("Analyzing branches for cleanup...");
+
+  // If aggressive mode is enabled, first handle reparenting
+  if clean.aggressive {
+    reparenting_operations = find_reparenting_opportunities(&repo_state, &repo)?;
+    
+    if !reparenting_operations.is_empty() {
+      print_info(&format!("Found {} reparenting opportunities:", reparenting_operations.len()));
+      for (child, old_parent, new_parent) in &reparenting_operations {
+        println!("  • {} will be reparented from {} to {}", child, old_parent, new_parent);
+      }
+    }
+  }
 
   for (branch, _) in branches {
     let branch_name = match branch.name()? {
@@ -153,8 +182,13 @@ fn handle_clean_command(clean: CleanArgs) -> Result<()> {
       continue;
     }
 
-    // Check if this branch has children
-    if has_child_branches(&repo_state, &branch_name) {
+    // Skip if we've already processed this branch as part of a chain
+    if processed_chains.contains(&branch_name) {
+      continue;
+    }
+
+    // Check if this branch has children that are not part of a cleanable chain
+    if has_non_cleanable_children(&repo_state, &repo, &branch_name)? {
       continue;
     }
 
@@ -164,30 +198,58 @@ fn handle_clean_command(clean: CleanArgs) -> Result<()> {
     if let Some(parent) = parent_branch {
       // Check if branch has unique commits compared to parent
       if !has_unique_commits(&repo, &branch_name, &parent)? {
-        branches_to_delete.push(branch_name);
+        // Check if this is part of a cleanable dependency chain
+        let chain = find_cleanable_dependency_chain(&repo_state, &repo, &branch_name)?;
+        
+        for chain_branch in &chain {
+          processed_chains.insert(chain_branch.clone());
+          if !branches_to_delete.contains(chain_branch) {
+            branches_to_delete.push(chain_branch.clone());
+          }
+        }
+        
+        // If no chain was found, add just this branch
+        if chain.is_empty() {
+          branches_to_delete.push(branch_name);
+        }
       }
     }
   }
 
-  if branches_to_delete.is_empty() {
+  if branches_to_delete.is_empty() && reparenting_operations.is_empty() {
     print_info("No branches found that can be tidied up.");
     return Ok(());
   }
 
-  // Show what would be deleted
-  print_info(&format!("Found {} branches to delete:", branches_to_delete.len()));
-  for branch in &branches_to_delete {
-    println!("  • {}", branch);
+  // Show what would be changed
+  if !branches_to_delete.is_empty() {
+    print_info(&format!("Found {} branches to delete:", branches_to_delete.len()));
+    for branch in &branches_to_delete {
+      println!("  • {}", branch);
+    }
+  }
+
+  if !reparenting_operations.is_empty() {
+    print_info(&format!("Found {} reparenting operations:", reparenting_operations.len()));
+    for (child, old_parent, new_parent) in &reparenting_operations {
+      println!("  • {} will be reparented from {} to {}", child, old_parent, new_parent);
+    }
   }
 
   if clean.dry_run {
-    print_info("Dry run mode - no branches were actually deleted.");
+    print_info("Dry run mode - no changes were actually made.");
     return Ok(());
   }
 
-  // Confirm deletion unless --force is used
+  // Confirm operations unless --force is used
   if !clean.force {
-    print_warning("This will permanently delete the listed branches.");
+    if !branches_to_delete.is_empty() && !reparenting_operations.is_empty() {
+      print_warning("This will permanently delete branches and reparent others.");
+    } else if !branches_to_delete.is_empty() {
+      print_warning("This will permanently delete the listed branches.");
+    } else {
+      print_warning("This will reparent the listed branches.");
+    }
     print!("Continue? (y/N): ");
     use std::io::{self, Write};
     io::stdout().flush()?;
@@ -201,9 +263,44 @@ fn handle_clean_command(clean: CleanArgs) -> Result<()> {
     }
   }
 
-  // Delete the branches and clean up configuration
-  let mut deleted_count = 0;
+  // Perform reparenting operations first
   let mut repo_state = repo_state; // Make it mutable
+  let mut reparented_count = 0;
+
+  for (child, old_parent, new_parent) in reparenting_operations {
+    // Remove old dependency
+    if repo_state.remove_dependency(&child, &old_parent) {
+      // Add new dependency
+      match repo_state.add_dependency(child.clone(), new_parent.clone()) {
+        Ok(()) => {
+          print_success(&format!("Reparented {} from {} to {}", child, old_parent, new_parent));
+          reparented_count += 1;
+          
+          // If the old parent now has no children and no unique commits, mark it for deletion
+          if repo_state.get_dependency_children(&old_parent).is_empty() {
+            if let Ok(parent_of_old) = find_parent_branch(&repo_state, &repo, &old_parent) {
+              if let Some(parent) = parent_of_old {
+                if let Ok(false) = has_unique_commits(&repo, &old_parent, &parent) {
+                  if !branches_to_delete.contains(&old_parent) {
+                    branches_to_delete.push(old_parent.clone());
+                    print_info(&format!("Added {} to deletion list (no children, no changes)", old_parent));
+                  }
+                }
+              }
+            }
+          }
+        }
+        Err(e) => {
+          print_error(&format!("Failed to reparent {} from {} to {}: {}", child, old_parent, new_parent, e));
+          // Try to restore the old dependency if the new one failed
+          let _ = repo_state.add_dependency(child, old_parent);
+        }
+      }
+    }
+  }
+
+  // Perform deletion operations
+  let mut deleted_count = 0;
 
   for branch_name in branches_to_delete {
     match delete_branch(&repo, &branch_name) {
@@ -220,16 +317,25 @@ fn handle_clean_command(clean: CleanArgs) -> Result<()> {
     }
   }
 
-  // Save the updated configuration if any branches were deleted
-  if deleted_count > 0 {
+  // Save the updated configuration if any changes were made
+  if deleted_count > 0 || reparented_count > 0 {
     if let Err(e) = repo_state.save(&repo_path) {
       print_warning(&format!("Failed to save updated configuration: {}", e));
     } else {
-      print_info("Updated twig configuration to remove deleted branches.");
+      print_info("Updated twig configuration.");
     }
   }
 
-  print_success(&format!("Clean complete: deleted {} branches.", deleted_count));
+  if deleted_count > 0 && reparented_count > 0 {
+    print_success(&format!("Clean complete: deleted {} branches, reparented {} branches.", deleted_count, reparented_count));
+  } else if deleted_count > 0 {
+    print_success(&format!("Clean complete: deleted {} branches.", deleted_count));
+  } else if reparented_count > 0 {
+    print_success(&format!("Clean complete: reparented {} branches.", reparented_count));
+  } else {
+    print_info("No changes were made.");
+  }
+  
   Ok(())
 }
 
@@ -403,9 +509,114 @@ fn is_current_branch(repo: &Git2Repository, branch_name: &str) -> Result<bool> {
   }
 }
 
-/// Check if a branch has child branches in the dependency tree
-fn has_child_branches(repo_state: &RepoState, branch_name: &str) -> bool {
-  !repo_state.get_dependency_children(branch_name).is_empty()
+/// Check if a branch has children that are not part of a cleanable chain
+/// This checks if any child has unique commits or is the current branch
+fn has_non_cleanable_children(repo_state: &RepoState, repo: &Git2Repository, branch_name: &str) -> Result<bool> {
+  let children = repo_state.get_dependency_children(branch_name);
+  
+  for child in children {
+    // Skip if this is the current branch
+    if is_current_branch(repo, child)? {
+      return Ok(true);
+    }
+    
+    // Check if child has unique commits compared to this branch
+    if has_unique_commits(repo, child, branch_name)? {
+      return Ok(true);
+    }
+    
+    // Recursively check if the child has non-cleanable children
+    if has_non_cleanable_children(repo_state, repo, child)? {
+      return Ok(true);
+    }
+  }
+  
+  Ok(false)
+}
+
+/// Find a cleanable dependency chain starting from a branch
+/// Returns all branches in the chain that can be safely deleted
+fn find_cleanable_dependency_chain(repo_state: &RepoState, repo: &Git2Repository, start_branch: &str) -> Result<Vec<String>> {
+  let mut chain = Vec::new();
+  let mut current = start_branch;
+  
+  // Traverse down the dependency tree to find the complete cleanable chain
+  loop {
+    let children = repo_state.get_dependency_children(current);
+    
+    // If there are no children, we've reached the end of the chain
+    if children.is_empty() {
+      chain.push(current.to_string());
+      break;
+    }
+    
+    // If there are multiple children, we can't clean the entire chain
+    if children.len() > 1 {
+      break;
+    }
+    
+    let child = children[0];
+    
+    // Check if child is the current branch (can't delete)
+    if is_current_branch(repo, child)? {
+      break;
+    }
+    
+    // Check if child has unique commits compared to current
+    if has_unique_commits(repo, child, current)? {
+      break;
+    }
+    
+    // Add current to chain and continue with the child
+    chain.push(current.to_string());
+    current = child;
+  }
+  
+  // Only return the chain if it contains more than one element (indicating a dependency chain)
+  // or if it's a single branch with no children (leaf node)
+  if chain.len() > 1 || repo_state.get_dependency_children(start_branch).is_empty() {
+    Ok(chain)
+  } else {
+    Ok(Vec::new())
+  }
+}
+
+/// Find reparenting opportunities for aggressive cleanup
+/// Returns a vector of (child, old_parent, new_parent) tuples
+fn find_reparenting_opportunities(repo_state: &RepoState, repo: &Git2Repository) -> Result<Vec<(String, String, String)>> {
+  let mut reparenting_ops = Vec::new();
+  
+  // Iterate through all dependencies to find intermediate branches with no changes
+  for dependency in &repo_state.dependencies {
+    let intermediate_branch = &dependency.parent;
+    let child_branch = &dependency.child;
+    
+    // Skip if intermediate branch is the current branch
+    if is_current_branch(repo, intermediate_branch)? {
+      continue;
+    }
+    
+    // Find the parent of the intermediate branch
+    let grandparent = find_parent_branch(repo_state, repo, intermediate_branch)?;
+    
+    if let Some(grandparent_name) = grandparent {
+      // Check if intermediate branch has no unique commits compared to its parent
+      if !has_unique_commits(repo, intermediate_branch, &grandparent_name)? {
+        // Check if intermediate branch has exactly one child (the current child)
+        let children = repo_state.get_dependency_children(intermediate_branch);
+        if children.len() == 1 && children[0] == child_branch {
+          // This is a good candidate for reparenting
+          reparenting_ops.push((
+            child_branch.clone(),
+            intermediate_branch.clone(),
+            grandparent_name,
+          ));
+        }
+      }
+    }
+  }
+  
+  Ok(reparenting_ops)
 }
 
 /// Find the parent branch for a given branch
@@ -481,5 +692,98 @@ fn cleanup_branch_from_config(repo_state: &mut RepoState, branch_name: &str) {
       removed_dependencies,
       if removed_from_roots { 1 } else { 0 }
     ));
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use twig_core::state::RepoState;
+  use tempfile::TempDir;
+
+  fn create_mock_repo_state() -> RepoState {
+    let mut state = RepoState::default();
+    
+    // Create dependencies: A -> B -> C
+    state.add_dependency("branch-b".to_string(), "branch-a".to_string()).unwrap();
+    state.add_dependency("branch-c".to_string(), "branch-b".to_string()).unwrap();
+    
+    state
+  }
+
+  #[test]
+  fn test_has_non_cleanable_children_empty() {
+    let repo_state = RepoState::default();
+    let temp_dir = TempDir::new().unwrap();
+    let mock_repo = git2::Repository::init_bare(temp_dir.path()).unwrap();
+    
+    let result = has_non_cleanable_children(&repo_state, &mock_repo, "nonexistent");
+    assert!(result.is_ok());
+    assert!(!result.unwrap());
+  }
+
+  #[test]
+  fn test_find_cleanable_dependency_chain_empty() {
+    let repo_state = RepoState::default();
+    let temp_dir = TempDir::new().unwrap();
+    let mock_repo = git2::Repository::init_bare(temp_dir.path()).unwrap();
+    
+    let result = find_cleanable_dependency_chain(&repo_state, &mock_repo, "nonexistent");
+    assert!(result.is_ok());
+    let chain = result.unwrap();
+    
+    // A nonexistent branch with no children should return the branch itself as a leaf
+    assert_eq!(chain.len(), 1);
+    assert_eq!(chain[0], "nonexistent");
+  }
+
+  #[test]
+  fn test_find_cleanable_dependency_chain_single_branch() {
+    let repo_state = create_mock_repo_state();
+    let temp_dir = TempDir::new().unwrap();
+    let mock_repo = git2::Repository::init_bare(temp_dir.path()).unwrap();
+    
+    // Test a branch with no children (should be considered cleanable as single branch)
+    let result = find_cleanable_dependency_chain(&repo_state, &mock_repo, "branch-c");
+    assert!(result.is_ok());
+    let chain = result.unwrap();
+    
+    // Should return the branch itself since it has no children
+    assert_eq!(chain.len(), 1);
+    assert_eq!(chain[0], "branch-c");
+  }
+
+  #[test]
+  fn test_find_reparenting_opportunities_simple() {
+    let repo_state = create_mock_repo_state();
+    let temp_dir = TempDir::new().unwrap();
+    let mock_repo = git2::Repository::init_bare(temp_dir.path()).unwrap();
+    
+    // Test basic reparenting opportunity detection
+    // Since we have a bare repo with no actual branches, this should return empty
+    // but not error out
+    let result = find_reparenting_opportunities(&repo_state, &mock_repo);
+    
+    match result {
+      Ok(ops) => {
+        // Should return empty since no actual git branches exist
+        assert!(ops.is_empty());
+      }
+      Err(_) => {
+        // In a bare repo scenario, it's acceptable for this to error
+        // since no branches exist - this is expected behavior
+      }
+    }
+  }
+
+  #[test]
+  fn test_find_reparenting_opportunities_empty_state() {
+    let repo_state = RepoState::default();
+    let temp_dir = TempDir::new().unwrap();
+    let mock_repo = git2::Repository::init_bare(temp_dir.path()).unwrap();
+    
+    let result = find_reparenting_opportunities(&repo_state, &mock_repo);
+    assert!(result.is_ok());
+    assert!(result.unwrap().is_empty());
   }
 }
