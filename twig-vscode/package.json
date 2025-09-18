@@ -4,6 +4,12 @@
   "description": "Displays the current Twig branch tree and selected branch in VS Code.",
   "version": "0.0.1",
   "publisher": "eddieland",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eddieland/twig.git",
+    "directory": "twig-vscode"
+  },
   "engines": {
     "vscode": "^1.70.0"
   },
@@ -20,7 +26,8 @@
       "scm": [
         {
           "id": "twigBranchTreeView",
-          "name": "Twig Branch Tree"
+          "name": "Twig Branch Tree",
+          "canSelectMany": false
         }
       ]
     },
@@ -39,14 +46,54 @@
         "command": "twig.createBranchFromCurrent",
         "title": "Create new Twig branch from current",
         "icon": "$(add)"
+      },
+      {
+        "command": "twig.createPullRequest",
+        "title": "Create Pull Request",
+        "icon": "$(git-pull-request)"
+      },
+      {
+        "command": "twig.reparentToRoot",
+        "title": "Reparent to Root",
+        "icon": "$(move)"
+      },
+      {
+        "command": "twig.deleteBranch",
+        "title": "Delete Branch",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "twig.removeAsRoot",
+        "title": "Remove as Root Branch",
+        "icon": "$(remove)"
       }
     ],
     "menus": {
       "view/item/context": [
         {
           "command": "twig.switchBranch",
-          "when": "view == twigBranchTreeView && viewItem == branch",
-          "group": "inline"
+          "when": "view == twigBranchTreeView && (viewItem == branch || viewItem == rootBranch)",
+          "group": "1_actions"
+        },
+        {
+          "command": "twig.createPullRequest",
+          "when": "view == twigBranchTreeView && (viewItem == branch || viewItem == rootBranch)",
+          "group": "1_actions"
+        },
+        {
+          "command": "twig.reparentToRoot",
+          "when": "view == twigBranchTreeView && (viewItem == branch || viewItem == rootBranch)",
+          "group": "2_manage"
+        },
+        {
+          "command": "twig.deleteBranch",
+          "when": "view == twigBranchTreeView && (viewItem == branch || viewItem == rootBranch)",
+          "group": "3_danger"
+        },
+        {
+          "command": "twig.removeAsRoot",
+          "when": "view == twigBranchTreeView && viewItem == rootBranch",
+          "group": "2_manage"
         }
       ],
       "view/title": [
@@ -57,6 +104,11 @@
         },
         {
           "command": "twig.createBranchFromCurrent",
+          "when": "view == twigBranchTreeView",
+          "group": "navigation"
+        },
+        {
+          "command": "twig.createPullRequest",
           "when": "view == twigBranchTreeView",
           "group": "navigation"
         }

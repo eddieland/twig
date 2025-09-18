@@ -464,7 +464,7 @@ fn switch_to_branch(repo_path: &std::path::Path, branch_name: &str) -> Result<()
 
   let target_commit = repo.find_commit(target)?;
 
-  // Check for uncommitted changes that might conflict
+  // Check for uncommitted changes and potential conflicts
   let statuses = repo.statuses(None)?;
   let has_uncommitted_changes = statuses.iter().any(|status_entry| {
     let flags = status_entry.status();
@@ -472,30 +472,23 @@ fn switch_to_branch(repo_path: &std::path::Path, branch_name: &str) -> Result<()
   });
 
   if has_uncommitted_changes {
-    // Try to checkout with merge strategy to preserve uncommitted changes
-    let mut checkout_builder = git2::build::CheckoutBuilder::new();
-    checkout_builder.allow_conflicts(true).conflict_style_merge(true);
-
-    match repo.checkout_tree(target_commit.as_object(), Some(&mut checkout_builder)) {
-      Ok(()) => {
-        // Checkout succeeded, now update HEAD and index
-        repo.set_head(&format!("refs/heads/{branch_name}"))?;
-
-        // Reset index to match the target commit
-        repo.reset(target_commit.as_object(), git2::ResetType::Mixed, None)?;
-
-        print_success(&format!("Switched to branch '{branch_name}'"));
-        Ok(())
-      }
-      Err(e) => Err(anyhow::anyhow!(
-        "Cannot switch to branch '{branch_name}' due to uncommitted changes that would be overwritten.\n\n\
-           Error: {}\n\n\
-           Please commit or stash your changes first, or use 'git checkout --force' if you want to discard them.",
-        e
-      )),
+    // Check if switching would cause conflicts with uncommitted changes
+    let conflicts = check_for_conflicts(&repo, &target_commit, &statuses)?;
+    
+    if !conflicts.is_empty() {
+      return Err(anyhow::anyhow!(
+        "error: Your local changes to the following files would be overwritten by checkout:\n{}\nPlease commit your changes or stash them before you switch branches.\nAborting.",
+        conflicts.join("\n")
+      ));
     }
+
+    // No conflicts, just switch the branch reference and preserve changes
+    repo.set_head(&format!("refs/heads/{branch_name}"))?;
+
+    print_success(&format!("Switched to branch '{branch_name}'"));
+    Ok(())
   } else {
-    // No uncommitted changes, safe to switch
+    // No uncommitted changes, do a full checkout
     repo.set_head(&format!("refs/heads/{branch_name}"))?;
 
     // Reset both index and working tree to match the target commit
@@ -785,6 +778,71 @@ fn store_github_pr_association(repo_path: &Path, branch_name: &str, pr_number: u
 
   repo_state.save(repo_path)?;
   Ok(())
+}
+
+/// Check if switching to a target commit would conflict with uncommitted changes
+fn check_for_conflicts(
+  repo: &Git2Repository,
+  target_commit: &git2::Commit,
+  statuses: &git2::Statuses,
+) -> Result<Vec<String>> {
+  let mut conflicts = Vec::new();
+
+  // Get the current HEAD commit
+  let head = repo.head()?;
+  let current_commit = head.peel_to_commit()?;
+
+  // For each modified file, check if it differs between current and target
+  for status_entry in statuses.iter() {
+    let file_path = status_entry.path().unwrap_or("");
+    let flags = status_entry.status();
+
+    // Skip files that are only staged (not modified in working tree)
+    if !flags.is_wt_modified() && !flags.is_wt_new() && !flags.is_wt_deleted() {
+      continue;
+    }
+
+    // Check if this file differs between current and target commits
+    if file_differs_between_commits(&current_commit, target_commit, file_path)? {
+      conflicts.push(format!("\t{}", file_path));
+    }
+  }
+
+  Ok(conflicts)
+}
+
+/// Check if a file differs between two commits
+fn file_differs_between_commits(
+  commit1: &git2::Commit,
+  commit2: &git2::Commit,
+  file_path: &str,
+) -> Result<bool> {
+  // Get trees for both commits
+  let tree1 = commit1.tree()?;
+  let tree2 = commit2.tree()?;
+
+  // Get the tree entries for the file in both commits
+  let entry1 = tree1.get_path(std::path::Path::new(file_path));
+  let entry2 = tree2.get_path(std::path::Path::new(file_path));
+
+  match (entry1, entry2) {
+    (Ok(e1), Ok(e2)) => {
+      // Both files exist, compare their object IDs
+      Ok(e1.id() != e2.id())
+    }
+    (Ok(_), Err(_)) => {
+      // File exists in commit1 but not in commit2
+      Ok(true)
+    }
+    (Err(_), Ok(_)) => {
+      // File exists in commit2 but not in commit1
+      Ok(true)
+    }
+    (Err(_), Err(_)) => {
+      // File doesn't exist in either commit (shouldn't happen with status)
+      Ok(false)
+    }
+  }
 }
 
 #[cfg(test)]
