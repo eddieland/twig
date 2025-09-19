@@ -31,7 +31,7 @@ class TwigBranchTreeProvider implements vscode.TreeDataProvider<TwigBranchItem>,
                     exec('twig tree', { cwd: vscode.workspace.rootPath }, (err, stdout, stderr) => {
                         if (err) {
                             const errorMsg = stderr ? stderr : err.message;
-                            resolve([new TwigBranchItem(`Error fetching branch tree: ${errorMsg}`, [], true, false, false, true)]);
+                            resolve([new TwigBranchItem(`Error fetching branch tree: ${errorMsg}`, [], true, false, false, true, undefined)]);
                             return;
                         }
                         
@@ -59,10 +59,10 @@ class TwigBranchTreeProvider implements vscode.TreeDataProvider<TwigBranchItem>,
                                 const missingBranches = allLocalBranches.filter(branch => !processedBranches.has(branch));
                                 
                                 if (missingBranches.length > 0) {
-                                    const missingSection = new TwigBranchItem("🔍 Untracked Branches", [], false, false, false, true);
+                                    const missingSection = new TwigBranchItem("🔍 Untracked Branches", [], false, false, false, true, undefined);
                                     for (const branch of missingBranches) {
                                         const isCurrentBranchItem = (currentBranch === branch) || (gitCurrentBranch === branch);
-                                        missingSection.children.push(new TwigBranchItem(branch, [], false, isCurrentBranchItem, true, false, false));
+                                        missingSection.children.push(new TwigBranchItem(branch, [], false, isCurrentBranchItem, true, false, false, undefined));
                                     }
                                     items.push(missingSection);
                                 }
@@ -235,7 +235,8 @@ class TwigBranchItem extends vscode.TreeItem {
         public readonly isCurrentBranch: boolean = false,
         public readonly isOrphaned: boolean = false,
         public readonly isSection: boolean = false,
-        public readonly isRootBranch: boolean = false
+        public readonly isRootBranch: boolean = false,
+        public readonly commitStatus?: string
     ) {
         super(label, children.length > 0 ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
         
@@ -248,18 +249,26 @@ class TwigBranchItem extends vscode.TreeItem {
             this.contextValue = 'branch';
         }
         
-        // Add visual indicators
+        // Add visual indicators and commit status
+        let description = '';
         if (isCurrentBranch) {
             this.iconPath = new vscode.ThemeIcon('star-full', new vscode.ThemeColor('charts.green'));
-            this.description = '(current)';
+            description = '(current)';
             // Highlight the current branch with a different resource URI to trigger styling
             this.resourceUri = vscode.Uri.parse('twig-current-branch://current');
         } else if (isOrphaned) {
             this.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground'));
-            this.description = '(orphaned)';
+            description = '(orphaned)';
         } else {
             this.iconPath = new vscode.ThemeIcon('git-branch');
         }
+        
+        // Add commit status to description
+        if (commitStatus) {
+            description = description ? `${description} ${commitStatus}` : commitStatus;
+        }
+        
+        this.description = description;
         
         // Style for section headers
         if (isSection) {
@@ -298,7 +307,7 @@ function parseTwigBranchTree(output: string, gitCurrentBranch?: string | null): 
     
     // Handle JIRA_HOST error gracefully
     if (output.includes("Jira host environment variable 'JIRA_HOST' not set")) {
-        result.push(new TwigBranchItem("Error: JIRA_HOST environment variable not set. Please set JIRA_HOST and reload VS Code.", [], true, false, false, true));
+        result.push(new TwigBranchItem("Error: JIRA_HOST environment variable not set. Please set JIRA_HOST and reload VS Code.", [], true, false, false, true, undefined));
         return result;
     }
     
@@ -323,10 +332,10 @@ function parseTwigBranchTree(output: string, gitCurrentBranch?: string | null): 
         }
         
         if (availableBranches.length > 0) {
-            const orphanedSection = new TwigBranchItem("📝 Available Branches", [], false, false, false, true);
+            const orphanedSection = new TwigBranchItem("📝 Available Branches", [], false, false, false, true, undefined);
             for (const branch of availableBranches) {
                 const isCurrentBranchItem = (currentBranch === branch) || (gitCurrentBranch === branch);
-                orphanedSection.children.push(new TwigBranchItem(branch, [], false, isCurrentBranchItem, true, false, false));
+                orphanedSection.children.push(new TwigBranchItem(branch, [], false, isCurrentBranchItem, true, false, false, undefined));
             }
             result.push(orphanedSection);
         }
@@ -403,11 +412,18 @@ function parseTwigBranchTree(output: string, gitCurrentBranch?: string | null): 
             const treeChars = cleanLine.match(/^[└├│─\s]*/);
             const indent = treeChars ? treeChars[0].length : 0;
             
-            // Extract branch name, removing tree characters and status info
-            let branchName = cleanLine.replace(/^[└├│─\s]*/, '').trim();
+            // Extract branch name and commit status
+            let fullBranchLine = cleanLine.replace(/^[└├│─\s]*/, '').trim();
             
-            // Remove status indicators like [up-to-date], (current), etc.
-            branchName = branchName.replace(/\s+\[.*?\]$/, '').replace(/\s+\(current\)$/, '').trim();
+            // Extract commit status (e.g., [+3/-1], [up-to-date], [-3])
+            let commitStatus: string | undefined;
+            const statusMatch = fullBranchLine.match(/\s+(\[.*?\])$/);
+            if (statusMatch) {
+                commitStatus = statusMatch[1];
+            }
+            
+            // Remove status indicators like [up-to-date], (current), etc. to get clean branch name
+            let branchName = fullBranchLine.replace(/\s+\[.*?\]$/, '').replace(/\s+\(current\)$/, '').trim();
             
             if (branchName && branchName.length > 0) {
                 const isCurrentBranchItem = (currentBranch === branchName) || (gitCurrentBranch === branchName);
@@ -416,7 +432,7 @@ function parseTwigBranchTree(output: string, gitCurrentBranch?: string | null): 
                 if (isRootBranchItem) {
                     rootBranches.add(branchName);
                 }
-                const item = new TwigBranchItem(branchName, [], false, isCurrentBranchItem, false, false, isRootBranchItem);
+                const item = new TwigBranchItem(branchName, [], false, isCurrentBranchItem, false, false, isRootBranchItem, commitStatus);
                 processedBranches.add(branchName); // Track this branch
                 
                 // Handle hierarchy using indentation
@@ -440,10 +456,10 @@ function parseTwigBranchTree(output: string, gitCurrentBranch?: string | null): 
             i++;
         }    // Add orphaned branches section if any exist
     if (orphanedBranches.length > 0) {
-        const orphanedSection = new TwigBranchItem("📝 Orphaned Branches", [], false, false, false, true);
+        const orphanedSection = new TwigBranchItem("📝 Orphaned Branches", [], false, false, false, true, undefined);
         for (const branch of orphanedBranches) {
             const isCurrentBranchItem = (currentBranch === branch) || (gitCurrentBranch === branch);
-            orphanedSection.children.push(new TwigBranchItem(branch, [], false, isCurrentBranchItem, true, false, false));
+            orphanedSection.children.push(new TwigBranchItem(branch, [], false, isCurrentBranchItem, true, false, false, undefined));
         }
         result.push(orphanedSection);
     }

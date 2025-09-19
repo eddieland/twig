@@ -10,7 +10,12 @@
     "dev": "tsx src/index.ts",
     "clean": "rimraf dist"
   },
-  "keywords": ["mcp", "twig", "git", "branch-management"],
+  "keywords": [
+    "mcp",
+    "twig",
+    "git",
+    "branch-management"
+  ],
   "author": "Twig Team",
   "license": "MIT",
   "dependencies": {

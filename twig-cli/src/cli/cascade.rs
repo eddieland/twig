@@ -147,7 +147,13 @@ fn rebase_downstream(
       let checkout_result = execute_git_command(repo_path, &["checkout", &branch])?;
       if !checkout_result.contains("Switched to branch") && !checkout_result.contains("Already on") {
         print_error(&format!("Failed to checkout branch {branch}: {checkout_result}"));
-        continue;
+        print_error("Cascade command stopped due to checkout failure.");
+        
+        // Return to the original branch before failing
+        let checkout_result = execute_git_command(repo_path, &["checkout", &current_branch_name])?;
+        print_info(&checkout_result);
+        
+        return Err(anyhow::anyhow!("Failed to checkout branch '{}'", branch));
       }
 
       // Execute the rebase
@@ -168,8 +174,13 @@ fn rebase_downstream(
               }
               _ => {
                 print_error(&format!("Failed to force-rebase {branch} onto {parent}",));
-                // Continue with other branches rather than aborting the whole process
-                continue;
+                print_error("Cascade command stopped due to force-rebase failure.");
+                
+                // Return to the original branch before failing
+                let checkout_result = execute_git_command(repo_path, &["checkout", &current_branch_name])?;
+                print_info(&checkout_result);
+                
+                return Err(anyhow::anyhow!("Force-rebase failed for branch '{}' onto '{}'", branch, parent));
               }
             }
           } else {
@@ -223,12 +234,14 @@ fn rebase_downstream(
                 let status_output = execute_git_command(repo_path, &["status", "--porcelain"])?;
                 if !status_output.trim().is_empty() {
                   // There are still conflicts or other issues
-                  print_warning("Additional conflicts detected after skip. Please resolve them manually.");
+                  print_error("Additional conflicts detected after skip. Cannot continue cascade.");
+                  print_error("Cascade command stopped due to unresolved conflicts.");
                   print_info("You can:");
                   print_info("  • Continue the rebase: git rebase --continue");
                   print_info("  • Abort the rebase: git rebase --abort");
                   print_info("  • Skip more commits: git rebase --skip");
-                  continue;
+                  
+                  return Err(anyhow::anyhow!("Unresolved conflicts remain after skip in branch '{}' onto '{}'", branch, parent));
                 }
               } else {
                 // Rebase completed successfully after skip
@@ -246,8 +259,13 @@ fn rebase_downstream(
         }
         RebaseResult::Error => {
           print_error(&format!("Failed to rebase {branch} onto {parent}",));
-          // Continue with other branches rather than aborting the whole process
-          continue;
+          print_error("Cascade command stopped due to rebase failure.");
+          
+          // Return to the original branch before failing
+          let checkout_result = execute_git_command(repo_path, &["checkout", &current_branch_name])?;
+          print_info(&checkout_result);
+          
+          return Err(anyhow::anyhow!("Rebase failed for branch '{}' onto '{}'", branch, parent));
         }
       }
     }
