@@ -122,6 +122,12 @@ fn rebase_downstream(
 
   // Perform the cascading rebase
   for branch in rebase_order {
+    // Check if the branch exists before attempting operations
+    if !branch_exists(repo_path, &branch)? {
+      print_warning(&format!("Branch '{}' does not exist, skipping rebase", branch));
+      continue;
+    }
+
     // Get the parents of this branch
     let parents = repo_state.get_dependency_parents(&branch);
 
@@ -132,6 +138,15 @@ fn rebase_downstream(
 
     // Rebase this branch onto each of its parents
     for parent in parents {
+      // Check if the parent branch exists
+      if !branch_exists(repo_path, parent)? {
+        print_warning(&format!(
+          "Parent branch '{}' does not exist, skipping rebase of {} onto {}",
+          parent, branch, parent
+        ));
+        continue;
+      }
+
       print_info(&format!("Rebasing {branch} onto {parent}"));
 
       // First checkout the branch
@@ -228,6 +243,33 @@ fn rebase_downstream(
               // Skip the current commit
               let skip_result = execute_git_command(repo_path, &["rebase", "--skip"])?;
               print_info(&skip_result);
+
+              // Check if the rebase is still in progress after skip
+              if is_rebase_in_progress(repo_path) {
+                // There might be more conflicts, continue handling the rebase
+                print_warning("Rebase is still in progress after skip. Checking for additional conflicts...");
+
+                // Check the status after skip
+                let status_output = execute_git_command(repo_path, &["status", "--porcelain"])?;
+                if !status_output.trim().is_empty() {
+                  // There are still conflicts or other issues
+                  print_warning("Additional conflicts detected after skip. Please resolve them manually.");
+                  print_info("You can:");
+                  print_info("  • Continue the rebase: git rebase --continue");
+                  print_info("  • Abort the rebase: git rebase --abort");
+                  print_info("  • Skip more commits: git rebase --skip");
+                  continue;
+                }
+              } else {
+                // Rebase completed successfully after skip
+                print_success(&format!(
+                  "Rebase of {branch} onto {parent} completed after skipping commit",
+                ));
+              }
+
+              // Clean up any unmerged entries in the index and working directory after skip
+              cleanup_index_after_skip(repo_path)?;
+
               print_info(&format!("Skipped commit during rebase of {branch} onto {parent}",));
             }
           }
@@ -604,6 +646,59 @@ fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<String> {
   }
 
   Ok(result)
+}
+
+/// Clean up the index and working directory after a rebase skip operation
+/// This removes any unmerged entries that might be left in the index and
+/// resets the working directory to match HEAD, ensuring a clean state
+fn cleanup_index_after_skip(repo_path: &Path) -> Result<()> {
+  // Open the repository using git2
+  let repo = Git2Repository::open(repo_path).context("Failed to open repository for index cleanup")?;
+
+  // Get the current HEAD commit
+  let head = repo.head()?;
+  let head_commit = head.peel_to_commit()?;
+
+  // Reset both index and working directory to match the HEAD commit
+  // This clears any unmerged entries and unstaged changes left by the skip
+  repo
+    .reset(head_commit.as_object(), git2::ResetType::Hard, None)
+    .context("Failed to reset repository state after skip")?;
+
+  Ok(())
+}
+
+/// Check if a rebase is currently in progress
+fn is_rebase_in_progress(repo_path: &Path) -> bool {
+  // Check for the existence of .git/rebase-merge directory
+  let rebase_merge_dir = repo_path.join(".git").join("rebase-merge");
+  if rebase_merge_dir.exists() {
+    return true;
+  }
+
+  // Check for the existence of .git/rebase-apply directory
+  let rebase_apply_dir = repo_path.join(".git").join("rebase-apply");
+  if rebase_apply_dir.exists() {
+    return true;
+  }
+
+  false
+}
+
+/// Check if a branch exists in the repository
+fn branch_exists(repo_path: &Path, branch_name: &str) -> Result<bool> {
+  let result = Command::new(consts::GIT_EXECUTABLE)
+    .current_dir(repo_path)
+    .args([
+      "show-ref",
+      "--verify",
+      "--quiet",
+      &format!("refs/heads/{}", branch_name),
+    ])
+    .output()
+    .context("Failed to check if branch exists")?;
+
+  Ok(result.status.success())
 }
 
 #[cfg(test)]

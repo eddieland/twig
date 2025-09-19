@@ -73,6 +73,15 @@ pub struct BranchNode {
   pub metadata: Option<BranchMetadata>,
   pub parents: Vec<String>,
   pub children: Vec<String>,
+  pub commit_info: Option<CommitInfo>,
+}
+
+/// Information about commits relative to parent branches
+#[derive(Debug, Clone)]
+pub struct CommitInfo {
+  pub ahead: usize,
+  pub behind: usize,
+  pub parent_branch: String,
 }
 
 /// Renderer for the branch tree
@@ -627,17 +636,19 @@ impl<'a> TreeRenderer<'a> {
       .get(&node.name)
       .map(|parents| parents.len() > 1 && parents.iter().any(|parent| !node.parents.contains(parent)))
       .unwrap_or(false);
+    let has_commits = node.commit_info.is_some();
 
-    if has_jira || has_pr || has_cross_refs {
+    if has_jira || has_pr || has_cross_refs || has_commits {
       // Use tree width for metadata alignment with proper spacing
       let jira_column_pos = std::cmp::max(current_width + 2, self.tree_width);
       let pr_column_pos = jira_column_pos + 12; // Space for "[JIRA-123]"
-      let cross_ref_column_pos = pr_column_pos + 12; // Space for "[PR#123]"
+      let commit_column_pos = pr_column_pos + 12; // Space for "[PR#123]"
+      let cross_ref_column_pos = commit_column_pos + 15; // Space for "[+3/-1]"
+
+      let mut current_pos = current_width;
 
       // Add issue/PR metadata with proper alignment
       if let Some(issue) = &node.metadata {
-        let mut current_pos = current_width;
-
         // Add Jira issue if it exists and is not empty
         if has_jira {
           let spaces_needed = jira_column_pos.saturating_sub(current_pos);
@@ -665,7 +676,44 @@ impl<'a> TreeRenderer<'a> {
             format!("[PR#{}]", pr_number.to_string().yellow())
           };
           line.push_str(&pr_display);
+          current_pos = self.display_width(&line);
         }
+      }
+
+      // Add commit information if available
+      if let Some(commit_info) = &node.commit_info {
+        let spaces_needed = commit_column_pos.saturating_sub(current_pos);
+        line.push_str(&" ".repeat(spaces_needed));
+
+        let commit_display = if commit_info.ahead > 0 && commit_info.behind > 0 {
+          if self.no_color {
+            format!("[+{}/-{}]", commit_info.ahead, commit_info.behind)
+          } else {
+            format!(
+              "[{}{}{}]",
+              format!("+{}", commit_info.ahead).green(),
+              "/".dimmed(),
+              format!("-{}", commit_info.behind).red()
+            )
+          }
+        } else if commit_info.ahead > 0 {
+          if self.no_color {
+            format!("[+{}]", commit_info.ahead)
+          } else {
+            format!("[{}]", format!("+{}", commit_info.ahead).green())
+          }
+        } else if commit_info.behind > 0 {
+          if self.no_color {
+            format!("[-{}]", commit_info.behind)
+          } else {
+            format!("[{}]", format!("-{}", commit_info.behind).red())
+          }
+        } else if self.no_color {
+          "[up-to-date]".to_string()
+        } else {
+          "[up-to-date]".dimmed().to_string()
+        };
+        line.push_str(&commit_display);
       }
 
       // Add cross-references with alignment (only if they exist)
@@ -1927,6 +1975,7 @@ mod tests {
         }),
         parents: vec![],
         children: vec![],
+        commit_info: None,
       },
     );
 
@@ -1974,6 +2023,7 @@ mod tests {
         }),
         parents: vec![],
         children: vec![],
+        commit_info: None,
       },
     );
 
@@ -2014,6 +2064,7 @@ mod tests {
         }),
         parents: vec![],
         children: vec![],
+        commit_info: None,
       },
     );
 
@@ -2031,6 +2082,7 @@ mod tests {
         }),
         parents: vec![],
         children: vec![],
+        commit_info: None,
       },
     );
 
@@ -2190,6 +2242,7 @@ mod tests {
         }),
         parents: vec!["main".to_string()],
         children: vec![],
+        commit_info: None,
       },
     );
 
@@ -2276,6 +2329,7 @@ mod tests {
       metadata: None,
       parents,
       children,
+      commit_info: None,
     }
   }
 
@@ -2301,6 +2355,7 @@ mod tests {
       }),
       parents,
       children,
+      commit_info: None,
     }
   }
 

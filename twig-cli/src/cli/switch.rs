@@ -384,13 +384,29 @@ fn handle_jira_switch(
   if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(issue_key) {
     let branch_name = &branch_issue.branch;
     tracing::info!("Found associated branch: {}", branch_name);
-    return switch_to_branch(repo_path, branch_name);
+
+    // Verify the branch actually exists in Git before trying to switch to it
+    let repo = Git2Repository::open(repo_path)?;
+    if repo.find_branch(branch_name, git2::BranchType::Local).is_ok() {
+      return switch_to_branch(repo_path, branch_name);
+    } else {
+      print_warning(&format!(
+        "Branch '{branch_name}' is associated with {issue_key} but no longer exists in Git."
+      ));
+      if !create_if_missing {
+        print_info("Use --create to create a new branch, or run 'twig tidy prune' to clean up stale associations.");
+        return Ok(());
+      }
+      print_info("Creating a new branch since the associated branch was deleted...");
+    }
   }
 
-  // No existing association found
+  // No existing association found, or associated branch was deleted
   if create_if_missing {
-    print_info("No associated branch found. Creating new branch from Jira issue...");
-    create_branch_from_jira_issue(jira, repo_path, issue_key, parent_option, jira_parser)
+    if repo_state.get_branch_issue_by_jira(issue_key).is_none() {
+      print_info("No associated branch found. Creating new branch from Jira issue...");
+    }
+    create_or_switch_to_jira_branch(jira, repo_path, issue_key, parent_option, jira_parser)
   } else {
     print_warning(&format!(
       "No branch found for Jira issue {issue_key}. Use --create to create a new branch.",
@@ -526,21 +542,48 @@ fn switch_to_branch(repo_path: &std::path::Path, branch_name: &str) -> Result<()
     .target()
     .ok_or_else(|| anyhow::anyhow!("Branch '{branch_name}' has no target commit",))?;
 
-  // Set HEAD to the branch
-  repo
-    .set_head(&format!("refs/heads/{branch_name}",))
-    .with_context(|| format!("Failed to set HEAD to branch '{branch_name}'",))?;
+  let target_commit = repo.find_commit(target)?;
 
-  let object = repo.find_object(target, None)?;
+  // Check for uncommitted changes that might conflict
+  let statuses = repo.statuses(None)?;
+  let has_uncommitted_changes = statuses.iter().any(|status_entry| {
+    let flags = status_entry.status();
+    flags.is_wt_modified() || flags.is_wt_new() || flags.is_wt_deleted()
+  });
 
-  // Checkout the branch
-  let mut builder = git2::build::CheckoutBuilder::new();
-  repo
-    .checkout_tree(&object, Some(&mut builder))
-    .with_context(|| format!("Failed to checkout branch '{branch_name}'",))?;
+  if has_uncommitted_changes {
+    // Try to checkout with merge strategy to preserve uncommitted changes
+    let mut checkout_builder = git2::build::CheckoutBuilder::new();
+    checkout_builder.allow_conflicts(true).conflict_style_merge(true);
 
-  print_success(&format!("Switched to branch '{branch_name}'",));
-  Ok(())
+    match repo.checkout_tree(target_commit.as_object(), Some(&mut checkout_builder)) {
+      Ok(()) => {
+        // Checkout succeeded, now update HEAD and index
+        repo.set_head(&format!("refs/heads/{branch_name}"))?;
+
+        // Reset index to match the target commit
+        repo.reset(target_commit.as_object(), git2::ResetType::Mixed, None)?;
+
+        print_success(&format!("Switched to branch '{branch_name}'"));
+        Ok(())
+      }
+      Err(e) => Err(anyhow::anyhow!(
+        "Cannot switch to branch '{branch_name}' due to uncommitted changes that would be overwritten.\n\n\
+           Error: {}\n\n\
+           Please commit or stash your changes first, or use 'git checkout --force' if you want to discard them.",
+        e
+      )),
+    }
+  } else {
+    // No uncommitted changes, safe to switch
+    repo.set_head(&format!("refs/heads/{branch_name}"))?;
+
+    // Reset both index and working tree to match the target commit
+    repo.reset(target_commit.as_object(), git2::ResetType::Hard, None)?;
+
+    print_success(&format!("Switched to branch '{branch_name}'"));
+    Ok(())
+  }
 }
 
 /// Create a new branch and switch to it
@@ -570,6 +613,30 @@ fn create_and_switch_to_branch(
   Ok(())
 }
 
+/// Create a new branch and switch to it (without adding dependency)
+fn create_and_switch_to_branch_no_dependency(repo_path: &std::path::Path, branch_name: &str) -> Result<()> {
+  let repo = Git2Repository::open(repo_path)?;
+
+  // Get the HEAD commit to branch from
+  let head = repo.head()?;
+  let target = head
+    .target()
+    .ok_or_else(|| anyhow::anyhow!("HEAD is not a direct reference"))?;
+  let commit = repo.find_commit(target)?;
+
+  // Create the branch
+  repo
+    .branch(branch_name, &commit, false)
+    .with_context(|| format!("Failed to create branch '{branch_name}'",))?;
+
+  print_success(&format!("Created branch '{branch_name}'",));
+
+  // Switch to the new branch
+  switch_to_branch(repo_path, branch_name)?;
+
+  Ok(())
+}
+
 /// Add a branch dependency
 fn add_branch_dependency(repo_path: &std::path::Path, child: &str, parent: &str) -> Result<()> {
   let mut repo_state = RepoState::load(repo_path)?;
@@ -587,8 +654,8 @@ fn add_branch_dependency(repo_path: &std::path::Path, child: &str, parent: &str)
   }
 }
 
-/// Create a branch from a Jira issue
-fn create_branch_from_jira_issue(
+/// Create a branch from a Jira issue, or switch to it if it already exists
+fn create_or_switch_to_jira_branch(
   jira_client: &JiraClient,
   repo_path: &std::path::Path,
   issue_key: &str,
@@ -625,6 +692,19 @@ fn create_branch_from_jira_issue(
     // Create the branch name in the format "PROJ-123/add-feature"
     let branch_name = format!("{issue_key}/{sanitized_summary}");
 
+    // Check if the branch already exists in Git
+    let repo = Git2Repository::open(repo_path)?;
+    if repo.find_branch(&branch_name, git2::BranchType::Local).is_ok() {
+      // Branch exists, just switch to it and store the association
+      print_info(&format!("Found existing branch: {branch_name}"));
+      switch_to_branch(repo_path, &branch_name)?;
+      store_jira_association(repo_path, &branch_name, issue_key)?;
+      print_success(&format!(
+        "Switched to existing branch '{branch_name}' and associated with Jira issue {issue_key}",
+      ));
+      return Ok(());
+    }
+
     print_info(&format!("Creating branch: {branch_name}",));
 
     // Resolve parent branch
@@ -633,8 +713,8 @@ fn create_branch_from_jira_issue(
     // Create and switch to the branch
     create_and_switch_to_branch(repo_path, &branch_name, &branch_base)?;
 
-    // Store the association
-    store_jira_association(repo_path, &branch_name, issue_key)?;
+    // Store the association and dependency in a single transaction
+    store_jira_association_with_dependency(repo_path, &branch_name, issue_key, parent_branch.as_deref())?;
 
     print_success(&format!(
       "Created and switched to branch '{branch_name}' for Jira issue {issue_key}",
@@ -714,6 +794,49 @@ fn store_jira_association(repo_path: &Path, branch_name: &str, issue_key: &str) 
     created_at: time_str,
   });
 
+  repo_state.save(repo_path)?;
+  Ok(())
+}
+
+/// Store Jira issue association and dependency in a single transaction
+fn store_jira_association_with_dependency(
+  repo_path: &Path,
+  branch_name: &str,
+  issue_key: &str,
+  parent_branch: Option<&str>,
+) -> Result<()> {
+  let mut repo_state = RepoState::load(repo_path)?;
+
+  // Add Jira association
+  let now = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap()
+    .as_secs();
+  let time_str = chrono::DateTime::<chrono::Utc>::from_timestamp(now as i64, 0)
+    .unwrap()
+    .to_rfc3339();
+
+  repo_state.add_branch_issue(BranchMetadata {
+    branch: branch_name.to_string(),
+    jira_issue: Some(issue_key.to_string()),
+    github_pr: None,
+    created_at: time_str,
+  });
+
+  // Add dependency if parent is specified
+  if let Some(parent) = parent_branch {
+    match repo_state.add_dependency(branch_name.to_string(), parent.to_string()) {
+      Ok(()) => {
+        print_success(&format!("Added dependency: {branch_name} -> {parent}"));
+      }
+      Err(e) => {
+        print_warning(&format!("Failed to add dependency: {e}"));
+        // Continue despite dependency error
+      }
+    }
+  }
+
+  // Save everything in one transaction
   repo_state.save(repo_path)?;
   Ok(())
 }
