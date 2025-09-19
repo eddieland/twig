@@ -125,6 +125,7 @@ fn run_cascade_command(
     force,
     show_graph,
     autostash,
+    force_push: false, // Default to false for existing tests
     repo: Some(repo_path.to_string_lossy().to_string()),
   };
 

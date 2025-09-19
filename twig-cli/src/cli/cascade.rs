@@ -36,6 +36,10 @@ pub struct CascadeArgs {
   #[arg(long)]
   pub autostash: bool,
 
+  /// Force-push branches after successful rebase
+  #[arg(long = "force-push")]
+  pub force_push: bool,
+
   /// Path to a specific repository
   #[arg(short, long, value_name = "PATH")]
   pub repo: Option<String>,
@@ -55,9 +59,10 @@ pub fn handle_cascade_command(args: CascadeArgs) -> Result<()> {
   let force = args.force;
   let show_graph = args.show_graph;
   let autostash = args.autostash;
+  let force_push = args.force_push;
 
   // Perform cascading rebase from current branch to children
-  rebase_downstream(&repo_path, max_depth, force, show_graph, autostash)
+  rebase_downstream(&repo_path, max_depth, force, show_graph, autostash, force_push)
 }
 
 /// Perform cascading rebase from current branch to children
@@ -67,6 +72,7 @@ fn rebase_downstream(
   force: bool,
   show_graph: bool,
   autostash: bool,
+  force_push: bool,
 ) -> Result<()> {
   // Open the repository
   let repo =
@@ -141,6 +147,13 @@ fn rebase_downstream(
       match result {
         RebaseResult::Success => {
           print_success(&format!("Successfully rebased {branch} onto {parent}",));
+          
+          // Force-push the branch if requested
+          if force_push {
+            if let Err(e) = force_push_branch(repo_path, &branch) {
+              print_warning(&format!("Failed to force-push {branch}: {e}"));
+            }
+          }
         }
         RebaseResult::UpToDate => {
           if force {
@@ -150,6 +163,13 @@ fn rebase_downstream(
             match force_result {
               RebaseResult::Success => {
                 print_success(&format!("Successfully force-rebased {branch} onto {parent}",));
+                
+                // Force-push the branch if requested
+                if force_push {
+                  if let Err(e) = force_push_branch(repo_path, &branch) {
+                    print_warning(&format!("Failed to force-push {branch}: {e}"));
+                  }
+                }
               }
               _ => {
                 print_error(&format!("Failed to force-rebase {branch} onto {parent}",));
@@ -174,6 +194,13 @@ fn rebase_downstream(
               print_success(&format!(
                 "Rebase of {branch} onto {parent} completed after resolving conflicts",
               ));
+              
+              // Force-push the branch if requested
+              if force_push {
+                if let Err(e) = force_push_branch(repo_path, &branch) {
+                  print_warning(&format!("Failed to force-push {branch}: {e}"));
+                }
+              }
             }
             ConflictResolution::AbortToOriginal => {
               // Abort the rebase and go back to the original branch
@@ -534,4 +561,48 @@ fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<String> {
   }
 
   Ok(result)
+}
+
+/// Force-push a branch to its remote
+fn force_push_branch(repo_path: &Path, branch: &str) -> Result<()> {
+  print_info(&format!("Force-pushing {branch} to remote"));
+
+  // Check if the branch has a remote tracking branch
+  let remote_branch_result = execute_git_command(repo_path, &["rev-parse", "--abbrev-ref", &format!("{branch}@{{upstream}}")]);
+  
+  match remote_branch_result {
+    Ok(remote_ref) => {
+      if !remote_ref.trim().is_empty() && !remote_ref.contains("no upstream") {
+        // Extract remote and branch name from the upstream reference
+        let parts: Vec<&str> = remote_ref.trim().split('/').collect();
+        if parts.len() >= 2 {
+          let remote = parts[0];
+          
+          // Execute force push
+          let push_result = execute_git_command(repo_path, &["push", "--force-with-lease", remote, branch]);
+          
+          match push_result {
+            Ok(output) => {
+              if !output.is_empty() {
+                print_info(&output);
+              }
+              print_success(&format!("Successfully force-pushed {branch} to {remote}"));
+            }
+            Err(e) => {
+              print_warning(&format!("Failed to force-push {branch}: {e}"));
+            }
+          }
+        } else {
+          print_warning(&format!("Could not parse upstream reference for {branch}: {remote_ref}"));
+        }
+      } else {
+        print_warning(&format!("Branch {branch} has no upstream tracking branch, skipping force-push"));
+      }
+    }
+    Err(_) => {
+      print_warning(&format!("Branch {branch} has no upstream tracking branch, skipping force-push"));
+    }
+  }
+
+  Ok(())
 }
