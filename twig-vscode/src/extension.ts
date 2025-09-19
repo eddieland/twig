@@ -31,7 +31,7 @@ class TwigBranchTreeProvider implements vscode.TreeDataProvider<TwigBranchItem>,
                     exec('twig tree', { cwd: vscode.workspace.rootPath }, (err, stdout, stderr) => {
                         if (err) {
                             const errorMsg = stderr ? stderr : err.message;
-                            resolve([new TwigBranchItem(`Error fetching branch tree: ${errorMsg}`, [], true, false, false, true, undefined)]);
+                            resolve([new TwigBranchItem(`Error fetching branch tree: ${errorMsg}`, [], true, false, false, true, undefined, undefined, undefined)]);
                             return;
                         }
                         
@@ -47,7 +47,7 @@ class TwigBranchTreeProvider implements vscode.TreeDataProvider<TwigBranchItem>,
                                 const collectBranches = (items: TwigBranchItem[]) => {
                                     for (const item of items) {
                                         if (!item.isSection) {
-                                            processedBranches.add(item.label);
+                                            processedBranches.add(item.originalBranchName);
                                         }
                                         if (item.children.length > 0) {
                                             collectBranches(item.children);
@@ -59,10 +59,10 @@ class TwigBranchTreeProvider implements vscode.TreeDataProvider<TwigBranchItem>,
                                 const missingBranches = allLocalBranches.filter(branch => !processedBranches.has(branch));
                                 
                                 if (missingBranches.length > 0) {
-                                    const missingSection = new TwigBranchItem("🔍 Untracked Branches", [], false, false, false, true, undefined);
+                                    const missingSection = new TwigBranchItem("🔍 Untracked Branches", [], false, false, false, true, undefined, undefined, undefined);
                                     for (const branch of missingBranches) {
                                         const isCurrentBranchItem = (currentBranch === branch) || (gitCurrentBranch === branch);
-                                        missingSection.children.push(new TwigBranchItem(branch, [], false, isCurrentBranchItem, true, false, false, undefined));
+                                        missingSection.children.push(new TwigBranchItem(branch, [], false, isCurrentBranchItem, true, false, false, undefined, undefined, undefined));
                                     }
                                     items.push(missingSection);
                                 }
@@ -86,7 +86,7 @@ class TwigBranchTreeProvider implements vscode.TreeDataProvider<TwigBranchItem>,
 
         // Store the dragged branch information
         const dragData = draggedBranches.map(item => ({
-            label: item.label,
+            label: item.originalBranchName,
             isCurrentBranch: item.isCurrentBranch,
             isOrphaned: item.isOrphaned
         }));
@@ -109,7 +109,7 @@ class TwigBranchTreeProvider implements vscode.TreeDataProvider<TwigBranchItem>,
         const draggedBranch = draggedBranches[0]; // Only handle single branch for now
 
         // Don't allow dropping onto sections or the same branch
-        if (!target || target.isSection || target.label === draggedBranch.label) {
+        if (!target || target.isSection || target.originalBranchName === draggedBranch.label) {
             vscode.window.showWarningMessage('Cannot drop branch here. Please drop onto a valid target branch.');
             return;
         }
@@ -121,7 +121,7 @@ class TwigBranchTreeProvider implements vscode.TreeDataProvider<TwigBranchItem>,
         }
 
         const childBranch = draggedBranch.label;
-        const newParent = target.label;
+        const newParent = target.originalBranchName;
 
         // Confirm the reparenting operation
         const confirmation = await vscode.window.showWarningMessage(
@@ -228,6 +228,8 @@ class TwigBranchTreeProvider implements vscode.TreeDataProvider<TwigBranchItem>,
 }
 
 class TwigBranchItem extends vscode.TreeItem {
+    public readonly originalBranchName: string;
+
     constructor(
         public readonly label: string,
         public readonly children: TwigBranchItem[] = [],
@@ -236,9 +238,24 @@ class TwigBranchItem extends vscode.TreeItem {
         public readonly isOrphaned: boolean = false,
         public readonly isSection: boolean = false,
         public readonly isRootBranch: boolean = false,
-        public readonly commitStatus?: string
+        public readonly commitStatus?: string,
+        public readonly jiraTickets?: string[],  // Array of JIRA tickets
+        public readonly prStatus?: string       // PR status
     ) {
-        super(label, children.length > 0 ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
+        // Create display label with commit status at the beginning
+        let displayLabel = label;
+        if (commitStatus && !isSection) {
+            displayLabel = `${commitStatus} ${label}`;
+            console.log(`Creating tree item: "${displayLabel}" (commitStatus: "${commitStatus}", label: "${label}")`);
+        }
+        
+        super(displayLabel, children.length > 0 ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
+        
+        // Store original branch name for tracking purposes (after super call)
+        this.originalBranchName = label;
+        
+        // Explicitly set the label property to ensure VS Code displays our formatted label
+        this.label = displayLabel;
         
         // Set context value for commands
         if (isSection) {
@@ -249,11 +266,11 @@ class TwigBranchItem extends vscode.TreeItem {
             this.contextValue = 'branch';
         }
         
-        // Add visual indicators and commit status
+        // Add visual indicators
         let description = '';
+        
         if (isCurrentBranch) {
             this.iconPath = new vscode.ThemeIcon('star-full', new vscode.ThemeColor('charts.green'));
-            description = '(current)';
             // Highlight the current branch with a different resource URI to trigger styling
             this.resourceUri = vscode.Uri.parse('twig-current-branch://current');
         } else if (isOrphaned) {
@@ -263,12 +280,24 @@ class TwigBranchItem extends vscode.TreeItem {
             this.iconPath = new vscode.ThemeIcon('git-branch');
         }
         
-        // Add commit status to description
-        if (commitStatus) {
-            description = description ? `${description} ${commitStatus}` : commitStatus;
+        this.description = description;
+        
+        // Set tooltip with separate lines for each status type
+        let tooltipLines = [label];
+        
+        if (!isSection) {
+            if (commitStatus) {
+                tooltipLines.push(`Commit Status: ${commitStatus}`);
+            }
+            if (jiraTickets && jiraTickets.length > 0) {
+                tooltipLines.push(`JIRA Tickets: ${jiraTickets.join(', ')}`);
+            }
+            if (prStatus) {
+                tooltipLines.push(`PR Status: ${prStatus}`);
+            }
         }
         
-        this.description = description;
+        this.tooltip = tooltipLines.join('\n');
         
         // Style for section headers
         if (isSection) {
@@ -280,11 +309,28 @@ class TwigBranchItem extends vscode.TreeItem {
 
 
 function updateStatusBar() {
-    exec('twig current-branch', { cwd: vscode.workspace.rootPath }, (err, stdout) => {
+    // Use git to get the current branch since 'twig current-branch' doesn't exist
+    exec('git branch --show-current', { 
+        cwd: vscode.workspace.rootPath,
+        encoding: 'utf8'  // Explicitly set encoding
+    }, (err, stdout) => {
         if (err) {
             statusBarItem.text = 'Twig: Error';
         } else {
-            statusBarItem.text = `Twig: ${stdout.trim()}`;
+            let branchName = stdout.trim();
+            
+            // Remove any BOM or Windows-specific encoding artifacts
+            branchName = branchName
+                .replace(/^\uFEFF/, '')          // Remove BOM
+                .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
+                .replace(/[^\x20-\x7E]/g, '')    // Keep only printable ASCII
+                .trim();
+            
+            if (branchName) {
+                statusBarItem.text = `Twig: ${branchName}`;
+            } else {
+                statusBarItem.text = 'Twig: (No branch)';
+            }
         }
         statusBarItem.show();
     });
@@ -307,7 +353,7 @@ function parseTwigBranchTree(output: string, gitCurrentBranch?: string | null): 
     
     // Handle JIRA_HOST error gracefully
     if (output.includes("Jira host environment variable 'JIRA_HOST' not set")) {
-        result.push(new TwigBranchItem("Error: JIRA_HOST environment variable not set. Please set JIRA_HOST and reload VS Code.", [], true, false, false, true, undefined));
+        result.push(new TwigBranchItem("Error: JIRA_HOST environment variable not set. Please set JIRA_HOST and reload VS Code.", [], true, false, false, true, undefined, undefined, undefined));
         return result;
     }
     
@@ -332,10 +378,10 @@ function parseTwigBranchTree(output: string, gitCurrentBranch?: string | null): 
         }
         
         if (availableBranches.length > 0) {
-            const orphanedSection = new TwigBranchItem("📝 Available Branches", [], false, false, false, true, undefined);
+            const orphanedSection = new TwigBranchItem("📝 Available Branches", [], false, false, false, true, undefined, undefined, undefined);
             for (const branch of availableBranches) {
                 const isCurrentBranchItem = (currentBranch === branch) || (gitCurrentBranch === branch);
-                orphanedSection.children.push(new TwigBranchItem(branch, [], false, isCurrentBranchItem, true, false, false, undefined));
+                orphanedSection.children.push(new TwigBranchItem(branch, [], false, isCurrentBranchItem, true, false, false, undefined, undefined, undefined));
             }
             result.push(orphanedSection);
         }
@@ -412,18 +458,38 @@ function parseTwigBranchTree(output: string, gitCurrentBranch?: string | null): 
             const treeChars = cleanLine.match(/^[└├│─\s]*/);
             const indent = treeChars ? treeChars[0].length : 0;
             
-            // Extract branch name and commit status
+            // Extract branch name and status information
             let fullBranchLine = cleanLine.replace(/^[└├│─\s]*/, '').trim();
             
-            // Extract commit status (e.g., [+3/-1], [up-to-date], [-3])
+            // Extract all status information (everything in brackets)
+            const allStatusMatches = fullBranchLine.match(/\[.*?\]/g) || [];
             let commitStatus: string | undefined;
-            const statusMatch = fullBranchLine.match(/\s+(\[.*?\])$/);
-            if (statusMatch) {
-                commitStatus = statusMatch[1];
+            let jiraTickets: string[] = [];
+            let prStatus: string | undefined;
+            
+            if (allStatusMatches.length > 0) {
+                // Categorize each status item
+                for (const statusItem of allStatusMatches) {
+                    const content = statusItem.slice(1, -1); // Remove brackets
+                    
+                    // Check if it's a commit status
+                    if (/^[+\-]\d+(?:\/[+\-]\d+)?$/.test(content) || content === 'up-to-date' || content === 'behind') {
+                        commitStatus = statusItem;
+                        console.log(`Found commit status: "${commitStatus}" for line: "${fullBranchLine}"`);
+                    }
+                    // Check if it's a PR status (contains 'PR' or common PR indicators)
+                    else if (/^PR|^pr|pull.?request/i.test(content)) {
+                        prStatus = statusItem;
+                    }
+                    // Assume everything else is a JIRA ticket
+                    else {
+                        jiraTickets.push(statusItem);
+                    }
+                }
             }
             
-            // Remove status indicators like [up-to-date], (current), etc. to get clean branch name
-            let branchName = fullBranchLine.replace(/\s+\[.*?\]$/, '').replace(/\s+\(current\)$/, '').trim();
+            // Remove ALL bracket patterns and (current) to get clean branch name
+            let branchName = fullBranchLine.replace(/\s*\[.*?\]/g, '').replace(/\s*\(current\)/, '').trim();
             
             if (branchName && branchName.length > 0) {
                 const isCurrentBranchItem = (currentBranch === branchName) || (gitCurrentBranch === branchName);
@@ -432,7 +498,7 @@ function parseTwigBranchTree(output: string, gitCurrentBranch?: string | null): 
                 if (isRootBranchItem) {
                     rootBranches.add(branchName);
                 }
-                const item = new TwigBranchItem(branchName, [], false, isCurrentBranchItem, false, false, isRootBranchItem, commitStatus);
+                const item = new TwigBranchItem(branchName, [], false, isCurrentBranchItem, false, false, isRootBranchItem, commitStatus, jiraTickets, prStatus);
                 processedBranches.add(branchName); // Track this branch
                 
                 // Handle hierarchy using indentation
@@ -456,24 +522,15 @@ function parseTwigBranchTree(output: string, gitCurrentBranch?: string | null): 
             i++;
         }    // Add orphaned branches section if any exist
     if (orphanedBranches.length > 0) {
-        const orphanedSection = new TwigBranchItem("📝 Orphaned Branches", [], false, false, false, true, undefined);
+        const orphanedSection = new TwigBranchItem("📝 Orphaned Branches", [], false, false, false, true, undefined, undefined, undefined);
         for (const branch of orphanedBranches) {
             const isCurrentBranchItem = (currentBranch === branch) || (gitCurrentBranch === branch);
-            orphanedSection.children.push(new TwigBranchItem(branch, [], false, isCurrentBranchItem, true, false, false, undefined));
+            orphanedSection.children.push(new TwigBranchItem(branch, [], false, isCurrentBranchItem, true, false, false, undefined, undefined, undefined));
         }
         result.push(orphanedSection);
     }
     
     return result;
-}
-
-function updateStatusBarFromTree() {
-    if (currentBranch) {
-        statusBarItem.text = `Twig: ${currentBranch}`;
-    } else {
-        statusBarItem.text = 'Twig: (no branch detected)';
-    }
-    statusBarItem.show();
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -489,7 +546,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('twig.refreshBranchTree', () => {
             treeDataProvider.refresh();
-            updateStatusBarFromTree();
+            updateStatusBar(); // Update status bar when refreshing tree
         })
     );
     context.subscriptions.push(
@@ -504,7 +561,7 @@ export function activate(context: vscode.ExtensionContext) {
             
             if (item && !item.isSection) {
                 // Use the selected branch name directly
-                targetBranch = item.label;
+                targetBranch = item.originalBranchName;
             } else {
                 // If no item provided, prompt for branch name
                 vscode.window.showInputBox({ prompt: 'Enter branch name to switch to' }).then((newBranchName) => {
@@ -542,7 +599,7 @@ export function activate(context: vscode.ExtensionContext) {
                         vscode.window.showInformationMessage(`Successfully switched to branch: ${targetBranch}`);
                         // Refresh the tree view and status bar
                         treeDataProvider.refresh();
-                        updateStatusBarFromTree();
+                        updateStatusBar();
                     }
                     resolve();
                 });
@@ -598,7 +655,7 @@ export function activate(context: vscode.ExtensionContext) {
                                     vscode.window.showInformationMessage(`Successfully created and switched to branch: ${newBranch}`);
                                     // Refresh the tree view and status bar
                                     treeDataProvider.refresh();
-                                    updateStatusBarFromTree();
+                                    updateStatusBar();
                                 }
                                 resolve();
                             });
@@ -615,7 +672,7 @@ export function activate(context: vscode.ExtensionContext) {
             
             if (item && !item.isSection) {
                 // Use the selected branch name directly
-                targetBranch = item.label;
+                targetBranch = item.originalBranchName;
             } else {
                 // Use current branch if no specific branch selected
                 targetBranch = currentBranch;
@@ -699,12 +756,12 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
             
-            if (!item || !item.label) {
+            if (!item || !item.originalBranchName) {
                 vscode.window.showErrorMessage('No branch selected for reparenting.');
                 return;
             }
             
-            const branchName = item.label;
+            const branchName = item.originalBranchName;
             
             // First, get the list of root branches
             exec('twig branch root list', { cwd: vscode.workspace.rootPath }, (err, stdout, stderr) => {
@@ -795,12 +852,12 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
             
-            if (!item || !item.label) {
+            if (!item || !item.originalBranchName) {
                 vscode.window.showErrorMessage('No branch selected for deletion.');
                 return;
             }
             
-            const branchName = item.label;
+            const branchName = item.originalBranchName;
             
             // Don't allow deleting the current branch
             if (item.isCurrentBranch) {
@@ -870,17 +927,17 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
             
-            if (!item || !item.label) {
+            if (!item || !item.originalBranchName) {
                 vscode.window.showErrorMessage('No branch selected for removing as root.');
                 return;
             }
             
             if (!item.isRootBranch) {
-                vscode.window.showInformationMessage(`Branch "${item.label}" is not currently marked as a root branch.`);
+                vscode.window.showInformationMessage(`Branch "${item.originalBranchName}" is not currently marked as a root branch.`);
                 return;
             }
             
-            const branchName = item.label;
+            const branchName = item.originalBranchName;
             
             // Confirm the action
             vscode.window.showWarningMessage(
@@ -912,9 +969,9 @@ export function activate(context: vscode.ExtensionContext) {
     );
     statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     context.subscriptions.push(statusBarItem);
-    updateStatusBarFromTree();
-    vscode.workspace.onDidChangeWorkspaceFolders(updateStatusBarFromTree);
-    vscode.workspace.onDidChangeConfiguration(updateStatusBarFromTree);
+    updateStatusBar(); // Call the function that actually executes git command
+    vscode.workspace.onDidChangeWorkspaceFolders(updateStatusBar);
+    vscode.workspace.onDidChangeConfiguration(updateStatusBar);
 }
 
 export function deactivate() {}
