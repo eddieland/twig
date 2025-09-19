@@ -29,4 +29,21 @@ ref/
 /target
 
 # Per-user secrets
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.node_repl_history
+# Note: package-lock.json and yarn.lock should be committed
+
+# TypeScript build output
+dist/
+build/
+*.tsbuildinfo
+
+# VS Code extension development
+*.vsix
 /.env

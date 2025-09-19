@@ -39,6 +39,29 @@ pub struct GitHubPullRequest {
   pub draft: Option<bool>,
 }
 
+/// Represents a GitHub issue
+#[derive(Debug, Deserialize, Serialize)]
+pub struct GitHubIssue {
+  pub number: u32,
+  pub title: String,
+  pub body: Option<String>,
+  pub html_url: String,
+  pub state: String,
+  pub user: GitHubUser,
+  pub created_at: String,
+  pub updated_at: String,
+  pub labels: Vec<GitHubLabel>,
+  pub assignees: Vec<GitHubUser>,
+}
+
+/// Represents a GitHub label
+#[derive(Debug, Deserialize, Serialize)]
+pub struct GitHubLabel {
+  pub name: String,
+  pub color: String,
+  pub description: Option<String>,
+}
+
 /// Represents a GitHub pull request reference (head or base)
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PullRequestRef {

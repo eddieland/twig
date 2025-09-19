@@ -118,13 +118,24 @@ run: ## Run the application
 ### Installation
 
 .PHONY: install
-install: ## Install edlicense locally
-	cargo install --path .
+install: ## Install twig locally
+	cargo install --path . $(CARGO_FLAGS)
+
+### VS Code Extension
+
+.PHONY: vscode-build
+vscode-build: ## Build VS Code extension
+	cd twig-vscode && npm install && npm run compile
+
+.PHONY: vscode-package
+vscode-package: ## Package VS Code extension
+	cd twig-vscode && npm install && npx vsce package
 
 
 .PHONY: install-dev-tools
 install-dev-tools: ## Install development tools
-	rustup show # Ensures rust-toolchain.toml is applied
+  # Ensures rust-toolchain.toml is applied
+	rustup show 
 	cargo install cargo-watch
 	cargo install cargo-outdated
 	cargo install cargo-nextest
