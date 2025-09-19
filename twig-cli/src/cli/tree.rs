@@ -166,6 +166,10 @@ fn display_orphaned_branches(orphaned: &[String]) {
   );
   println!(
     "  • Add dependency: {}",
-    format_command("twig branch depend <parent-branch>")
+    format_command("twig branch depend <child-branch> <parent-branch>")
+  );
+  println!(
+    "  • Reparent all to one branch: {}",
+    format_command("twig branch reparent <parent-branch>")
   );
 }
