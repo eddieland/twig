@@ -32,6 +32,8 @@ This plan focuses on core branch-centric flows that most Twig users rely on: `tw
 
 **Deliverables.** Updated branching helper, CLI logic, and integration tests in `tests/` that assert the new branch points at the parent tip when provided.
 
+**Status.** ✅ Completed — `twig switch` now resolves parent tips before branch creation, persists dependencies only after successful checkout, and includes automated coverage for parent, Jira, and GitHub flows to confirm the new branches inherit the expected ancestry.
+
 ---
 
 ## P0 — Use upstream PR data when creating branches from GitHub
