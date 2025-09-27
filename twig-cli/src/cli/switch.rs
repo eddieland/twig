@@ -229,61 +229,140 @@ fn extract_jira_issue_from_url(url: &str) -> Option<String> {
 }
 
 /// Resolve parent branch based on the provided option
-fn resolve_parent_branch(
+#[derive(Clone, Debug)]
+enum BranchBase {
+  Head,
+  Parent { name: String },
+}
+
+impl BranchBase {
+  fn parent_name(&self) -> Option<&str> {
+    match self {
+      BranchBase::Head => None,
+      BranchBase::Parent { name } => Some(name.as_str()),
+    }
+  }
+}
+
+#[derive(Clone, Debug)]
+struct BranchBaseResolution {
+  base: BranchBase,
+  commit: git2::Oid,
+}
+
+impl BranchBaseResolution {
+  fn head(commit: git2::Oid) -> Self {
+    Self {
+      base: BranchBase::Head,
+      commit,
+    }
+  }
+
+  fn parent(name: String, commit: git2::Oid) -> Self {
+    Self {
+      base: BranchBase::Parent { name },
+      commit,
+    }
+  }
+
+  fn parent_name(&self) -> Option<&str> {
+    self.base.parent_name()
+  }
+}
+
+fn resolve_branch_base(
   repo_path: &std::path::Path,
   parent_option: Option<&str>,
   jira_parser: Option<&JiraTicketParser>,
-) -> Result<Option<String>> {
-  match parent_option {
-    None => Ok(None), // No parent specified
-    Some("current") => {
-      // Get the current branch name
-      let repo = Git2Repository::open(repo_path)?;
-      let head = repo.head()?;
-      if head.is_branch() {
-        let branch_name = head.shorthand().unwrap_or_default().to_string();
-        Ok(Some(branch_name))
-      } else {
-        print_warning("HEAD is not on a branch, cannot use as parent");
-        Ok(None)
-      }
+) -> Result<BranchBaseResolution> {
+  let repo = Git2Repository::open(repo_path)?;
+
+  match parent_option.map(str::trim) {
+    None | Some("") | Some("none") => {
+      let head_commit = repo
+        .head()
+        .context("Failed to resolve HEAD for branch creation")?
+        .peel_to_commit()
+        .context("Failed to resolve HEAD commit for branch creation")?;
+      Ok(BranchBaseResolution::head(head_commit.id()))
     }
-    Some("none") => Ok(None), // Explicitly no parent
-    Some(parent) => {
-      // Check if it's a Jira issue key
-      if let Some(parser) = jira_parser.as_ref() {
-        if let Some(normalized_key) = parse_jira_issue_key(parser, parent) {
-          // Look up branch by Jira issue (using normalized key)
-          let parent = &normalized_key;
-          let repo_state = RepoState::load(repo_path)?;
-          if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(parent) {
-            Ok(Some(branch_issue.branch.clone()))
-          } else {
-            print_warning(&format!("No branch found for Jira issue {parent}"));
-            Ok(None)
-          }
-        } else {
-          // Not a valid Jira issue, treat as branch name
-          let repo = Git2Repository::open(repo_path)?;
-          if repo.find_branch(parent, git2::BranchType::Local).is_ok() {
-            Ok(Some(parent.to_string()))
-          } else {
-            print_warning(&format!("Branch '{parent}' not found"));
-            Ok(None)
-          }
-        }
-      } else {
-        // Assume it's a branch name, verify it exists
-        let repo = Git2Repository::open(repo_path)?;
-        if repo.find_branch(parent, git2::BranchType::Local).is_ok() {
-          Ok(Some(parent.to_string()))
-        } else {
-          print_warning(&format!("Branch '{parent}' not found, cannot use as parent"));
-          Ok(None)
-        }
+    Some("current") => {
+      let head = repo
+        .head()
+        .context("Failed to resolve current branch for --parent=current")?;
+
+      if !head.is_branch() {
+        return Err(anyhow::anyhow!(
+          "HEAD is not on a branch. Create a branch first or use `--parent none`."
+        ));
       }
+
+      let branch_name = head.shorthand().unwrap_or_default().to_string();
+      let commit = head
+        .peel_to_commit()
+        .context("Failed to resolve commit for the current branch")?
+        .id();
+
+      Ok(BranchBaseResolution::parent(branch_name, commit))
+    }
+    Some(parent) => {
+      if let Some(parser) = jira_parser.as_ref()
+        && let Some(normalized_key) = parse_jira_issue_key(parser, parent) {
+          let repo_state = RepoState::load(repo_path)?;
+
+          if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(&normalized_key) {
+            let commit = lookup_branch_tip(&repo, &branch_issue.branch)?
+              .ok_or_else(|| parent_lookup_error(&branch_issue.branch))?;
+            return Ok(BranchBaseResolution::parent(branch_issue.branch.clone(), commit));
+          }
+        }
+
+      let commit = lookup_branch_tip(&repo, parent)?.ok_or_else(|| parent_lookup_error(parent))?;
+      Ok(BranchBaseResolution::parent(parent.to_string(), commit))
     }
   }
+}
+
+fn lookup_branch_tip(repo: &Git2Repository, branch_name: &str) -> Result<Option<git2::Oid>> {
+  if let Ok(branch) = repo.find_branch(branch_name, git2::BranchType::Local) {
+    let commit = branch
+      .into_reference()
+      .peel_to_commit()
+      .context("Failed to resolve local branch commit")?;
+    return Ok(Some(commit.id()));
+  }
+
+  let remote_branch_name = format!("origin/{branch_name}");
+  if let Ok(branch) = repo.find_branch(&remote_branch_name, git2::BranchType::Remote) {
+    let commit = branch
+      .into_reference()
+      .peel_to_commit()
+      .context("Failed to resolve remote branch commit")?;
+    return Ok(Some(commit.id()));
+  }
+
+  if let Ok(mut remote) = repo.find_remote("origin") {
+    let mut fetch_options = git2::FetchOptions::new();
+    remote
+      .fetch(&[branch_name], Some(&mut fetch_options), None)
+      .with_context(|| format!("Failed to fetch '{branch_name}' from origin"))?;
+
+    if let Ok(branch) = repo.find_branch(&remote_branch_name, git2::BranchType::Remote) {
+      let commit = branch
+        .into_reference()
+        .peel_to_commit()
+        .context("Failed to resolve fetched branch commit")?;
+      return Ok(Some(commit.id()));
+    }
+  }
+
+  Ok(None)
+}
+
+fn parent_lookup_error(parent: &str) -> anyhow::Error {
+  anyhow::anyhow!(
+    "Parent branch '{parent}' was not found. Create it first and record dependencies with `twig branch depend` or `twig branch root add`."
+  )
 }
 
 /// Handle switching to a branch based on Jira issue
@@ -377,9 +456,9 @@ fn handle_branch_switch(
     print_info(&format!("Branch '{branch_name}' doesn't exist. Creating it...",));
 
     // Resolve parent branch
-    let parent_branch = resolve_parent_branch(repo_path, parent_option, jira_parser)?;
+    let branch_base = resolve_branch_base(repo_path, parent_option, jira_parser)?;
 
-    create_and_switch_to_branch(repo_path, branch_name, parent_branch.as_deref())
+    create_and_switch_to_branch(repo_path, branch_name, &branch_base)
   } else {
     print_warning(&format!(
       "Branch '{branch_name}' doesn't exist. Use --create to create it.",
@@ -467,29 +546,23 @@ fn switch_to_branch(repo_path: &std::path::Path, branch_name: &str) -> Result<()
 fn create_and_switch_to_branch(
   repo_path: &std::path::Path,
   branch_name: &str,
-  parent_branch: Option<&str>,
+  branch_base: &BranchBaseResolution,
 ) -> Result<()> {
   let repo = Git2Repository::open(repo_path)?;
 
-  // Get the HEAD commit to branch from
-  let head = repo.head()?;
-  let target = head
-    .target()
-    .ok_or_else(|| anyhow::anyhow!("HEAD is not a direct reference"))?;
-  let commit = repo.find_commit(target)?;
+  let base_commit = repo
+    .find_commit(branch_base.commit)
+    .with_context(|| format!("Failed to locate base commit for '{branch_name}'"))?;
 
-  // Create the branch
   repo
-    .branch(branch_name, &commit, false)
+    .branch(branch_name, &base_commit, false)
     .with_context(|| format!("Failed to create branch '{branch_name}'",))?;
 
   print_success(&format!("Created branch '{branch_name}'",));
 
-  // Switch to the new branch
   switch_to_branch(repo_path, branch_name)?;
 
-  // Add dependency if parent is specified
-  if let Some(parent) = parent_branch {
+  if let Some(parent) = branch_base.parent_name() {
     add_branch_dependency(repo_path, branch_name, parent)?;
   }
 
@@ -554,10 +627,10 @@ fn create_branch_from_jira_issue(
     print_info(&format!("Creating branch: {branch_name}",));
 
     // Resolve parent branch
-    let parent_branch = resolve_parent_branch(repo_path, parent_option, jira_parser)?;
+    let branch_base = resolve_branch_base(repo_path, parent_option, jira_parser)?;
 
     // Create and switch to the branch
-    create_and_switch_to_branch(repo_path, &branch_name, parent_branch.as_deref())?;
+    create_and_switch_to_branch(repo_path, &branch_name, &branch_base)?;
 
     // Store the association
     store_jira_association(repo_path, &branch_name, issue_key)?;
@@ -604,10 +677,10 @@ fn create_branch_from_github_pr(
     print_info(&format!("Creating branch: {branch_name}",));
 
     // Resolve parent branch
-    let parent_branch = resolve_parent_branch(repo_path, parent_option, jira_parser)?;
+    let branch_base = resolve_branch_base(repo_path, parent_option, jira_parser)?;
 
     // Create and switch to the branch
-    create_and_switch_to_branch(repo_path, &branch_name, parent_branch.as_deref())?;
+    create_and_switch_to_branch(repo_path, &branch_name, &branch_base)?;
 
     // Store the association
     store_github_pr_association(repo_path, &branch_name, pr_number)?;
@@ -663,6 +736,14 @@ fn store_github_pr_association(repo_path: &Path, branch_name: &str, pr_number: u
 
 #[cfg(test)]
 mod tests {
+  use anyhow::Result;
+  use git2::BranchType;
+  use serde_json::json;
+  use tokio::runtime::Runtime;
+  use twig_test_utils::{GitRepoTestGuard, checkout_branch, create_commit, setup_test_env_with_init};
+  use wiremock::matchers::{method, path};
+  use wiremock::{Mock, MockServer, ResponseTemplate};
+
   use super::*;
 
   #[test]
@@ -751,5 +832,189 @@ mod tests {
     } else {
       panic!("Expected BranchName");
     }
+  }
+
+  #[test]
+  fn test_create_branch_from_parent_tip() -> Result<()> {
+    let (_env_guard, _config_dirs) = setup_test_env_with_init()?;
+    let repo_guard = GitRepoTestGuard::new();
+    let repo = &repo_guard.repo;
+
+    create_commit(repo, "base.txt", "base", "initial commit")?;
+
+    let head_commit = repo.head()?.peel_to_commit()?;
+    repo.branch("parent", &head_commit, true)?;
+    checkout_branch(repo, "parent")?;
+    create_commit(repo, "parent.txt", "parent", "parent commit")?;
+    let parent_tip = repo.head()?.peel_to_commit()?.id();
+
+    let branch_base = resolve_branch_base(repo_guard.path(), Some("parent"), None)?;
+    create_and_switch_to_branch(repo_guard.path(), "feature/new", &branch_base)?;
+
+    let created_branch = repo.find_branch("feature/new", BranchType::Local)?;
+    let created_tip = created_branch.into_reference().peel_to_commit()?.id();
+    assert_eq!(created_tip, parent_tip);
+
+    let repo_state = RepoState::load(repo_guard.path())?;
+    let dependency = repo_state
+      .dependencies
+      .iter()
+      .find(|dep| dep.child == "feature/new")
+      .expect("dependency recorded");
+    assert_eq!(dependency.parent, "parent");
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_parent_branch_missing_errors() -> Result<()> {
+    let (_env_guard, _config_dirs) = setup_test_env_with_init()?;
+    let repo_guard = GitRepoTestGuard::new();
+    let repo = &repo_guard.repo;
+
+    create_commit(repo, "base.txt", "base", "initial commit")?;
+
+    let err =
+      resolve_branch_base(repo_guard.path(), Some("missing"), None).expect_err("expected missing parent to error");
+    assert!(err.to_string().contains("twig branch depend"));
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_create_branch_from_jira_issue_uses_parent_tip() -> Result<()> {
+    let (_env_guard, _config_dirs) = setup_test_env_with_init()?;
+    let repo_guard = GitRepoTestGuard::new();
+    let repo = &repo_guard.repo;
+
+    create_commit(repo, "base.txt", "base", "initial commit")?;
+    let head_commit = repo.head()?.peel_to_commit()?;
+    repo.branch("parent", &head_commit, true)?;
+    checkout_branch(repo, "parent")?;
+    create_commit(repo, "parent.txt", "parent", "parent commit")?;
+    let parent_tip = repo.head()?.peel_to_commit()?.id();
+
+    let runtime = Runtime::new()?;
+    let mock_server = runtime.block_on(MockServer::start());
+
+    runtime.block_on(async {
+      Mock::given(method("GET"))
+        .and(path("/rest/api/2/issue/PROJ-123"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+          "id": "100",
+          "key": "PROJ-123",
+          "fields": {
+            "summary": "Example Feature",
+            "description": "Example description",
+            "status": { "name": "In Progress" }
+          }
+        })))
+        .mount(&mock_server)
+        .await;
+    });
+
+    let jira_client = JiraClient::new(
+      &mock_server.uri(),
+      twig_jira::models::JiraAuth {
+        username: "user".to_string(),
+        api_token: "token".to_string(),
+      },
+    );
+
+    create_branch_from_jira_issue(&jira_client, repo_guard.path(), "PROJ-123", Some("parent"), None)?;
+
+    let created_branch = repo.find_branch("PROJ-123/example-feature", BranchType::Local)?;
+    let created_tip = created_branch.into_reference().peel_to_commit()?.id();
+    assert_eq!(created_tip, parent_tip);
+
+    let repo_state = RepoState::load(repo_guard.path())?;
+    let dependency = repo_state
+      .dependencies
+      .iter()
+      .find(|dep| dep.child == "PROJ-123/example-feature")
+      .expect("dependency recorded");
+    assert_eq!(dependency.parent, "parent");
+
+    let metadata = repo_state
+      .get_branch_metadata("PROJ-123/example-feature")
+      .expect("metadata recorded");
+    assert_eq!(metadata.jira_issue.as_deref(), Some("PROJ-123"));
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_create_branch_from_github_pr_respects_parent_tip() -> Result<()> {
+    let (_env_guard, _config_dirs) = setup_test_env_with_init()?;
+    let repo_guard = GitRepoTestGuard::new();
+    let repo = &repo_guard.repo;
+
+    create_commit(repo, "base.txt", "base", "initial commit")?;
+    let head_commit = repo.head()?.peel_to_commit()?;
+    repo.branch("parent", &head_commit, true)?;
+    checkout_branch(repo, "parent")?;
+    create_commit(repo, "parent.txt", "parent", "parent commit")?;
+    let parent_tip = repo.head()?.peel_to_commit()?.id();
+
+    repo.remote("origin", "https://github.com/example/repo.git")?;
+
+    let runtime = Runtime::new()?;
+    let mock_server = runtime.block_on(MockServer::start());
+
+    runtime.block_on(async {
+      Mock::given(method("GET"))
+        .and(path("/repos/example/repo/pulls/42"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+          "number": 42,
+          "title": "Example PR",
+          "html_url": "https://github.com/example/repo/pull/42",
+          "state": "open",
+          "user": { "login": "octocat", "id": 1, "name": "Octocat" },
+          "created_at": "2021-01-01T00:00:00Z",
+          "updated_at": "2021-01-01T00:00:00Z",
+          "head": {
+            "label": "octocat:feature",
+            "ref_name": "feature",
+            "sha": "abcdef1234567890abcdef1234567890abcdef12"
+          },
+          "base": {
+            "label": "octocat:main",
+            "ref_name": "main",
+            "sha": "1234567890abcdef1234567890abcdef12345678"
+          },
+          "mergeable": true,
+          "mergeable_state": "clean",
+          "draft": false
+        })))
+        .mount(&mock_server)
+        .await;
+    });
+
+    let mut github_client = twig_gh::GitHubClient::new(twig_gh::models::GitHubAuth {
+      username: "user".to_string(),
+      token: "token".to_string(),
+    });
+    github_client.base_url = mock_server.uri();
+
+    create_branch_from_github_pr(&github_client, repo_guard.path(), 42, Some("parent"), None)?;
+
+    let created_branch = repo.find_branch("pr-42-abcdef12", BranchType::Local)?;
+    let created_tip = created_branch.into_reference().peel_to_commit()?.id();
+    assert_eq!(created_tip, parent_tip);
+
+    let repo_state = RepoState::load(repo_guard.path())?;
+    let dependency = repo_state
+      .dependencies
+      .iter()
+      .find(|dep| dep.child == "pr-42-abcdef12")
+      .expect("dependency recorded");
+    assert_eq!(dependency.parent, "parent");
+
+    let metadata = repo_state
+      .get_branch_metadata("pr-42-abcdef12")
+      .expect("metadata recorded");
+    assert_eq!(metadata.github_pr, Some(42));
+
+    Ok(())
   }
 }
