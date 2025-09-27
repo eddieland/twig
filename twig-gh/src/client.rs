@@ -33,6 +33,14 @@ impl GitHubClient {
     instance
   }
 
+  /// Overrides the base URL used for GitHub API requests.
+  ///
+  /// Primarily intended for tests that need to route requests through a mock
+  /// server.
+  pub fn set_base_url(&mut self, base_url: impl Into<String>) {
+    self.base_url = base_url.into();
+  }
+
   /// Test the GitHub connection by fetching the current user
   #[instrument(skip(self), level = "debug")]
   pub async fn test_connection(&self) -> Result<bool> {
