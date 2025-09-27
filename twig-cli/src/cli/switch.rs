@@ -994,7 +994,7 @@ mod tests {
       username: "user".to_string(),
       token: "token".to_string(),
     });
-    github_client.base_url = mock_server.uri();
+    github_client.set_base_url(mock_server.uri());
 
     create_branch_from_github_pr(&github_client, repo_guard.path(), 42, Some("parent"), None)?;
 
