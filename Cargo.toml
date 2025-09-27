@@ -40,6 +40,40 @@ repository.workspace = true
 
 [dependencies]
 twig-cli = { path = "twig-cli" }
+twig-core = { path = "twig-core" }
+twig-gh = { path = "twig-gh" }
+twig-jira = { path = "twig-jira" }
+no-worries = { path = "no-worries" }
+
+# Add the same dependencies as twig-cli needs
+anyhow.workspace = true
+chrono.workspace = true
+clap.workspace = true
+clap_complete.workspace = true
+console.workspace = true
+crossterm.workspace = true
+dialoguer.workspace = true
+directories.workspace = true
+emojis.workspace = true
+git2.workspace = true
+indicatif.workspace = true
+nucleo.workspace = true
+owo-colors.workspace = true
+ratatui.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tabled.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+wincredentials.workspace = true
+# Platform-specific git2 features for Windows
+git2 = { version = "0.20", features = ["vendored-openssl"] }
 
 [dev-dependencies]
 twig-test-utils = { path = "twig-test-utils" }
@@ -96,10 +130,6 @@ wincredentials = "0.2"
 insta = "1.43"
 tempfile = "3.8"
 wiremock = "0.6.5"
-
-[target.'cfg(windows)'.dependencies]
-# Platform-specific git2 features for Windows
-git2 = { version = "0.20", features = ["vendored-openssl"] }
 
 [profile.release]
 opt-level = 2
