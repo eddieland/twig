@@ -9,6 +9,8 @@ use clap::{Args, Subcommand};
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::{RepoState, detect_repository};
 
+use crate::enhanced_errors::{ErrorHandler, TwigError, ErrorCategory, ResultExt};
+
 /// Command for branch dependency and root management
 #[derive(Args)]
 pub struct BranchArgs {
@@ -206,7 +208,11 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
       let repo_path = if let Some(repo_arg) = cmd.repo {
         crate::utils::resolve_repository_path(Some(&repo_arg))?
       } else {
-        detect_repository().context("Not in a git repository")?
+        detect_repository().ok_or_else(|| {
+          let error = ErrorHandler::handle_repository_error(anyhow::anyhow!("Not in a git repository"));
+          error.display_enhanced();
+          anyhow::anyhow!(error)
+        })?
       };
 
       // Load repository state
@@ -221,8 +227,9 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
           Ok(())
         }
         Err(e) => {
-          print_error(&format!("Failed to add dependency: {e}"));
-          Err(e)
+          let enhanced_error = ErrorHandler::handle_branch_error("add dependency", &cmd.child, e);
+          enhanced_error.display_enhanced();
+          Err(enhanced_error.into())
         }
       }
     }
@@ -274,8 +281,9 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
             Ok(())
           }
           Err(e) => {
-            print_error(&format!("Failed to add root branch: {e}"));
-            Err(e)
+            let enhanced_error = ErrorHandler::handle_branch_error("add root", &cmd.branch, e);
+            enhanced_error.display_enhanced();
+            Err(enhanced_error.into())
           }
         }
       }

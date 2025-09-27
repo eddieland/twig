@@ -11,8 +11,13 @@ pub mod completion;
 pub mod consts;
 pub mod creds;
 pub mod diagnostics;
+pub mod enhanced_errors;
 pub mod fixup;
 pub mod git;
 pub mod plugin;
 pub mod user_defined_dependency_resolver;
+pub mod user_experience;
 pub mod utils;
+
+#[cfg(test)]
+mod test_enhanced_features;
