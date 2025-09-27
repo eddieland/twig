@@ -12,12 +12,15 @@ use owo_colors::OwoColorize;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
+use twig_core::git::current_branch;
 use twig_core::output::{
   format_check_status, format_command, format_pr_review_status, print_error, print_info, print_success, print_warning,
 };
 use twig_core::state::BranchMetadata;
-use twig_core::{RepoState, detect_repository, detect_repository_from_path, get_current_branch_github_pr};
-use twig_gh::PullRequestStatus;
+use twig_core::{
+  RepoState, detect_repository, detect_repository_from_path, get_current_branch_github_pr, open_url_in_browser,
+};
+use twig_gh::{CreatePullRequestParams, GitHubIssue, PullRequestStatus};
 
 use crate::clients;
 
@@ -69,6 +72,12 @@ pub enum GitHubSubcommands {
                       This command group provides functionality for working with GitHub pull requests,\n\
                       including viewing status and linking branches to pull requests.")]
   Pr(PrCommand),
+
+  /// Issue operations
+  #[command(long_about = "Manage GitHub issues.\n\n\
+                      This command group provides functionality for working with GitHub issues,\n\
+                      including creating branches from issue information.")]
+  Issue(IssueCommand),
 }
 
 /// View CI/CD checks for a PR
@@ -115,6 +124,15 @@ pub enum PrSubcommands {
   )]
   #[command(alias = "st")]
   Status,
+
+  /// Create a pull request for the current branch
+  #[command(long_about = "Create a GitHub pull request for the current branch.\n\n\
+                           This command creates a new pull request using the current branch as the head.\n\
+                           It automatically determines the base branch from the parent dependency,\n\
+                           or uses the repository's default branch if no parent is defined.\n\
+                           The title and body can be customized or auto-generated from commit messages.")]
+  #[command(alias = "create")]
+  CreatePr(CreatePrCommand),
 }
 
 /// List pull requests for a repository
@@ -142,6 +160,81 @@ pub struct LinkCommand {
                If not provided, uses the current branch's associated PR"
   )]
   pub pr_url_or_id: Option<String>,
+}
+
+/// Create a pull request for the current branch
+#[derive(Args)]
+pub struct CreatePrCommand {
+  /// PR title (defaults to branch name or latest commit message)
+  #[arg(long, short = 't')]
+  pub title: Option<String>,
+
+  /// PR body/description
+  #[arg(long, short = 'b')]
+  pub body: Option<String>,
+
+  /// Base branch (defaults to parent dependency or repository default)
+  #[arg(long)]
+  pub base: Option<String>,
+
+  /// Create as draft PR
+  #[arg(long, short = 'd')]
+  pub draft: bool,
+
+  /// Open PR in browser after creation
+  #[arg(long, short = 'o')]
+  pub open: bool,
+
+  /// Path to a specific repository (defaults to current repository)
+  #[arg(long, short = 'r', value_name = "PATH")]
+  pub repo: Option<String>,
+}
+
+/// Issue operations
+#[derive(Args)]
+pub struct IssueCommand {
+  /// The subcommand to execute
+  #[command(subcommand)]
+  pub subcommand: IssueSubcommands,
+}
+
+/// Subcommands for the Issue command
+#[derive(Subcommand)]
+pub enum IssueSubcommands {
+  /// Create a branch from a GitHub issue
+  #[command(long_about = "Create a branch from a GitHub issue ID or URL.\n\n\
+                           This command fetches the issue information from GitHub and\n\
+                           creates a new branch with a name based on the issue title.\n\
+                           The branch will be created from the current branch or a specified base branch.")]
+  #[command(alias = "branch")]
+  CreateBranch(CreateBranchFromIssueCommand),
+}
+
+/// Create a branch from a GitHub issue
+#[derive(Args)]
+pub struct CreateBranchFromIssueCommand {
+  /// GitHub issue ID or URL
+  #[arg(
+    index = 1,
+    long_help = "GitHub issue ID (e.g., '123') or URL (e.g., 'https://github.com/owner/repo/issues/123')"
+  )]
+  pub issue_id_or_url: String,
+
+  /// Base branch to create the new branch from (defaults to current branch)
+  #[arg(long, short = 'b')]
+  pub base: Option<String>,
+
+  /// Custom branch name (defaults to generated name from issue title)
+  #[arg(long, short = 'n')]
+  pub name: Option<String>,
+
+  /// Set the created branch as a child of the base branch in dependencies
+  #[arg(long, short = 'p')]
+  pub set_parent: bool,
+
+  /// Path to a specific repository (defaults to current repository)
+  #[arg(long, short = 'r', value_name = "PATH")]
+  pub repo: Option<String>,
 }
 
 /// Handle the GitHub command
@@ -178,6 +271,10 @@ pub(crate) fn handle_github_command(github: GitHubArgs) -> Result<()> {
       }
       PrSubcommands::List(list) => handle_pr_list_command(&list),
       PrSubcommands::Status => handle_pr_status_command(),
+      PrSubcommands::CreatePr(create) => handle_create_pr_command(create),
+    },
+    GitHubSubcommands::Issue(issue) => match issue.subcommand {
+      IssueSubcommands::CreateBranch(create) => handle_create_branch_from_issue_command(create),
     },
   }
 }
@@ -953,4 +1050,378 @@ fn display_pr_status(status: &PullRequestStatus) {
   }
 
   println!();
+}
+
+/// Handle creating a pull request for the current branch
+fn handle_create_pr_command(cmd: CreatePrCommand) -> Result<()> {
+  use git2::Repository as Git2Repository;
+
+  // Get repository path
+  let repo_path = if let Some(path) = &cmd.repo {
+    detect_repository_from_path(path)
+  } else {
+    detect_repository()
+  };
+
+  let repo_path = match repo_path {
+    Some(path) => path,
+    None => {
+      print_error("Not in a git repository or repository not found");
+      return Ok(());
+    }
+  };
+
+  // Open the repository
+  let repo = Git2Repository::open(&repo_path).context("Failed to open git repository")?;
+
+  // Get current branch name
+  let current_branch = match current_branch() {
+    Ok(Some(branch)) => branch,
+    Ok(None) => {
+      print_error("Not on any branch");
+      return Ok(());
+    }
+    Err(e) => {
+      print_error(&format!("Failed to get current branch: {e}"));
+      return Ok(());
+    }
+  };
+
+  print_info(&format!("Creating PR for branch: {}", current_branch));
+
+  // Determine base branch - be more conservative about when to specify one
+  let base_branch = if let Some(base) = &cmd.base {
+    base.clone()
+  } else {
+    // Try to get parent from dependencies first
+    let repo_state = RepoState::load(&repo_path).unwrap_or_default();
+    let parents = repo_state.get_dependency_parents(&current_branch);
+
+    if let Some(parent) = parents.first() {
+      print_info(&format!("Using parent dependency as base: {}", parent));
+      parent.to_string()
+    } else {
+      // No explicit base and no parent dependency
+      // Check if we're on the repository's default branch by looking at origin/HEAD
+      if let Some(default_branch) = get_repository_default_branch(&repo) {
+        if default_branch == current_branch {
+          print_error(&format!(
+            "Cannot create PR: current branch '{}' is the repository's default branch",
+            current_branch
+          ));
+          print_info("Specify a different base branch with --base");
+          return Ok(());
+        }
+
+        // Use the repository's actual default branch
+        print_info(&format!("Using repository default branch as base: {}", default_branch));
+        default_branch
+      } else {
+        // Can't determine default branch, use common fallback
+        print_warning("Could not determine repository default branch, using 'main' as base");
+        print_info("Specify a base branch with --base if 'main' is not correct");
+        "main".to_string()
+      }
+    }
+  };
+
+  // Generate title if not provided
+  let title = if let Some(title) = &cmd.title {
+    title.clone()
+  } else {
+    // Use current branch name, cleaned up
+    current_branch
+      .replace("feature/", "")
+      .replace("bugfix/", "")
+      .replace("hotfix/", "")
+      .replace("-", " ")
+      .replace("_", " ")
+  };
+
+  // Get repository owner and name from remote URL
+  let (owner, repo_name) = match get_repo_owner_and_name(&repo) {
+    Some(info) => info,
+    None => {
+      print_error("Could not determine repository owner and name from remote URL");
+      return Ok(());
+    }
+  };
+
+  // Create GitHub client
+  let rt = Runtime::new().context("Failed to create async runtime")?;
+  let home = BaseDirs::new().context("Failed to get home directory")?;
+  let client = match clients::create_github_client_from_netrc(home.home_dir()) {
+    Ok(client) => client,
+    Err(e) => {
+      print_error(&format!("Failed to create GitHub client: {e}"));
+      return Ok(());
+    }
+  };
+
+  // Create the pull request
+  let params = CreatePullRequestParams {
+    owner: &owner,
+    repo: &repo_name,
+    title: &title,
+    body: cmd.body.as_deref(),
+    head: &current_branch,
+    base: &base_branch,
+    draft: Some(cmd.draft),
+  };
+
+  match rt.block_on(client.create_pull_request(params)) {
+    Ok(pr) => {
+      print_success(&format!(
+        "Successfully created pull request #{}: {}",
+        pr.number, pr.title
+      ));
+      print_info(&format!("URL: {}", pr.html_url));
+
+      // Link the PR to the current branch
+      let mut repo_state = RepoState::load(&repo_path).unwrap_or_default();
+      let metadata = BranchMetadata {
+        branch: current_branch.clone(),
+        jira_issue: None,
+        github_pr: Some(pr.number),
+        created_at: chrono::Utc::now().to_rfc3339(),
+      };
+      repo_state.add_branch_issue(metadata);
+      if let Err(e) = repo_state.save(&repo_path) {
+        print_warning(&format!("Failed to save branch metadata: {e}"));
+      } else {
+        print_info(&format!("Linked PR #{} to branch {}", pr.number, current_branch));
+      }
+
+      // Open in browser if requested
+      if cmd.open
+        && let Err(e) = open_url_in_browser(&pr.html_url)
+      {
+        print_warning(&format!("Failed to open PR in browser: {e}"));
+      }
+
+      Ok(())
+    }
+    Err(e) => {
+      print_error(&format!("Failed to create pull request: {e}"));
+      Ok(())
+    }
+  }
+}
+
+/// Handle creating a branch from a GitHub issue
+fn handle_create_branch_from_issue_command(cmd: CreateBranchFromIssueCommand) -> Result<()> {
+  use git2::Repository as Git2Repository;
+
+  // Get repository path
+  let repo_path = if let Some(path) = &cmd.repo {
+    detect_repository_from_path(path)
+  } else {
+    detect_repository()
+  };
+
+  let repo_path = match repo_path {
+    Some(path) => path,
+    None => {
+      print_error("Not in a git repository or repository not found");
+      return Ok(());
+    }
+  };
+
+  // Open the repository
+  let repo = Git2Repository::open(&repo_path).context("Failed to open git repository")?;
+
+  // Parse issue ID from input
+  let issue_id = parse_github_issue_id(&cmd.issue_id_or_url)?;
+
+  // Get repository owner and name from remote URL
+  let (owner, repo_name) = match get_repo_owner_and_name(&repo) {
+    Some(info) => info,
+    None => {
+      print_error("Could not determine repository owner and name from remote URL");
+      return Ok(());
+    }
+  };
+
+  print_info(&format!("Fetching issue #{} from {}/{}", issue_id, owner, repo_name));
+
+  // Create GitHub client and fetch issue
+  let rt = Runtime::new().context("Failed to create async runtime")?;
+  let home = BaseDirs::new().context("Failed to get home directory")?;
+  let client = match clients::create_github_client_from_netrc(home.home_dir()) {
+    Ok(client) => client,
+    Err(e) => {
+      print_error(&format!("Failed to create GitHub client: {e}"));
+      return Ok(());
+    }
+  };
+
+  let issue = match rt.block_on(client.get_issue(&owner, &repo_name, issue_id)) {
+    Ok(issue) => issue,
+    Err(e) => {
+      print_error(&format!("Failed to fetch issue: {e}"));
+      return Ok(());
+    }
+  };
+
+  print_success(&format!("Found issue: {}", issue.title));
+
+  // Generate branch name if not provided
+  let branch_name = if let Some(name) = &cmd.name {
+    name.clone()
+  } else {
+    generate_branch_name_from_issue(&issue)
+  };
+
+  // Determine base branch
+  let base_branch = if let Some(base) = &cmd.base {
+    base.clone()
+  } else {
+    match current_branch() {
+      Ok(Some(branch)) => branch,
+      Ok(None) => {
+        print_error("Not on any branch");
+        return Ok(());
+      }
+      Err(e) => {
+        print_error(&format!("Failed to get current branch: {e}"));
+        return Ok(());
+      }
+    }
+  };
+
+  print_info(&format!("Creating branch '{}' from '{}'", branch_name, base_branch));
+
+  // Create the branch
+  let base_commit = match repo.revparse_single(&base_branch) {
+    Ok(obj) => obj.peel_to_commit().context("Failed to find base commit")?,
+    Err(_) => {
+      print_error(&format!("Base branch '{}' not found", base_branch));
+      return Ok(());
+    }
+  };
+
+  match repo.branch(&branch_name, &base_commit, false) {
+    Ok(_) => {
+      print_success(&format!("Created branch: {}", branch_name));
+
+      // Set parent dependency if requested
+      if cmd.set_parent {
+        let mut repo_state = RepoState::load(&repo_path).unwrap_or_default();
+        if let Err(e) = repo_state.add_dependency(branch_name.clone(), base_branch.clone()) {
+          print_warning(&format!("Failed to set parent dependency: {e}"));
+        } else if let Err(e) = repo_state.save(&repo_path) {
+          print_warning(&format!("Failed to save dependency: {e}"));
+        } else {
+          print_info(&format!("Set {} as parent of {}", base_branch, branch_name));
+        }
+      }
+
+      // Store issue association
+      let mut repo_state = RepoState::load(&repo_path).unwrap_or_default();
+      let metadata = BranchMetadata {
+        branch: branch_name.clone(),
+        jira_issue: Some(issue_id.to_string()),
+        github_pr: None,
+        created_at: chrono::Utc::now().to_rfc3339(),
+      };
+      repo_state.add_branch_issue(metadata);
+      if let Err(e) = repo_state.save(&repo_path) {
+        print_warning(&format!("Failed to save branch metadata: {e}"));
+      } else {
+        print_info(&format!("Linked issue #{} to branch {}", issue_id, branch_name));
+      }
+
+      // Switch to the new branch
+      let branch_ref = format!("refs/heads/{}", branch_name);
+      match repo.set_head(&branch_ref) {
+        Ok(_) => {
+          if let Err(e) = repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force())) {
+            print_warning(&format!("Created branch but failed to switch to it: {e}"));
+          } else {
+            print_success(&format!("Switched to branch: {}", branch_name));
+          }
+        }
+        Err(e) => {
+          print_warning(&format!("Created branch but failed to switch to it: {e}"));
+        }
+      }
+
+      Ok(())
+    }
+    Err(e) => {
+      print_error(&format!("Failed to create branch: {e}"));
+      Ok(())
+    }
+  }
+}
+
+/// Parse GitHub issue ID from URL or ID string
+fn parse_github_issue_id(input: &str) -> Result<u32> {
+  // Try to parse as direct number first
+  if let Ok(id) = input.parse::<u32>() {
+    return Ok(id);
+  }
+
+  // Try to parse from GitHub URL
+  let url_regex = regex::Regex::new(r"github\.com/[^/]+/[^/]+/issues/(\d+)")?;
+  if let Some(captures) = url_regex.captures(input)
+    && let Some(id_str) = captures.get(1)
+  {
+    return Ok(id_str.as_str().parse()?);
+  }
+
+  Err(anyhow::anyhow!("Could not parse GitHub issue ID from: {}", input))
+}
+
+/// Generate a branch name from a GitHub issue
+fn generate_branch_name_from_issue(issue: &GitHubIssue) -> String {
+  let title = issue
+    .title
+    .to_lowercase()
+    .chars()
+    .map(|c| if c.is_alphanumeric() || c == ' ' { c } else { ' ' })
+    .collect::<String>()
+    .split_whitespace()
+    .take(5) // Limit to first 5 words
+    .collect::<Vec<_>>()
+    .join("-");
+
+  format!("issue-{}-{}", issue.number, title)
+}
+
+/// Get the repository's default branch by checking the remote HEAD
+fn get_repository_default_branch(repo: &Git2Repository) -> Option<String> {
+  // Try to get the default branch from origin/HEAD
+  if let Ok(reference) = repo.find_reference("refs/remotes/origin/HEAD")
+    && let Some(target) = reference.symbolic_target()
+  {
+    // Extract branch name from refs/remotes/origin/branch_name
+    if let Some(branch_name) = target.strip_prefix("refs/remotes/origin/") {
+      return Some(branch_name.to_string());
+    }
+  }
+
+  // Fallback: try common default branch names
+  for default in &["main", "master", "develop"] {
+    if repo.find_branch(default, git2::BranchType::Local).is_ok() {
+      return Some(default.to_string());
+    }
+  }
+
+  None
+}
+
+/// Get repository owner and name from Git remote
+fn get_repo_owner_and_name(repo: &Git2Repository) -> Option<(String, String)> {
+  let remote = repo.find_remote("origin").ok()?;
+  let url = remote.url()?;
+
+  // Parse GitHub URL
+  let github_regex = regex::Regex::new(r"github\.com[:/]([^/]+)/([^/.]+)").ok()?;
+  let captures = github_regex.captures(url)?;
+
+  let owner = captures.get(1)?.as_str().to_string();
+  let repo_name = captures.get(2)?.as_str().to_string();
+
+  Some((owner, repo_name))
 }

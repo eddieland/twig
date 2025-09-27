@@ -115,6 +115,33 @@ pub fn get_upstream_branch(branch_name: &str) -> Result<Option<String>> {
   }
 }
 
+/// Get the number of commits ahead and behind between two branches
+pub fn get_commits_ahead_behind(branch: &str, parent: &str) -> Result<(usize, usize)> {
+  let repo = get_repository().ok_or_else(|| anyhow::anyhow!("Not in a Git repository"))?;
+
+  // Get the commit objects for both branches
+  let branch_commit = repo
+    .find_branch(branch, git2::BranchType::Local)
+    .context(format!("Branch '{}' not found", branch))?
+    .get()
+    .target()
+    .context("Branch has no target")?;
+
+  let parent_commit = repo
+    .find_branch(parent, git2::BranchType::Local)
+    .context(format!("Parent branch '{}' not found", parent))?
+    .get()
+    .target()
+    .context("Parent branch has no target")?;
+
+  // Use git2's graph_ahead_behind function
+  let (ahead, behind) = repo
+    .graph_ahead_behind(branch_commit, parent_commit)
+    .context("Failed to calculate ahead/behind commits")?;
+
+  Ok((ahead, behind))
+}
+
 #[cfg(test)]
 mod tests {
   use tempfile::TempDir;
