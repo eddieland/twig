@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result};
 use clap::Args;
 use directories::BaseDirs;
-use git2::Repository as Git2Repository;
+use git2::{AutotagOption, BranchType, FetchOptions, Oid, Repository as Git2Repository};
 use regex::Regex;
 use tokio::runtime::Runtime;
 use twig_core::detect_repository;
@@ -233,6 +233,7 @@ fn extract_jira_issue_from_url(url: &str) -> Option<String> {
 enum BranchBase {
   Head,
   Parent { name: String },
+  External { parent: Option<String> },
 }
 
 impl BranchBase {
@@ -240,6 +241,7 @@ impl BranchBase {
     match self {
       BranchBase::Head => None,
       BranchBase::Parent { name } => Some(name.as_str()),
+      BranchBase::External { parent } => parent.as_deref(),
     }
   }
 }
@@ -261,6 +263,13 @@ impl BranchBaseResolution {
   fn parent(name: String, commit: git2::Oid) -> Self {
     Self {
       base: BranchBase::Parent { name },
+      commit,
+    }
+  }
+
+  fn external(parent: Option<String>, commit: git2::Oid) -> Self {
+    Self {
+      base: BranchBase::External { parent },
       commit,
     }
   }
@@ -364,6 +373,35 @@ fn parent_lookup_error(parent: &str) -> anyhow::Error {
   anyhow::anyhow!(
     "Parent branch '{parent}' was not found. Create it first and record dependencies with `twig branch depend` or `twig branch root add`."
   )
+}
+
+fn normalize_remote_ref(ref_name: &str) -> String {
+  if ref_name.starts_with("refs/") {
+    ref_name.to_string()
+  } else {
+    format!("refs/heads/{ref_name}")
+  }
+}
+
+fn ensure_pr_remote(repo: &Git2Repository, url: &str) -> Result<()> {
+  if repo.find_remote("twig-pr").is_err() {
+    repo.remote("twig-pr", url)?;
+  } else {
+    repo.remote_set_url("twig-pr", url)?;
+  }
+
+  Ok(())
+}
+
+fn fetch_pr_reference(repo: &Git2Repository, url: &str, refspec: &str) -> Result<()> {
+  ensure_pr_remote(repo, url)?;
+
+  let mut remote = repo.find_remote("twig-pr")?;
+  let mut fetch_options = FetchOptions::new();
+  fetch_options.download_tags(AutotagOption::None);
+
+  remote.fetch(&[refspec], Some(&mut fetch_options), None)?;
+  Ok(())
 }
 
 /// Handle switching to a branch based on Jira issue
@@ -677,11 +715,87 @@ fn create_branch_from_github_pr(
 
     print_info(&format!("Creating branch: {branch_name}",));
 
-    // Resolve parent branch
-    let branch_base = resolve_branch_base(repo_path, parent_option, jira_parser)?;
+    // Resolve parent branch for dependency validation
+    let dependency_parent = resolve_branch_base(repo_path, parent_option, jira_parser)?
+      .parent_name()
+      .map(str::to_string);
+
+    let head_ref_name = pr
+      .head
+      .ref_name
+      .clone()
+      .or_else(|| pr.head.label.split(':').nth(1).map(str::to_string));
+
+    let expected_oid =
+      Oid::from_str(&pr.head.sha).with_context(|| format!("Failed to parse PR head SHA for #{pr_number}"))?;
+
+    let tracking_ref = format!("refs/remotes/twig-pr/pr/{pr_number}");
+
+    // Attempt to fetch the PR head commit
+    let mut fetch_error: Option<anyhow::Error> = None;
+    let mut fetch_source_url: Option<String> = None;
+
+    if let Some(repo_info) = pr.head.repo.as_ref() {
+      if let Some(ref_name) = head_ref_name.clone() {
+        if let Some(url) = repo_info.ssh_url.clone().or_else(|| repo_info.clone_url.clone()) {
+          let remote_ref = normalize_remote_ref(&ref_name);
+          let refspec = format!("+{}:{}", remote_ref, tracking_ref);
+
+          match fetch_pr_reference(&repo, &url, &refspec) {
+            Ok(()) => {
+              fetch_source_url = Some(url);
+            }
+            Err(err) => {
+              fetch_error = Some(err);
+            }
+          }
+        }
+      }
+    }
+
+    if fetch_source_url.is_none() {
+      let fallback_refspec = format!("+refs/pull/{pr_number}/head:{}", tracking_ref);
+      match fetch_pr_reference(&repo, remote_url, &fallback_refspec) {
+        Ok(()) => {
+          fetch_source_url = Some(remote_url.to_string());
+        }
+        Err(err) => {
+          let mut error = err;
+          if let Some(previous) = fetch_error.take() {
+            error = error.context(format!("Primary head ref fetch failed: {previous}"));
+          }
+          return Err(error.context("Failed to fetch PR head reference"));
+        }
+      }
+    }
+
+    let fetched_commit = repo
+      .find_reference(&tracking_ref)
+      .with_context(|| format!("Failed to locate fetched PR reference '{tracking_ref}'"))?
+      .peel_to_commit()
+      .with_context(|| format!("Failed to resolve commit for '{tracking_ref}'"))?;
+
+    if fetched_commit.id() != expected_oid {
+      print_warning(&format!(
+        "Fetched PR head commit does not match API SHA (expected {}, got {}).",
+        expected_oid,
+        fetched_commit.id()
+      ));
+    }
+
+    let branch_base = BranchBaseResolution::external(dependency_parent, fetched_commit.id());
 
     // Create and switch to the branch
     create_and_switch_to_branch(repo_path, &branch_name, &branch_base)?;
+
+    // Configure upstream tracking for easy pulls
+    if let Some(url) = fetch_source_url {
+      ensure_pr_remote(&repo, &url)?;
+      let mut branch = repo.find_branch(&branch_name, BranchType::Local)?;
+      if let Err(e) = branch.set_upstream(Some(&format!("twig-pr/pr/{pr_number}"))) {
+        print_warning(&format!("Failed to set upstream tracking: {e}"));
+      }
+    }
 
     // Store the association
     store_github_pr_association(repo_path, &branch_name, pr_number)?;
@@ -741,7 +855,7 @@ mod tests {
   use git2::BranchType;
   use serde_json::json;
   use tokio::runtime::Runtime;
-  use twig_test_utils::{GitRepoTestGuard, checkout_branch, create_commit, setup_test_env_with_init};
+  use twig_test_utils::{GitRepoTestGuard, checkout_branch, create_branch, create_commit, setup_test_env_with_init};
   use wiremock::matchers::{method, path};
   use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -945,8 +1059,17 @@ mod tests {
   }
 
   #[test]
-  fn test_create_branch_from_github_pr_respects_parent_tip() -> Result<()> {
+  fn test_create_branch_from_github_pr_fetches_head_commit() -> Result<()> {
     let (_env_guard, _config_dirs) = setup_test_env_with_init()?;
+    let remote_guard = GitRepoTestGuard::new();
+    let remote_repo = &remote_guard.repo;
+
+    create_commit(remote_repo, "base.txt", "base", "initial commit")?;
+    create_branch(remote_repo, "feature", None)?;
+    checkout_branch(remote_repo, "feature")?;
+    create_commit(remote_repo, "feature.txt", "feature", "feature commit")?;
+    let feature_tip = remote_repo.head()?.peel_to_commit()?.id();
+
     let repo_guard = GitRepoTestGuard::new();
     let repo = &repo_guard.repo;
 
@@ -955,7 +1078,6 @@ mod tests {
     repo.branch("parent", &head_commit, true)?;
     checkout_branch(repo, "parent")?;
     create_commit(repo, "parent.txt", "parent", "parent commit")?;
-    let parent_tip = repo.head()?.peel_to_commit()?.id();
 
     repo.remote("origin", "https://github.com/example/repo.git")?;
 
@@ -975,8 +1097,13 @@ mod tests {
           "updated_at": "2021-01-01T00:00:00Z",
           "head": {
             "label": "octocat:feature",
-            "ref_name": "feature",
-            "sha": "abcdef1234567890abcdef1234567890abcdef12"
+            "ref": "feature",
+            "sha": feature_tip.to_string(),
+            "repo": {
+              "full_name": "octocat/feature-repo",
+              "clone_url": remote_guard.path().to_string_lossy(),
+              "ssh_url": null
+            }
           },
           "base": {
             "label": "octocat:main",
@@ -999,20 +1126,28 @@ mod tests {
 
     create_branch_from_github_pr(&github_client, repo_guard.path(), 42, Some("parent"), None)?;
 
-    let created_branch = repo.find_branch("pr-42-abcdef12", BranchType::Local)?;
+    let expected_branch_name = format!("pr-42-{}", &feature_tip.to_string()[..8]);
+
+    let created_branch = repo.find_branch(&expected_branch_name, BranchType::Local)?;
     let created_tip = created_branch.into_reference().peel_to_commit()?.id();
-    assert_eq!(created_tip, parent_tip);
+    assert_eq!(created_tip, feature_tip);
+
+    let upstream = repo.find_branch(&expected_branch_name, BranchType::Local)?.upstream()?;
+    assert_eq!(upstream.name()?, Some("twig-pr/pr/42"));
+
+    let tracking_ref = repo.find_reference("refs/remotes/twig-pr/pr/42")?.peel_to_commit()?;
+    assert_eq!(tracking_ref.id(), feature_tip);
 
     let repo_state = RepoState::load(repo_guard.path())?;
     let dependency = repo_state
       .dependencies
       .iter()
-      .find(|dep| dep.child == "pr-42-abcdef12")
+      .find(|dep| dep.child == expected_branch_name)
       .expect("dependency recorded");
     assert_eq!(dependency.parent, "parent");
 
     let metadata = repo_state
-      .get_branch_metadata("pr-42-abcdef12")
+      .get_branch_metadata(&expected_branch_name)
       .expect("metadata recorded");
     assert_eq!(metadata.github_pr, Some(42));
 

@@ -43,8 +43,19 @@ pub struct GitHubPullRequest {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PullRequestRef {
   pub label: String,
+  #[serde(alias = "ref")]
   pub ref_name: Option<String>,
   pub sha: String,
+  #[serde(default)]
+  pub repo: Option<PullRequestRepo>,
+}
+
+/// Metadata about the repository that backs a PR head or base reference
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct PullRequestRepo {
+  pub full_name: Option<String>,
+  pub clone_url: Option<String>,
+  pub ssh_url: Option<String>,
 }
 
 /// Represents a GitHub pull request review

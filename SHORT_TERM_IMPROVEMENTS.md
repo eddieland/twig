@@ -55,6 +55,8 @@ This plan focuses on core branch-centric flows that most Twig users rely on: `tw
 
 **Deliverables.** Updated GitHub client, enhanced switch flow, tests verifying SHA alignment, and documentation snippets in `README`/`USER_STORIES` if needed.
 
+**Status.** ✅ Completed — `twig switch` now fetches PR heads into dedicated tracking refs, configures upstream remotes, and verifies new branches inherit the GitHub head commit with tests covering the flow.
+
 ---
 
 ## P1 — Enrich `twig tree` with branch health signals
