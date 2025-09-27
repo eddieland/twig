@@ -307,15 +307,16 @@ fn resolve_branch_base(
     }
     Some(parent) => {
       if let Some(parser) = jira_parser.as_ref()
-        && let Some(normalized_key) = parse_jira_issue_key(parser, parent) {
-          let repo_state = RepoState::load(repo_path)?;
+        && let Some(normalized_key) = parse_jira_issue_key(parser, parent)
+      {
+        let repo_state = RepoState::load(repo_path)?;
 
-          if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(&normalized_key) {
-            let commit = lookup_branch_tip(&repo, &branch_issue.branch)?
-              .ok_or_else(|| parent_lookup_error(&branch_issue.branch))?;
-            return Ok(BranchBaseResolution::parent(branch_issue.branch.clone(), commit));
-          }
+        if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(&normalized_key) {
+          let commit =
+            lookup_branch_tip(&repo, &branch_issue.branch)?.ok_or_else(|| parent_lookup_error(&branch_issue.branch))?;
+          return Ok(BranchBaseResolution::parent(branch_issue.branch.clone(), commit));
         }
+      }
 
       let commit = lookup_branch_tip(&repo, parent)?.ok_or_else(|| parent_lookup_error(parent))?;
       Ok(BranchBaseResolution::parent(parent.to_string(), commit))
