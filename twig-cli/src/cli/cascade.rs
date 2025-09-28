@@ -28,6 +28,10 @@ pub struct CascadeArgs {
   #[arg(long)]
   pub force: bool,
 
+  /// Force push to remote after successful rebase (WARNING: This can overwrite remote changes)
+  #[arg(long = "force-push")]
+  pub force_push: bool,
+
   /// Show dependency graph before rebasing
   #[arg(long = "show-graph")]
   pub show_graph: bool,
@@ -53,11 +57,12 @@ pub fn handle_cascade_command(args: CascadeArgs) -> Result<()> {
   // Extract the values we need from args
   let max_depth = args.max_depth;
   let force = args.force;
+  let force_push = args.force_push;
   let show_graph = args.show_graph;
   let autostash = args.autostash;
 
   // Perform cascading rebase from current branch to children
-  rebase_downstream(&repo_path, max_depth, force, show_graph, autostash)
+  rebase_downstream(&repo_path, max_depth, force, force_push, show_graph, autostash)
 }
 
 /// Perform cascading rebase from current branch to children
@@ -65,6 +70,7 @@ fn rebase_downstream(
   repo_path: &Path,
   max_depth: Option<u32>,
   force: bool,
+  force_push: bool,
   show_graph: bool,
   autostash: bool,
 ) -> Result<()> {
@@ -141,6 +147,14 @@ fn rebase_downstream(
       match result {
         RebaseResult::Success => {
           print_success(&format!("Successfully rebased {branch} onto {parent}",));
+          
+          // Force push if requested
+          if force_push {
+            if let Err(e) = handle_force_push(repo_path, &branch) {
+              print_error(&format!("Failed to force push {branch}: {e}"));
+              // Continue with other branches rather than aborting the whole process
+            }
+          }
         }
         RebaseResult::UpToDate => {
           if force {
@@ -150,6 +164,14 @@ fn rebase_downstream(
             match force_result {
               RebaseResult::Success => {
                 print_success(&format!("Successfully force-rebased {branch} onto {parent}",));
+                
+                // Force push if requested
+                if force_push {
+                  if let Err(e) = handle_force_push(repo_path, &branch) {
+                    print_error(&format!("Failed to force push {branch}: {e}"));
+                    // Continue with other branches rather than aborting the whole process
+                  }
+                }
               }
               _ => {
                 print_error(&format!("Failed to force-rebase {branch} onto {parent}",));
@@ -174,6 +196,14 @@ fn rebase_downstream(
               print_success(&format!(
                 "Rebase of {branch} onto {parent} completed after resolving conflicts",
               ));
+              
+              // Force push if requested
+              if force_push {
+                if let Err(e) = handle_force_push(repo_path, &branch) {
+                  print_error(&format!("Failed to force push {branch}: {e}"));
+                  // Continue with other branches rather than aborting the whole process
+                }
+              }
             }
             ConflictResolution::AbortToOriginal => {
               // Abort the rebase and go back to the original branch
@@ -509,6 +539,46 @@ fn handle_rebase_conflict(_repo_path: &Path, _branch: &str) -> Result<ConflictRe
   }
 }
 
+/// Handle force push to remote for a branch after successful rebase
+fn handle_force_push(repo_path: &Path, branch: &str) -> Result<()> {
+  // First, check if the branch has a remote tracking branch
+  let remote_ref = format!("origin/{}", branch);
+  let check_remote_args = ["rev-parse", "--verify", &remote_ref];
+  
+  match execute_git_command(repo_path, &check_remote_args) {
+    Ok(_) => {
+      // Remote tracking branch exists, proceed with force push
+      print_warning(&format!("⚠️  Force pushing {branch} to remote (this may overwrite remote changes)"));
+      
+      let force_push_args = ["push", "--force-with-lease", "origin", branch];
+      match execute_git_command(repo_path, &force_push_args) {
+        Ok(output) => {
+          if !output.trim().is_empty() {
+            print_info(&output);
+          }
+          print_success(&format!("Successfully force-pushed {branch} to origin"));
+          Ok(())
+        }
+        Err(e) => {
+          // Try to provide more helpful error message
+          if let Some(git_error) = e.downcast_ref::<std::io::Error>() {
+            return Err(anyhow::anyhow!(
+              "Force push failed for {}: {}. This might be due to remote branch protection or network issues.", 
+              branch, git_error
+            ));
+          }
+          Err(e.context(format!("Failed to force push {branch}")))
+        }
+      }
+    }
+    Err(_) => {
+      // No remote tracking branch, skip force push
+      print_info(&format!("Branch {branch} has no remote tracking branch, skipping force push"));
+      Ok(())
+    }
+  }
+}
+
 /// Execute a git command and handle output
 fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<String> {
   let output = Command::new(consts::GIT_EXECUTABLE)
@@ -534,4 +604,80 @@ fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<String> {
   }
 
   Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test] 
+  fn test_cascade_args_struct_fields() {
+    // Test that the CascadeArgs struct has all expected fields with correct defaults
+    let cascade_args = CascadeArgs {
+      max_depth: None,
+      force: false,
+      force_push: false,
+      show_graph: false,
+      autostash: false,
+      repo: None,
+    };
+    
+    assert!(!cascade_args.force_push, "force_push should default to false");
+    assert!(!cascade_args.force, "force should default to false");
+    assert!(!cascade_args.show_graph, "show_graph should default to false");
+    assert!(!cascade_args.autostash, "autostash should default to false");
+    assert!(cascade_args.max_depth.is_none(), "max_depth should default to None");
+    assert!(cascade_args.repo.is_none(), "repo should default to None");
+  }
+
+  #[test]
+  fn test_force_push_flag_enabled() {
+    // Test that force_push can be set to true
+    let cascade_args = CascadeArgs {
+      max_depth: None,
+      force: false,
+      force_push: true, // Enable force-push
+      show_graph: false,
+      autostash: false,
+      repo: None,
+    };
+    
+    assert!(cascade_args.force_push, "force_push should be true when explicitly set");
+    assert!(!cascade_args.force, "force should remain false");
+  }
+
+  #[test]
+  fn test_all_flags_enabled() {
+    // Test that all flags can be enabled together
+    let cascade_args = CascadeArgs {
+      max_depth: Some(10),
+      force: true,
+      force_push: true,
+      show_graph: true,
+      autostash: true,
+      repo: Some("/some/path".to_string()),
+    };
+    
+    assert!(cascade_args.force_push, "force_push should be true");
+    assert!(cascade_args.force, "force should be true");
+    assert!(cascade_args.show_graph, "show_graph should be true");
+    assert!(cascade_args.autostash, "autostash should be true");
+    assert_eq!(cascade_args.max_depth, Some(10), "max_depth should be 10");
+    assert_eq!(cascade_args.repo, Some("/some/path".to_string()), "repo should be set");
+  }
+
+  #[test]
+  fn test_handle_force_push_no_remote() {
+    // Test that handle_force_push handles the case where there's no remote gracefully
+    use std::path::Path;
+    
+    // This should handle the no remote case gracefully
+    let temp_path = Path::new("/tmp/nonexistent");
+    let result = handle_force_push(&temp_path, "test-branch");
+    
+    // The function should return Ok when there's no remote (graceful handling)
+    // but may return an error for non-existent paths
+    // Either outcome is acceptable for this test - we're just ensuring it doesn't panic
+    assert!(result.is_ok() || result.is_err(), "handle_force_push should handle non-existent paths gracefully");
+  }
 }

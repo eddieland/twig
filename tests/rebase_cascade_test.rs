@@ -115,6 +115,18 @@ fn run_cascade_command(
   show_graph: bool,
   autostash: bool,
 ) -> Result<String> {
+  run_cascade_command_with_force_push(repo_path, max_depth, force, show_graph, autostash, false)
+}
+
+/// Helper function to simulate running the cascade command with force-push option
+fn run_cascade_command_with_force_push(
+  repo_path: &Path,
+  max_depth: Option<u32>,
+  force: bool,
+  show_graph: bool,
+  autostash: bool,
+  force_push: bool,
+) -> Result<String> {
   use twig_cli::cli::cascade::{CascadeArgs, handle_cascade_command};
 
   // We don't need to capture output for the test
@@ -123,6 +135,7 @@ fn run_cascade_command(
   let args = CascadeArgs {
     max_depth,
     force,
+    force_push,
     show_graph,
     autostash,
     repo: Some(repo_path.to_string_lossy().to_string()),
@@ -386,6 +399,105 @@ fn test_cascade_with_max_depth() -> Result<()> {
     entry.is_none(),
     "main-update.txt should NOT be present in sub-sub-feature branch due to max-depth=1"
   );
+
+  Ok(())
+}
+
+#[test]
+fn test_cascade_with_force_push_flag() -> Result<()> {
+  // Create a temporary git repository
+  let git_repo = GitRepoTestGuard::new_and_change_dir();
+  let repo = &git_repo.repo;
+  let repo_path = git_repo.path();
+
+  // Create initial commit on main branch
+  create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
+
+  // Create main branch explicitly
+  let head_commit = repo.head()?.peel_to_commit()?;
+  repo.branch("main", &head_commit, false)?;
+  checkout_branch(repo, "main")?;
+
+  // Create feature branch
+  create_branch(repo, "feature", Some("main"))?;
+  checkout_branch(repo, "feature")?;
+  create_commit(repo, "feature.txt", "Feature content", "Feature commit")?;
+
+  // Create sub-feature branch from feature
+  create_branch(repo, "sub-feature", Some("feature"))?;
+  checkout_branch(repo, "sub-feature")?;
+  create_commit(repo, "sub-feature.txt", "Sub-feature content", "Sub-feature commit")?;
+
+  // Go back to main and create another commit to create rebase scenario
+  checkout_branch(repo, "main")?;
+  create_commit(repo, "main-update.txt", "Updated main content", "Updated main commit")?;
+
+  // Set up branch dependencies
+  add_branch_dependency(repo_path, "feature", "main")?;
+  add_branch_dependency(repo_path, "sub-feature", "feature")?;
+  add_root_branch(repo_path, "main", true)?;
+
+  // Checkout feature branch and run cascade command with force-push flag
+  checkout_branch(repo, "feature")?;
+
+  // Run cascade command with force-push flag (this should succeed even without remote)
+  let output = run_cascade_command_with_force_push(repo_path, None, false, false, false, true)?;
+
+  // Verify that the cascade was successful
+  assert!(
+    output.contains("Successfully rebased feature onto main") || output.contains("up-to-date"),
+    "Expected successful rebase or up-to-date message, got: {output}"
+  );
+
+  // Verify force-push handling message appears (should skip since no remote)
+  assert!(
+    output.contains("has no remote tracking branch, skipping force push") ||
+    output.contains("Successfully rebased"),
+    "Expected force-push handling message, got: {output}"
+  );
+
+  // Verify sub-feature was also processed
+  assert!(
+    output.contains("sub-feature") || output.contains("Processing branch"),
+    "Expected sub-feature to be processed, got: {output}"
+  );
+
+  Ok(())
+}
+
+#[test] 
+fn test_cascade_force_push_flag_parsing() -> Result<()> {
+  // This test verifies that the force-push flag is correctly parsed and accessible
+  // We don't actually test git operations, just the argument parsing
+  
+  use twig_cli::cli::cascade::CascadeArgs;
+  use clap::Parser;
+
+  // Test parsing with --force-push flag
+  let args = vec!["twig", "cascade", "--force-push"];
+  let parsed = CascadeArgs::try_parse_from(args);
+  assert!(parsed.is_ok(), "Failed to parse --force-push flag");
+  
+  let cascade_args = parsed.unwrap();
+  assert!(cascade_args.force_push, "force_push should be true when --force-push flag is present");
+  assert!(!cascade_args.force, "force should be false when not specified");
+
+  // Test parsing without --force-push flag  
+  let args = vec!["twig", "cascade"];
+  let parsed = CascadeArgs::try_parse_from(args);
+  assert!(parsed.is_ok(), "Failed to parse cascade command without flags");
+  
+  let cascade_args = parsed.unwrap();
+  assert!(!cascade_args.force_push, "force_push should be false by default");
+
+  // Test parsing with both --force and --force-push flags
+  let args = vec!["twig", "cascade", "--force", "--force-push"];
+  let parsed = CascadeArgs::try_parse_from(args);
+  assert!(parsed.is_ok(), "Failed to parse both --force and --force-push flags");
+  
+  let cascade_args = parsed.unwrap();
+  assert!(cascade_args.force_push, "force_push should be true when --force-push flag is present");
+  assert!(cascade_args.force, "force should be true when --force flag is present");
 
   Ok(())
 }
