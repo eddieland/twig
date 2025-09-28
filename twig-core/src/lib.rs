@@ -6,6 +6,7 @@
 //! maintaining their own separate state.
 
 pub mod config;
+pub mod diamond_detector;
 pub mod git;
 pub mod jira_parser;
 pub mod output;
@@ -15,6 +16,7 @@ pub mod utils;
 
 // Re-export main types for plugin developers
 pub use config::{ConfigDirs, get_config_dirs};
+pub use diamond_detector::{DiamondDetector, DiamondPattern};
 pub use git::{current_branch, detect_repository, detect_repository_from_path, in_git_repository};
 pub use jira_parser::{JiraParseError, JiraParsingConfig, JiraParsingMode, JiraTicketParser, create_jira_parser};
 pub use output::{ColorMode, format_repo_path, print_error, print_info, print_success, print_warning};
