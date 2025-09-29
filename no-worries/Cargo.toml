@@ -13,7 +13,7 @@ path = "src/lib.rs"
 
 [dependencies]
 # Core dependencies
-backtrace = "0.3.75"
+backtrace = "0.3.76"
 chrono = { workspace = true }
 is-terminal = "0.4.12"
 
