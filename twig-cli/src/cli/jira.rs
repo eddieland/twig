@@ -102,17 +102,35 @@ pub enum JiraSubcommands {
     issue_key: Option<String>,
   },
 
-  /// Configure Jira parsing settings
-  #[command(long_about = "Configure Jira ticket parsing behavior.\n\n\
-                         Allows you to set parsing mode (strict/flexible) and other preferences.")]
+  /// Configure Jira settings
+  #[command(long_about = "Configure Jira connection and parsing behavior.\n\n\
+                         Allows you to set Jira host URL, parsing mode (strict/flexible), and other preferences.")]
   Config {
     /// Set the parsing mode
     #[arg(long, value_enum)]
     mode: Option<JiraParsingModeArg>,
 
+    /// Set the Jira host URL (e.g., https://company.atlassian.net)
+    #[arg(long)]
+    host: Option<String>,
+
     /// Show current configuration
     #[arg(long)]
     show: bool,
+  },
+
+  /// Show a Jira ticket's details 
+  #[command(long_about = "Display detailed information about a Jira ticket.\n\n\
+                     This command fetches and displays comprehensive details about a Jira issue,\n\
+                     including title, description, status, assignee, comments, and activity history.\n\
+                     If no issue key is provided, shows the issue associated with the current branch.")]
+  Show {
+    #[arg(
+      index = 1,
+      long_help = "The Jira issue key (e.g., PROJ-123)\n\
+                 If not provided, uses the current branch's associated Jira issue"
+    )]
+    issue_key: Option<String>,
   },
 }
 
@@ -254,14 +272,45 @@ pub(crate) fn handle_jira_command(jira: JiraArgs) -> Result<()> {
         }
       }
     }
-    JiraSubcommands::Config { mode, show } => {
+    JiraSubcommands::Config { mode, host, show } => {
       if show {
         handle_show_jira_config()
-      } else if let Some(mode) = mode {
-        handle_set_jira_config(mode)
+      } else if mode.is_some() || host.is_some() {
+        handle_set_jira_config(mode, host)
       } else {
-        print_error("Please specify --mode or --show");
+        print_error("Please specify --mode, --host, or --show");
         Ok(())
+      }
+    }
+    JiraSubcommands::Show { issue_key } => {
+      match issue_key {
+        Some(key) => {
+          // Parse and normalize the issue key
+          match jira_parser
+            .as_ref()
+            .and_then(|parser| parse_and_validate_issue_key(parser, &key))
+          {
+            Some(normalized_key) => handle_show_issue_command(&normalized_key),
+            None => {
+              print_error(&format!("Invalid Jira issue key format: '{key}'"));
+              Ok(())
+            }
+          }
+        }
+        None => {
+          // Try to get issue key from current branch
+          match get_current_branch_jira_issue() {
+            Ok(Some(issue_key)) => handle_show_issue_command(&issue_key),
+            Ok(None) => {
+              print_error("No Jira issue associated with current branch. Please specify an issue key.");
+              Ok(())
+            }
+            Err(e) => {
+              print_error(&format!("Failed to get current branch issue: {}", e));
+              Ok(())
+            }
+          }
+        }
       }
     }
   }
@@ -273,21 +322,127 @@ fn handle_show_jira_config() -> Result<()> {
   let jira_config = config_dirs.load_jira_config()?;
 
   print_info("Current Jira configuration:");
-  println!("  Jira Ticket Parsing: {:?}", jira_config.mode);
+  println!("  Parsing Mode: {:?}", jira_config.mode);
+  match &jira_config.host {
+    Some(host) => println!("  Host: {}", host),
+    None => println!("  Host: Not configured"),
+  }
 
   Ok(())
 }
 
+/// Validate and normalize a Jira host URL
+fn validate_and_normalize_host(host: &str) -> Result<String> {
+  let host = host.trim();
+  
+  if host.is_empty() {
+    anyhow::bail!("Host URL cannot be empty");
+  }
+
+  // Add https:// if no protocol is specified
+  let normalized = if host.starts_with("http://") || host.starts_with("https://") {
+    host.to_string()
+  } else {
+    format!("https://{}", host)
+  };
+
+  // Basic URL validation - try to parse as URL
+  let url = url::Url::parse(&normalized)
+    .with_context(|| format!("Invalid URL format: {}", normalized))?;
+
+  // Ensure it has a valid host
+  if url.host_str().is_none() {
+    anyhow::bail!("URL must have a valid host: {}", normalized);
+  }
+
+  // Remove trailing slash for consistency
+  let mut result = url.to_string();
+  if result.ends_with('/') {
+    result.pop();
+  }
+
+  Ok(result)
+}
+
+/// Handle showing detailed information about a Jira issue
+fn handle_show_issue_command(issue_key: &str) -> Result<()> {
+  let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
+  let jira_host = get_jira_host()?;
+
+  let (rt, jira_client) = clients::create_jira_runtime_and_client(base_dirs.home_dir(), &jira_host)?;
+
+  print_info(&format!("Fetching details for Jira issue: {}", issue_key.bright_blue()));
+
+  rt.block_on(async {
+    match jira_client.get_issue(issue_key).await {
+      Ok(issue) => {
+        // Display issue details in a formatted way
+        println!("\n{}", "📋 Issue Details".bright_cyan().bold());
+        println!("   {}: {}", "Key".bold(), issue.key.bright_blue());
+        println!("   {}: {}", "Summary".bold(), issue.fields.summary);
+        println!("   {}: {}", "Status".bold(), issue.fields.status.name.bright_green());
+        
+        if let Some(assignee) = &issue.fields.assignee {
+          println!("   {}: {}", "Assignee".bold(), assignee.display_name);
+        } else {
+          println!("   {}: {}", "Assignee".bold(), "Unassigned".dimmed());
+        }
+
+        if !issue.fields.updated.is_empty() {
+          println!("   {}: {}", "Updated".bold(), issue.fields.updated);
+        }
+
+        // Show description if available
+        if let Some(description) = &issue.fields.description {
+          if !description.is_empty() {
+            println!("\n{}", "📝 Description".bright_cyan().bold());
+            // Simple text extraction from description (Jira uses complex format)
+            println!("   {}", description);
+          }
+        }
+
+        println!("\n{}: {}/browse/{}", "🔗 URL".bright_cyan().bold(), jira_host, issue.key);
+        
+        Ok(())
+      }
+      Err(e) => {
+        print_error(&format!("Failed to fetch issue details: {}", e));
+        Ok(())
+      }
+    }
+  })
+}
+
 /// Handle setting Jira configuration
-fn handle_set_jira_config(mode: JiraParsingModeArg) -> Result<()> {
+fn handle_set_jira_config(mode: Option<JiraParsingModeArg>, host: Option<String>) -> Result<()> {
   let config_dirs = get_config_dirs()?;
   let mut jira_config = config_dirs.load_jira_config().unwrap_or_default();
 
-  jira_config.mode = mode.into();
+  let mut changes = Vec::new();
+
+  if let Some(mode) = mode {
+    jira_config.mode = mode.into();
+    changes.push(format!("parsing mode set to: {:?}", jira_config.mode));
+  }
+
+  if let Some(host) = host {
+    // Validate and normalize the host URL
+    let normalized_host = validate_and_normalize_host(&host)?;
+    jira_config.host = Some(normalized_host.clone());
+    changes.push(format!("host set to: {}", normalized_host));
+  }
+
+  if changes.is_empty() {
+    print_error("No configuration changes specified");
+    return Ok(());
+  }
 
   config_dirs.save_jira_config(&jira_config)?;
 
-  print_success(&format!("Jira parsing mode set to: {:?}", jira_config.mode));
+  print_success("Jira configuration updated:");
+  for change in changes {
+    print_success(&format!("  {}", change));
+  }
 
   Ok(())
 }

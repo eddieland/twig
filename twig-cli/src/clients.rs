@@ -15,14 +15,27 @@ use url::Url;
 use crate::consts::ENV_JIRA_HOST;
 use crate::creds::{get_github_credentials, get_jira_credentials};
 
-/// Get the $JIRA_HOST environment variable value
+/// Get the Jira host from configuration or environment variable
+/// Checks configuration file first, then falls back to JIRA_HOST environment variable
 /// If the host doesn't include a scheme (http:// or https://), assumes https://
 pub fn get_jira_host() -> Result<String> {
+  // First check configuration file
+  if let Ok(config_dirs) = twig_core::get_config_dirs() {
+    if let Ok(jira_config) = config_dirs.load_jira_config() {
+      if let Some(host) = jira_config.host {
+        if !host.is_empty() {
+          return Ok(ensure_scheme(&host)?);
+        }
+      }
+    }
+  }
+  
+  // Fall back to environment variable
   let jira_host = std::env::var(ENV_JIRA_HOST);
   match jira_host {
     Ok(host) => Ok(ensure_scheme(&host)?),
     Err(_) => Err(anyhow::anyhow!(
-      "Jira host environment variable '{}' not set",
+      "Jira host not configured. Use 'twig jira config --host <url>' or set '{}' environment variable",
       ENV_JIRA_HOST
     )),
   }

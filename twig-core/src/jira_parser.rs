@@ -9,17 +9,22 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-/// Configuration for Jira ticket parsing behavior
+/// Configuration for Jira ticket parsing behavior and connection settings
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct JiraParsingConfig {
   /// The parsing mode to use
   pub mode: JiraParsingMode,
+  
+  /// Jira host URL (e.g., https://company.atlassian.net)
+  #[serde(default)]
+  pub host: Option<String>,
 }
 
 impl Default for JiraParsingConfig {
   fn default() -> Self {
     Self {
       mode: JiraParsingMode::Flexible,
+      host: None,
     }
   }
 }
@@ -85,6 +90,7 @@ impl JiraTicketParser {
   pub fn new_flexible() -> Self {
     Self::new(JiraParsingConfig {
       mode: JiraParsingMode::Flexible,
+      host: None,
     })
   }
 
@@ -92,6 +98,7 @@ impl JiraTicketParser {
   pub fn new_strict() -> Self {
     Self::new(JiraParsingConfig {
       mode: JiraParsingMode::Strict,
+      host: None,
     })
   }
 
