@@ -1971,6 +1971,7 @@ mod tests {
           branch: "feature-branch".to_string(),
           jira_issue: None,     // No JIRA issue
           github_pr: Some(123), // Has GitHub PR
+          github_issues: vec![],
           created_at: "2023-01-01T00:00:00Z".to_string(),
         }),
         parents: vec![],
@@ -2019,6 +2020,7 @@ mod tests {
           branch: "PROJ-123/feature-branch".to_string(),
           jira_issue: Some("PROJ-123".to_string()),
           github_pr: Some(456),
+          github_issues: vec![],
           created_at: "2023-01-01T00:00:00Z".to_string(),
         }),
         parents: vec![],
@@ -2060,6 +2062,7 @@ mod tests {
           branch: "ABC-456/long-branch-name".to_string(),
           jira_issue: Some("ABC-456".to_string()),
           github_pr: Some(789),
+          github_issues: vec![],
           created_at: "2023-01-01T00:00:00Z".to_string(),
         }),
         parents: vec![],
@@ -2078,6 +2081,7 @@ mod tests {
           branch: "short".to_string(),
           jira_issue: None,
           github_pr: Some(321),
+          github_issues: vec![],
           created_at: "2023-01-01T00:00:00Z".to_string(),
         }),
         parents: vec![],
@@ -2238,6 +2242,7 @@ mod tests {
           branch: "feature-pr-only".to_string(),
           jira_issue: None,     // No JIRA issue
           github_pr: Some(123), // Has GitHub PR
+          github_issues: vec![],
           created_at: "2023-01-01T00:00:00Z".to_string(),
         }),
         parents: vec!["main".to_string()],
@@ -2351,6 +2356,7 @@ mod tests {
           None => None,
         },
         github_pr,
+        github_issues: vec![],
         created_at: "".to_string(),
       }),
       parents,

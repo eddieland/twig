@@ -275,6 +275,9 @@ impl RepoState {
         gitignore_content.push_str(".twig/\n");
         fs::write(&gitignore_path, gitignore_content).context("Failed to update .gitignore file")?;
       }
+
+      // Enhance gitignore with Node.js patterns if this is a Node.js project
+      crate::nodejs::NodeJsTooling::enhance_gitignore(&repo_path).ok();
     }
 
     // Update timestamp before saving

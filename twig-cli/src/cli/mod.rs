@@ -15,6 +15,7 @@ pub mod fixup;
 mod git;
 mod github;
 mod jira;
+mod nodejs;
 pub mod rebase;
 mod switch;
 mod sync;
@@ -198,6 +199,15 @@ pub enum Commands {
             and creating branches from issues.")]
   Jira(jira::JiraArgs),
 
+  /// Node.js integration
+  #[command(name = "nodejs")]
+  #[command(long_about = "Integrate with Node.js projects and tooling.\n\n\
+            This command group provides functionality for working with Node.js projects,\n\
+            including detecting projects, viewing available scripts, and enhancing\n\
+            gitignore files with Node.js-specific patterns.")]
+  #[command(alias = "node")]
+  NodeJs(nodejs::NodeJsArgs),
+
   /// Intentionally panic (for testing error handling)
   #[command(hide = true)]
   Panic,
@@ -313,6 +323,7 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
       Commands::GitHub(github) => github::handle_github_command(github),
       Commands::Init => config::handle_init_command(),
       Commands::Jira(jira) => jira::handle_jira_command(jira),
+      Commands::NodeJs(nodejs) => nodejs::handle_nodejs_command(nodejs),
       Commands::Panic => {
         panic!("This is an intentional test panic to verify no-worries integration");
       }
