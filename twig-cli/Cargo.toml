@@ -58,7 +58,7 @@ twig-jira = { path = "../twig-jira" }
 
 # Platform-specific dependencies
 [target.'cfg(windows)'.dependencies]
-wincredentials.workspace = true
+windows-sys.workspace = true
 
 [dev-dependencies]
 # Testing dependencies
