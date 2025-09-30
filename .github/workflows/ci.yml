@@ -3,15 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main]
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
 
 # Cancel existing runs for the same pull request (but not main branch builds)
 concurrency:
