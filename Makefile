@@ -45,7 +45,13 @@ watch-test: ## Run tests in watch mode (requires cargo-watch)
 	cargo watch -x "nextest run --workspace"
 
 .PHONY: all
-all: fmt lint test ## Run fmt, lint, and test
+all: fmt lint test build validate-build ## Run full pipeline with validation
+
+.PHONY: help
+help: ## Display this help screen
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+
+### Linting
 
 ### Snapshot Testing
 
@@ -114,6 +120,32 @@ clean: ## Clean build artifacts
 .PHONY: run
 run: ## Run the application
 	cargo run --workspace
+
+### Build Validation
+
+.PHONY: validate-build
+validate-build: ## Run comprehensive build validation
+	@echo "Running build validation..."
+	@powershell -ExecutionPolicy Bypass -File scripts/build-validation.ps1
+
+.PHONY: validate-build-verbose
+validate-build-verbose: ## Run build validation with verbose output
+	@echo "Running build validation (verbose)..."
+	@powershell -ExecutionPolicy Bypass -File scripts/build-validation.ps1 -Verbose
+
+.PHONY: validate-binary-collisions
+validate-binary-collisions: ## Check for binary name collisions only
+	@echo "Checking for binary collisions..."
+	@powershell -Command "Get-ChildItem -Path '.' -Name 'Cargo.toml' -Recurse | Where-Object { $$_ -notmatch 'target' } | ForEach-Object { $$content = Get-Content -Path $$_ -Raw; if ($$content -match '\[\[bin\]\]') { Write-Host 'Binary definition found in:' $$_ } }"
+
+.PHONY: validate-workspace
+validate-workspace: ## Validate workspace structure
+	@echo "Validating workspace structure..."
+	@cargo metadata --format-version 1 --no-deps --quiet
+
+.PHONY: ci-validate
+ci-validate: lint test validate-build ## Full CI validation pipeline
+	@echo "All CI validation checks passed!"
 
 ### Installation
 
