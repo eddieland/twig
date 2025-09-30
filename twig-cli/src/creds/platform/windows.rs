@@ -94,22 +94,15 @@ fn read_windows_credential(target_name: &str) -> Result<Option<Credentials>> {
   let target_name_wide = to_wide(target_name);
   let mut credential_ptr: *mut CREDENTIALW = ptr::null_mut();
 
-  let read_result = unsafe {
-    CredReadW(
-      PCWSTR(target_name_wide.as_ptr()),
-      CRED_TYPE_GENERIC,
-      0,
-      &mut credential_ptr,
-    )
-  };
+  let read_result = unsafe { CredReadW(target_name_wide.as_ptr(), CRED_TYPE_GENERIC, 0, &mut credential_ptr) };
 
-  if !read_result.as_bool() {
+  if read_result == 0 {
     let error = unsafe { GetLastError() };
     if error == ERROR_NOT_FOUND {
       return Ok(None);
     }
 
-    bail!("CredReadW failed with error code {:#x}", error.0);
+    bail!("CredReadW failed with error code {:#x}", error);
   }
 
   if credential_ptr.is_null() {
@@ -139,19 +132,26 @@ fn write_windows_credential(target_name: &str, credentials: &Credentials) -> Res
   let mut username_wide = to_wide(&credentials.username);
   let password_bytes = credentials.password.as_bytes();
 
-  let mut credential = CREDENTIALW::default();
-  credential.Type = CRED_TYPE_GENERIC;
-  credential.TargetName = PWSTR(target_name_wide.as_mut_ptr());
-  credential.UserName = PWSTR(username_wide.as_mut_ptr());
-  credential.Persist = CRED_PERSIST_LOCAL_MACHINE;
-  credential.CredentialBlobSize = password_bytes.len() as u32;
-  credential.CredentialBlob = password_bytes.as_ptr() as *mut u8;
+  let mut credential = CREDENTIALW {
+    Flags: 0,
+    Type: CRED_TYPE_GENERIC,
+    TargetName: target_name_wide.as_mut_ptr(),
+    Comment: ptr::null_mut(),
+    LastWritten: unsafe { std::mem::zeroed() },
+    CredentialBlobSize: password_bytes.len() as u32,
+    CredentialBlob: password_bytes.as_ptr() as *mut u8,
+    Persist: CRED_PERSIST_LOCAL_MACHINE,
+    AttributeCount: 0,
+    Attributes: ptr::null_mut(),
+    TargetAlias: ptr::null_mut(),
+    UserName: username_wide.as_mut_ptr(),
+  };
 
   let write_result = unsafe { CredWriteW(&credential, 0) };
 
-  if !write_result.as_bool() {
+  if write_result == 0 {
     let error = unsafe { GetLastError() };
-    bail!("CredWriteW failed with error code {:#x}", error.0);
+    bail!("CredWriteW failed with error code {:#x}", error);
   }
 
   Ok(())

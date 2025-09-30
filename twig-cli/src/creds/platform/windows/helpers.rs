@@ -19,13 +19,16 @@ pub(super) unsafe fn pwstr_to_string(value: PWSTR) -> String {
 
   let mut len = 0usize;
   loop {
-    let current = *value.add(len);
+    // SAFETY: The caller must ensure `value` points to a valid null-terminated
+    // UTF-16 string
+    let current = unsafe { *value.add(len) };
     if current == 0 {
       break;
     }
     len += 1;
   }
 
-  let slice = std::slice::from_raw_parts(value as *const u16, len);
+  // SAFETY: We've determined the length by finding the null terminator
+  let slice = unsafe { std::slice::from_raw_parts(value as *const u16, len) };
   String::from_utf16_lossy(slice)
 }
