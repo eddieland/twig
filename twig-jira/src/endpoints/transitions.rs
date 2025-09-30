@@ -32,7 +32,7 @@ impl JiraClient {
       StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => Err(anyhow::anyhow!(
         "Authentication failed. Please check your Jira credentials."
       )),
-      StatusCode::NOT_FOUND => Err(anyhow::anyhow!("Issue {} not found", issue_key)),
+      StatusCode::NOT_FOUND => Err(anyhow::anyhow!("Issue {issue_key} not found")),
       _ => Err(anyhow::anyhow!(
         "Unexpected error: HTTP {} - {}",
         response.status(),
@@ -67,7 +67,7 @@ impl JiraClient {
       StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => Err(anyhow::anyhow!(
         "Authentication failed. Please check your Jira credentials."
       )),
-      StatusCode::NOT_FOUND => Err(anyhow::anyhow!("Issue {} not found", issue_key)),
+      StatusCode::NOT_FOUND => Err(anyhow::anyhow!("Issue {issue_key} not found")),
       StatusCode::BAD_REQUEST => Err(anyhow::anyhow!(
         "Invalid transition. The transition may not be available for the current status."
       )),

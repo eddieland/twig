@@ -38,12 +38,11 @@ impl GitHubClient {
               && let Some(message) = error_json.get("message").and_then(|m| m.as_str())
             {
               return Err(anyhow::anyhow!(
-                "Failed to parse GitHub user: GitHub API error: {}",
-                message
+                "Failed to parse GitHub user: GitHub API error: {message}"
               ));
             }
             // Fall back to the original error if we can't extract a message
-            return Err(anyhow::anyhow!("Failed to parse GitHub user: {}", e));
+            return Err(anyhow::anyhow!("Failed to parse GitHub user: {e}"));
           }
         };
 

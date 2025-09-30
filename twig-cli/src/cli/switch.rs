@@ -216,7 +216,7 @@ fn extract_pr_number_from_url(url: &str) -> Result<u32> {
       .with_context(|| format!("Failed to parse PR number '{pr_str}' as a valid integer"))?;
     Ok(pr_number)
   } else {
-    Err(anyhow::anyhow!("Could not extract PR number from URL: {}", url))
+    Err(anyhow::anyhow!("Could not extract PR number from URL: {url}"))
   }
 }
 
@@ -502,9 +502,8 @@ fn handle_root_switch(repo_path: &std::path::Path) -> Result<()> {
   // Check if the root branch actually exists
   if repo.find_branch(&dependency_root, git2::BranchType::Local).is_err() {
     return Err(anyhow::anyhow!(
-      "Dependency tree root branch '{}' does not exist locally.\n\
-       This may indicate a broken dependency chain.",
-      dependency_root
+      "Dependency tree root branch '{dependency_root}' does not exist locally.\n\
+       This may indicate a broken dependency chain."
     ));
   }
 

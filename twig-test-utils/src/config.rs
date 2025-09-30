@@ -59,14 +59,14 @@ impl ConfigDirsTestGuard {
   /// Initialize the configuration directories
   pub fn init(&self) -> anyhow::Result<()> {
     // Create the config directory and its parent directories
-    fs::create_dir_all(&self.config_dir).map_err(|e| anyhow::anyhow!("Failed to create config directory: {}", e))?;
+    fs::create_dir_all(&self.config_dir).map_err(|e| anyhow::anyhow!("Failed to create config directory: {e}"))?;
 
     // Create the data directory and its parent directories
-    fs::create_dir_all(&self.data_dir).map_err(|e| anyhow::anyhow!("Failed to create data directory: {}", e))?;
+    fs::create_dir_all(&self.data_dir).map_err(|e| anyhow::anyhow!("Failed to create data directory: {e}"))?;
 
     // Create the cache directory if it exists
     if let Some(cache_dir) = &self.cache_dir {
-      fs::create_dir_all(cache_dir).map_err(|e| anyhow::anyhow!("Failed to create cache directory: {}", e))?;
+      fs::create_dir_all(cache_dir).map_err(|e| anyhow::anyhow!("Failed to create cache directory: {e}"))?;
     }
 
     Ok(())
@@ -82,11 +82,11 @@ impl ConfigDirsTestGuard {
 
     // Ensure the parent directory exists
     if let Some(parent) = registry_path.parent() {
-      fs::create_dir_all(parent).map_err(|e| anyhow::anyhow!("Failed to create registry parent directory: {}", e))?;
+      fs::create_dir_all(parent).map_err(|e| anyhow::anyhow!("Failed to create registry parent directory: {e}"))?;
     }
 
     // Write the empty registry file
-    fs::write(&registry_path, "[]").map_err(|e| anyhow::anyhow!("Failed to create empty registry file: {}", e))?;
+    fs::write(&registry_path, "[]").map_err(|e| anyhow::anyhow!("Failed to create empty registry file: {e}"))?;
 
     Ok(())
   }
@@ -127,7 +127,7 @@ impl ConfigDirsTestGuard {
     }
 
     let registry_content =
-      fs::read_to_string(registry_path).map_err(|e| anyhow::anyhow!("Failed to read registry file: {}", e))?;
+      fs::read_to_string(registry_path).map_err(|e| anyhow::anyhow!("Failed to read registry file: {e}"))?;
 
     Ok(registry_content == expected_content)
   }

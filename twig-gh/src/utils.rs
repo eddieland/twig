@@ -28,7 +28,7 @@ impl GitHubClient {
       let repo = captures.get(2).unwrap().as_str().to_string();
       Ok((owner, repo))
     } else {
-      Err(anyhow::anyhow!("Could not extract owner and repo from URL: {}", url))
+      Err(anyhow::anyhow!("Could not extract owner and repo from URL: {url}"))
     }
   }
 
@@ -43,7 +43,7 @@ impl GitHubClient {
         .with_context(|| format!("Failed to parse PR number '{pr_str}' as a valid integer"))?;
       Ok(pr_number)
     } else {
-      Err(anyhow::anyhow!("Could not extract PR number from URL: {}", url))
+      Err(anyhow::anyhow!("Could not extract PR number from URL: {url}"))
     }
   }
 }

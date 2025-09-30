@@ -68,12 +68,12 @@ impl JiraClient {
       }
       StatusCode::NOT_FOUND => {
         warn!("Jira issue not found: {}", issue_key);
-        Err(anyhow::anyhow!("Issue {} not found", issue_key))
+        Err(anyhow::anyhow!("Issue {issue_key} not found"))
       }
       _ => {
         let error_text = response.text().await.unwrap_or_default();
         warn!("Unexpected Jira API error: HTTP {} - {}", status, error_text);
-        Err(anyhow::anyhow!("Unexpected error: HTTP {} - {}", status, error_text))
+        Err(anyhow::anyhow!("Unexpected error: HTTP {status} - {error_text}"))
       }
     }
   }
@@ -180,7 +180,7 @@ impl JiraClient {
       _ => {
         let error_text = response.text().await.unwrap_or_default();
         warn!("Unexpected Jira API error: HTTP {} - {}", status, error_text);
-        Err(anyhow::anyhow!("Unexpected error: HTTP {} - {}", status, error_text))
+        Err(anyhow::anyhow!("Unexpected error: HTTP {status} - {error_text}"))
       }
     }
   }
@@ -238,12 +238,12 @@ impl JiraClient {
       }
       StatusCode::NOT_FOUND => {
         warn!("Jira issue not found: {}", issue_key);
-        Err(anyhow::anyhow!("Issue {} not found", issue_key))
+        Err(anyhow::anyhow!("Issue {issue_key} not found"))
       }
       _ => {
         let error_text = response.text().await.unwrap_or_default();
         warn!("Unexpected Jira API error: HTTP {} - {}", status, error_text);
-        Err(anyhow::anyhow!("Unexpected error: HTTP {} - {}", status, error_text))
+        Err(anyhow::anyhow!("Unexpected error: HTTP {status} - {error_text}"))
       }
     }
   }

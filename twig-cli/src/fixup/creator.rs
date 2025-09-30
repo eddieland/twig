@@ -40,7 +40,7 @@ pub fn create_fixup_commit(repo_path: &Path, target_commit: &CommitCandidate) ->
     let stderr = String::from_utf8_lossy(&output.stderr);
     print_error("Failed to create fixup commit.");
     tracing::warn!("Git commit --fixup failed: {}", stderr);
-    Err(anyhow::anyhow!("Git commit --fixup command failed: {}", stderr))
+    Err(anyhow::anyhow!("Git commit --fixup command failed: {stderr}"))
   }
 }
 

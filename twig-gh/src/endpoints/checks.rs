@@ -44,18 +44,17 @@ impl GitHubClient {
               && let Some(message) = error_json.get("message").and_then(|m| m.as_str())
             {
               return Err(anyhow::anyhow!(
-                "Failed to parse check runs: GitHub API error: {}",
-                message
+                "Failed to parse check runs: GitHub API error: {message}"
               ));
             }
             // Fall back to the original error if we can't extract a message
-            return Err(anyhow::anyhow!("Failed to parse check runs: {}", e));
+            return Err(anyhow::anyhow!("Failed to parse check runs: {e}"));
           }
         };
 
         Ok(check_runs_response.check_runs)
       }
-      StatusCode::NOT_FOUND => Err(anyhow::anyhow!("Commit {} not found", ref_sha)),
+      StatusCode::NOT_FOUND => Err(anyhow::anyhow!("Commit {ref_sha} not found")),
       StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => Err(anyhow::anyhow!(
         "Authentication failed. Please check your GitHub credentials."
       )),

@@ -115,7 +115,7 @@ impl Registry {
       }
     }
 
-    Err(anyhow::anyhow!("Repository not found in registry: {}", path_str))
+    Err(anyhow::anyhow!("Repository not found in registry: {path_str}"))
   }
 }
 
@@ -349,18 +349,14 @@ impl RepoState {
     // Check if the dependency already exists
     if self.dependencies.iter().any(|d| d.child == child && d.parent == parent) {
       return Err(anyhow::anyhow!(
-        "Dependency from '{}' to '{}' already exists",
-        child,
-        parent
+        "Dependency from '{child}' to '{parent}' already exists"
       ));
     }
 
     // Check for circular dependencies
     if self.would_create_cycle(&child, &parent)? {
       return Err(anyhow::anyhow!(
-        "Adding dependency from '{}' to '{}' would create a circular dependency",
-        child,
-        parent
+        "Adding dependency from '{child}' to '{parent}' would create a circular dependency"
       ));
     }
 
@@ -527,7 +523,7 @@ impl RepoState {
     }
 
     if !found {
-      return Err(anyhow::anyhow!("Branch '{}' is not marked as a root", branch));
+      return Err(anyhow::anyhow!("Branch '{branch}' is not marked as a root"));
     }
 
     Ok(())
@@ -660,8 +656,7 @@ pub fn create_worktree<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Resul
     if repo.find_worktree(&safe_branch_name).is_ok() {
       print_warning(&format!("A worktree named '{safe_branch_name}' already exists",));
       return Err(anyhow::anyhow!(
-        "A worktree named '{}' already exists. This could be due to a previous attempt to create this worktree.",
-        safe_branch_name
+        "A worktree named '{safe_branch_name}' already exists. This could be due to a previous attempt to create this worktree."
       ));
     }
 
@@ -672,8 +667,7 @@ pub fn create_worktree<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Resul
         "A branch named '{safe_branch_name}' already exists, which conflicts with the worktree name",
       ));
       return Err(anyhow::anyhow!(
-        "A branch named '{}' already exists, which conflicts with the worktree name. Please delete this branch first or use a different branch name.",
-        safe_branch_name
+        "A branch named '{safe_branch_name}' already exists, which conflicts with the worktree name. Please delete this branch first or use a different branch name."
       ));
     }
 

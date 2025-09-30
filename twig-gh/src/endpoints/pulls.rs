@@ -61,9 +61,7 @@ impl GitHubClient {
       let status = response.status();
       let error_text = response.text().await.unwrap_or_default();
       return Err(anyhow::anyhow!(
-        "GitHub API returned error status {}: {}",
-        status,
-        error_text
+        "GitHub API returned error status {status}: {error_text}"
       ));
     }
 
@@ -113,12 +111,12 @@ impl GitHubClient {
       }
       reqwest::StatusCode::NOT_FOUND => {
         warn!("Pull request not found: {}/{} #{}", owner, repo, pr_number);
-        Err(anyhow::anyhow!("Pull request #{} not found", pr_number))
+        Err(anyhow::anyhow!("Pull request #{pr_number} not found"))
       }
       _ => {
         let error_text = response.text().await.unwrap_or_default();
         warn!("Unexpected GitHub API error: HTTP {} - {}", status, error_text);
-        Err(anyhow::anyhow!("Unexpected error: HTTP {} - {}", status, error_text))
+        Err(anyhow::anyhow!("Unexpected error: HTTP {status} - {error_text}"))
       }
     }
   }
@@ -169,12 +167,12 @@ impl GitHubClient {
       }
       reqwest::StatusCode::NOT_FOUND => {
         warn!("Pull request not found: {}/{} #{}", owner, repo, pr_number);
-        Err(anyhow::anyhow!("Pull request #{} not found", pr_number))
+        Err(anyhow::anyhow!("Pull request #{pr_number} not found"))
       }
       _ => {
         let error_text = response.text().await.unwrap_or_default();
         warn!("Unexpected GitHub API error: HTTP {} - {}", status, error_text);
-        Err(anyhow::anyhow!("Unexpected error: HTTP {} - {}", status, error_text))
+        Err(anyhow::anyhow!("Unexpected error: HTTP {status} - {error_text}"))
       }
     }
   }

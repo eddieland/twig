@@ -155,7 +155,7 @@ pub(crate) fn handle_git_command(git: GitArgs) -> Result<()> {
       let days = cmd
         .days
         .parse::<u32>()
-        .map_err(|e| anyhow!("Days must be a positive number: {}", e))?;
+        .map_err(|e| anyhow!("Days must be a positive number: {e}"))?;
 
       let repo_arg = cmd.repo.as_deref();
       let repo_path = crate::utils::resolve_repository_path(repo_arg)?;

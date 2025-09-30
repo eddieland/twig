@@ -14,7 +14,7 @@ pub fn resolve_repository_path(repo_arg: Option<&str>) -> Result<PathBuf> {
     Some(path) => {
       let path_buf = PathBuf::from(path);
       if !path_buf.exists() {
-        return Err(anyhow::anyhow!("Repository path does not exist: {}", path));
+        return Err(anyhow::anyhow!("Repository path does not exist: {path}"));
       }
       detect_repository_from_path(&path_buf).context(format!("Failed to detect repository at path: {path}"))
     }

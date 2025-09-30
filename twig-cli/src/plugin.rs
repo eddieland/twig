@@ -15,10 +15,8 @@ pub fn execute_plugin(plugin_name: &str, args: Vec<String>, verbosity: u8) -> Re
   // Check if plugin exists in PATH
   if !plugin_exists(&plugin_binary)? {
     return Err(anyhow::anyhow!(
-      "Unknown command '{}'. No plugin 'twig-{}' found in PATH.\n\n\
-             To install plugins, place executable files named 'twig-<command>' in your PATH.",
-      plugin_name,
-      plugin_name
+      "Unknown command '{plugin_name}'. No plugin 'twig-{plugin_name}' found in PATH.\n\n\
+             To install plugins, place executable files named 'twig-<command>' in your PATH."
     ));
   }
 

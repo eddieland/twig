@@ -22,8 +22,7 @@ pub fn get_jira_host() -> Result<String> {
   match jira_host {
     Ok(host) => Ok(ensure_scheme(&host)?),
     Err(_) => Err(anyhow::anyhow!(
-      "Jira host environment variable '{}' not set",
-      ENV_JIRA_HOST
+      "Jira host environment variable '{ENV_JIRA_HOST}' not set"
     )),
   }
 }
@@ -85,8 +84,7 @@ fn normalize_url(url: &Url) -> String {
 /// Try to parse with https:// prefix
 fn parse_with_https_prefix(input: &str) -> Result<Url> {
   let with_scheme = format!("https://{input}");
-  Url::parse(&with_scheme)
-    .map_err(|_| anyhow::anyhow!("Failed to parse URL: '{}'. Ensure it has a valid scheme.", input))
+  Url::parse(&with_scheme).map_err(|_| anyhow::anyhow!("Failed to parse URL: '{input}'. Ensure it has a valid scheme."))
 }
 
 /// Ensure a host URL has a scheme, defaulting to https:// if none is present
