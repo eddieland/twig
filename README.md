@@ -18,7 +18,7 @@ Twig streamlines common developer workflows across multiple repositories, provid
 ## Technology Stack
 
 - **Language**: Rust (Edition 2024)
-- **MSRV**: 1.88.0
+- **MSRV**: 1.90.0
 - **Target Platforms**: Ubuntu 24.04 (primary), macOS (secondary), Windows (tertiary)
 
 ## Installation
@@ -69,7 +69,7 @@ cargo install --path twig-cli
 ```
 
 **Requirements:**
-- Rust 1.88.0 or later
+- Rust 1.90.0 or later
 - Git
 
 ### Verify Installation

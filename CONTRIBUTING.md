@@ -24,7 +24,7 @@ This document provides guidelines and instructions for contributing to the proje
 
 ### Setting Up the Right Toolchain
 
-Twig requires Rust 1.88.0 or later and uses the **nightly** toolchain for unstable rustfmt features. The project includes a `rust-toolchain.toml` file that specifies the exact requirements.
+Twig requires Rust 1.90.0 or later and uses the **nightly** toolchain for unstable rustfmt features. The project includes a `rust-toolchain.toml` file that specifies the exact requirements.
 
 ```bash
 # Simply navigate to the project directory and Rustup will automatically detect the toolchain file
