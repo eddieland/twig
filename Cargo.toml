@@ -90,7 +90,7 @@ url = "2.5"
 uuid = { version = "1.18", features = ["v4", "serde"] }
 
 # Windows-specific dependencies
-wincredentials = "0.2"
+windows-sys = { version = "0.59", features = ["Win32_Security_Credentials"] }
 
 # Testing dependencies
 insta = "1.43"
