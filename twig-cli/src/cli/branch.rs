@@ -9,7 +9,7 @@ use clap::{Args, Subcommand};
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::{RepoState, detect_repository};
 
-use crate::enhanced_errors::{ErrorHandler, TwigError, ErrorCategory, ResultExt};
+use crate::enhanced_errors::ErrorHandler;
 
 /// Command for branch dependency and root management
 #[derive(Args)]

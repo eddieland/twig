@@ -714,7 +714,11 @@ fn create_or_switch_to_jira_branch(
     create_and_switch_to_branch(repo_path, &branch_name, &branch_base)?;
 
     // Store the association and dependency in a single transaction
-    store_jira_association_with_dependency(repo_path, &branch_name, issue_key, parent_branch.as_deref())?;
+    let parent_branch = match parent_option {
+      Some(p) => Some(p),
+      None => branch_base.base.parent_name(),
+    };
+    store_jira_association_with_dependency(repo_path, &branch_name, issue_key, parent_branch)?;
 
     print_success(&format!(
       "Created and switched to branch '{branch_name}' for Jira issue {issue_key}",

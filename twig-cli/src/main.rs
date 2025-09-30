@@ -18,6 +18,7 @@ mod completion;
 mod consts;
 mod creds;
 mod diagnostics;
+mod enhanced_errors;
 mod fixup;
 mod git;
 mod plugin;
