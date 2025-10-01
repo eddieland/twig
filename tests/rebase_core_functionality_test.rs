@@ -1,5 +1,3 @@
-#![cfg(unix)]
-
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -64,7 +62,7 @@ fn create_commit(repo: &Git2Repository, file_name: &str, content: &str, message:
 /// Test the core rebase continue functionality
 #[test]
 fn test_rebase_continue_basic() -> Result<()> {
-  let guard = GitRepoTestGuard::new()?;
+  let guard = GitRepoTestGuard::new();
   let repo_path = guard.path();
   let repo = &guard.repo;
 
@@ -120,7 +118,7 @@ fn test_rebase_continue_basic() -> Result<()> {
 /// Test the core rebase skip functionality
 #[test]
 fn test_rebase_skip_basic() -> Result<()> {
-  let guard = GitRepoTestGuard::new()?;
+  let guard = GitRepoTestGuard::new();
   let repo_path = guard.path();
   let repo = &guard.repo;
 
@@ -185,7 +183,7 @@ fn test_rebase_skip_basic() -> Result<()> {
 /// Test rebase abort functionality
 #[test]
 fn test_rebase_abort_basic() -> Result<()> {
-  let guard = GitRepoTestGuard::new()?;
+  let guard = GitRepoTestGuard::new();
   let repo_path = guard.path();
   let repo = &guard.repo;
 
@@ -236,7 +234,7 @@ fn test_rebase_abort_basic() -> Result<()> {
 /// Test rebase in progress detection
 #[test]
 fn test_rebase_detection() -> Result<()> {
-  let guard = GitRepoTestGuard::new()?;
+  let guard = GitRepoTestGuard::new();
   let repo_path = guard.path();
   let repo = &guard.repo;
 

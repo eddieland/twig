@@ -1,5 +1,3 @@
-#![cfg(unix)]
-
 use std::fs;
 use std::path::Path;
 
@@ -81,7 +79,7 @@ fn add_branch_dependency(repo_path: &Path, child: &str, parent: &str) -> Result<
 }
 
 /// Helper function to simulate a rebase with conflicts
-fn simulate_rebase_with_conflicts(repo_path: &Path, branch: &str, onto: &str) -> Result<bool> {
+fn simulate_rebase_with_conflicts(repo_path: &Path, _branch: &str, onto: &str) -> Result<bool> {
   use std::process::Command;
   use twig_cli::consts;
 
@@ -125,7 +123,7 @@ fn is_rebase_in_progress(repo_path: &Path) -> bool {
 
 #[test]
 fn test_rebase_continue_functionality() -> Result<()> {
-  let guard = GitRepoTestGuard::new()?;
+  let guard = GitRepoTestGuard::new();
   let repo_path = guard.path();
   let repo = &guard.repo;
 
@@ -168,7 +166,7 @@ fn test_rebase_continue_functionality() -> Result<()> {
     assert!(success, "Should be able to stage resolved file");
 
     // Test rebase --continue
-    let (success, output) = execute_git_command(repo_path, &["rebase", "--continue"])?;
+    let (_success, output) = execute_git_command(repo_path, &["rebase", "--continue"])?;
     
     // The continue should succeed or at least not fail catastrophically
     println!("Rebase continue output: {}", output);
@@ -182,7 +180,7 @@ fn test_rebase_continue_functionality() -> Result<()> {
 
 #[test]
 fn test_rebase_skip_functionality() -> Result<()> {
-  let guard = GitRepoTestGuard::new()?;
+  let guard = GitRepoTestGuard::new();
   let repo_path = guard.path();
   let repo = &guard.repo;
 
@@ -224,7 +222,7 @@ fn test_rebase_skip_functionality() -> Result<()> {
     assert!(is_rebase_in_progress(repo_path), "Rebase should be in progress after conflict");
 
     // Test rebase --skip (skip the conflicting commit)
-    let (success, output) = execute_git_command(repo_path, &["rebase", "--skip"])?;
+    let (_success, output) = execute_git_command(repo_path, &["rebase", "--skip"])?;
     
     println!("Rebase skip output: {}", output);
     
@@ -266,7 +264,7 @@ fn test_rebase_skip_functionality() -> Result<()> {
 
 #[test]
 fn test_rebase_abort_functionality() -> Result<()> {
-  let guard = GitRepoTestGuard::new()?;
+  let guard = GitRepoTestGuard::new();
   let repo_path = guard.path();
   let repo = &guard.repo;
 
@@ -313,7 +311,7 @@ fn test_rebase_abort_functionality() -> Result<()> {
 
 #[test]
 fn test_rebase_cleanup_after_skip() -> Result<()> {
-  let guard = GitRepoTestGuard::new()?;
+  let guard = GitRepoTestGuard::new();
   let repo_path = guard.path();
   let repo = &guard.repo;
 
@@ -365,7 +363,7 @@ fn test_rebase_cleanup_after_skip() -> Result<()> {
 
 #[test]
 fn test_detect_rebase_in_progress() -> Result<()> {
-  let guard = GitRepoTestGuard::new()?;
+  let guard = GitRepoTestGuard::new();
   let repo_path = guard.path();
   let repo = &guard.repo;
 
