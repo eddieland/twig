@@ -21,7 +21,7 @@ mod switch;
 mod sync;
 pub mod tidy;
 mod tree;
-// mod update; // Not yet implemented in this branch
+mod update;
 mod worktree;
 
 use anyhow::Result;
@@ -277,18 +277,18 @@ pub enum Commands {
   #[command(alias = "t")]
   Tree(tree::TreeArgs),
 
-  // /// Update repository by switching to root branch, fetching, and pulling  
-  // #[command(long_about = "Update the repository by performing a complete refresh workflow.\n\n\
-  //           This command performs the following operations in sequence:\n\
-  //           1. Switch to the root branch (or main/master if no root branch is configured)\n\
-  //           2. Fetch the latest changes from origin\n\
-  //           3. Pull the latest commits to update the current branch\n\
-  //           4. Run 'twig cascade' to update all dependent branches (unless --no-cascade is used)\n\n\
-  //           This is useful for keeping your repository and all dependent branches up to date\n\
-  //           with the latest changes from the remote repository. The cascade operation ensures\n\
-  //           that all your feature branches are rebased on the latest changes.")]
-  // #[command(alias = "up")]
-  // Update(update::UpdateArgs), // Not yet implemented in this branch
+  /// Update repository by switching to root branch, fetching, and pulling  
+  #[command(long_about = "Update the repository by performing a complete refresh workflow.\n\n\
+            This command performs the following operations in sequence:\n\
+            1. Switch to the root branch (or main/master if no root branch is configured)\n\
+            2. Fetch the latest changes from origin\n\
+            3. Pull the latest commits to update the current branch\n\
+            4. Run 'twig cascade' to update all dependent branches (unless --no-cascade is used)\n\n\
+            This is useful for keeping your repository and all dependent branches up to date\n\
+            with the latest changes from the remote repository. The cascade operation ensures\n\
+            that all your feature branches are rebased on the latest changes.")]
+  #[command(alias = "up")]
+  Update(update::UpdateArgs),
 
   /// Worktree management
   #[command(long_about = "Manage Git worktrees for efficient multi-branch development.\n\n\
@@ -332,7 +332,7 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
       Commands::Sync(sync) => sync::handle_sync_command(sync),
       Commands::Tidy(tidy) => tidy::handle_tidy_command(tidy),
       Commands::Tree(tree) => tree::handle_tree_command(tree),
-      // Commands::Update(update) => update::handle_update_command(update), // Not yet implemented
+      Commands::Update(update) => update::handle_update_command(update),
       Commands::Worktree(worktree) => worktree::handle_worktree_command(worktree),
       Commands::Commit(args) => commit::handle_commit_command(args),
       Commands::Fixup(fixup) => fixup::handle_fixup_command(fixup),
