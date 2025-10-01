@@ -779,6 +779,58 @@ fn create_branch_from_github_pr(
   })
 }
 
+/// Create a branch from a Jira issue
+fn create_branch_from_jira_issue(
+  jira_client: &JiraClient,
+  repo_path: &Path,
+  issue_key: &str,
+  parent_option: Option<&str>,
+  jira_parser: Option<&JiraTicketParser>,
+) -> Result<()> {
+  let rt = Runtime::new().context("Failed to create async runtime")?;
+  rt.block_on(async {
+    // Get the Jira issue details
+    let issue = match jira_client.get_issue(issue_key).await {
+      Ok(issue) => issue,
+      Err(e) => {
+        print_error(&format!("Failed to get Jira issue {issue_key}: {e}",));
+        return Err(e);
+      }
+    };
+
+    // Create branch name from issue key and summary
+    let safe_summary = issue.fields.summary
+      .chars()
+      .filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '-')
+      .collect::<String>()
+      .to_lowercase()
+      .split_whitespace()
+      .take(5) // Limit to first 5 words
+      .collect::<Vec<_>>()
+      .join("-");
+    
+    let branch_name = format!("{}/{}", issue_key, safe_summary);
+
+    print_info(&format!("Creating branch: {branch_name}",));
+
+    // Resolve parent branch
+    let branch_base = resolve_branch_base(repo_path, parent_option, jira_parser)?;
+
+    // Create and switch to the branch
+    create_and_switch_to_branch(repo_path, &branch_name, &branch_base)?;
+
+    // Store the association
+    store_jira_association(repo_path, &branch_name, issue_key)?;
+
+    print_success(&format!(
+      "Created and switched to branch '{branch_name}' for Jira issue {issue_key}",
+    ));
+    print_info(&format!("Issue Summary: {}", issue.fields.summary));
+    
+    Ok(())
+  })
+}
+
 /// Store Jira issue association in repository state
 fn store_jira_association(repo_path: &Path, branch_name: &str, issue_key: &str) -> Result<()> {
   let mut repo_state = RepoState::load(repo_path)?;
