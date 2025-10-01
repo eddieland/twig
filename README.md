@@ -1,5 +1,8 @@
 # twig
 
+[![CI](https://github.com/eddieland/twig/actions/workflows/ci.yml/badge.svg)](https://github.com/eddieland/twig/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/eddieland/twig?display_name=tag&sort=semver)](https://github.com/eddieland/twig/releases/latest)
+
 A Git-based developer productivity tool that enhances workflows by integrating git repository management with Jira issue tracking and GitHub pull request workflows.
 
 ## Overview
