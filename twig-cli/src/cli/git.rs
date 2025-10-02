@@ -3,7 +3,7 @@
 //! Derive-based implementation of the git command for managing Git
 //! repositories.
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use clap::{Args, Subcommand};
 
 /// Command for Git repository management
@@ -121,6 +121,10 @@ pub struct StaleBranchesCommand {
   /// Interactive prune mode - prompt to delete each stale branch
   #[arg(long, short = 'p')]
   pub prune: bool,
+
+  /// Output stale branch information as JSON (incompatible with --prune)
+  #[arg(long)]
+  pub json: bool,
 }
 
 /// Handle the git command
@@ -152,6 +156,10 @@ pub(crate) fn handle_git_command(git: GitArgs) -> Result<()> {
     GitSubcommands::List => crate::git::list_repositories(),
     GitSubcommands::Remove(cmd) => crate::git::remove_repository(&cmd.path),
     GitSubcommands::StaleBranches(cmd) => {
+      if cmd.prune && cmd.json {
+        bail!("--json cannot be used together with --prune");
+      }
+
       let days = cmd
         .days
         .parse::<u32>()
@@ -159,7 +167,7 @@ pub(crate) fn handle_git_command(git: GitArgs) -> Result<()> {
 
       let repo_arg = cmd.repo.as_deref();
       let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
-      crate::git::find_stale_branches(repo_path, days, cmd.prune)
+      crate::git::find_stale_branches(repo_path, days, cmd.prune, cmd.json)
     }
   }
 }

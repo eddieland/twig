@@ -11,6 +11,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result};
 use git2::{BranchType, FetchOptions, Repository as Git2Repository};
 use owo_colors::OwoColorize;
+use serde::Serialize;
 use tokio::{task, time};
 use twig_core::output::{
   format_command, format_repo_name, format_repo_path, format_timestamp, print_error, print_header, print_success,
@@ -21,7 +22,7 @@ use twig_core::{ConfigDirs, Registry, RepoState};
 use crate::consts;
 
 /// Information about a stale branch for pruning
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize)]
 pub struct StaleBranchInfo {
   pub name: String,
   pub last_commit_date: String,
@@ -32,7 +33,7 @@ pub struct StaleBranchInfo {
 }
 
 /// Information about a commit
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize)]
 pub struct CommitInfo {
   pub hash: String,
   pub message: String,
@@ -344,7 +345,7 @@ pub fn execute_all_repositories(command: &str) -> Result<()> {
 }
 
 /// Find stale branches in a repository
-pub fn find_stale_branches<P: AsRef<Path>>(path: P, days: u32, prune: bool) -> Result<()> {
+pub fn find_stale_branches<P: AsRef<Path>>(path: P, days: u32, prune: bool, output_json: bool) -> Result<()> {
   let path = path.as_ref();
   let repo = Git2Repository::open(path).context(format!("Failed to open git repository at {}", path.display()))?;
 
@@ -356,6 +357,8 @@ pub fn find_stale_branches<P: AsRef<Path>>(path: P, days: u32, prune: bool) -> R
 
   if prune {
     interactive_prune_branches(path, &repo, &repo_state, stale_branches, days)
+  } else if output_json {
+    display_stale_branches_json(&stale_branches)
   } else {
     display_stale_branches(path, stale_branches)
   }
@@ -442,6 +445,13 @@ fn display_stale_branches<P: AsRef<Path>>(path: P, stale_branches: Vec<StaleBran
     }
   }
 
+  Ok(())
+}
+
+/// Display stale branches in JSON format
+fn display_stale_branches_json(stale_branches: &[StaleBranchInfo]) -> Result<()> {
+  let json = serde_json::to_string_pretty(stale_branches)?;
+  println!("{json}");
   Ok(())
 }
 
@@ -694,6 +704,7 @@ fn display_prune_summary(summary: &PruneSummary) {
 
 #[cfg(test)]
 mod tests {
+  use serde_json::Value;
   use twig_core::RepoState;
   use twig_test_utils::{
     GitRepoTestGuard, checkout_branch, create_branch, create_commit, create_commit_with_time, days_ago,
@@ -909,5 +920,28 @@ mod tests {
 
     let result = display_stale_branches(repo_path, stale_branches);
     assert!(result.is_ok());
+  }
+
+  #[test]
+  fn test_stale_branch_info_serializes_to_json() {
+    let info = StaleBranchInfo {
+      name: "feature/test".into(),
+      last_commit_date: "2024-01-01 12:00:00".into(),
+      parent_branch: Some("main".into()),
+      novel_commits: vec![CommitInfo {
+        hash: "abcdef12".into(),
+        message: "Test commit".into(),
+      }],
+      jira_issue: Some("PROJ-123".into()),
+      github_pr: Some(42),
+    };
+
+    let json: Value = serde_json::to_value(vec![info]).unwrap();
+
+    assert_eq!(json[0]["name"], "feature/test");
+    assert_eq!(json[0]["parent_branch"], "main");
+    assert_eq!(json[0]["jira_issue"], "PROJ-123");
+    assert_eq!(json[0]["github_pr"], 42);
+    assert_eq!(json[0]["novel_commits"][0]["hash"], "abcdef12");
   }
 }
