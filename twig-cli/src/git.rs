@@ -52,8 +52,14 @@ pub fn add_repository<P: AsRef<Path>>(path: P) -> Result<()> {
   let config_dirs = ConfigDirs::new()?;
   let mut registry = Registry::load(&config_dirs)?;
 
-  registry.add(path)?;
+  let path_ref = path.as_ref();
+  let canonical_path = std::fs::canonicalize(path_ref)
+    .with_context(|| format!("Failed to resolve repository path {}", path_ref.display()))?;
+
+  registry.add(&canonical_path)?;
   registry.save(&config_dirs)?;
+
+  twig_core::state::ensure_twig_internal_gitignore(&canonical_path)?;
 
   Ok(())
 }

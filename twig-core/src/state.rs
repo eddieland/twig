@@ -15,6 +15,28 @@ use uuid::Uuid;
 
 use crate::config::ConfigDirs;
 
+/// Ensure the repository's `.twig/` directory contains a `.gitignore` that
+/// ignores every file within the directory. This keeps twig's metadata out of
+/// version control without mutating the repository's root `.gitignore` file.
+pub fn ensure_twig_internal_gitignore<P: AsRef<Path>>(repo_path: P) -> Result<()> {
+  let twig_dir = repo_path.as_ref().join(".twig");
+  if !twig_dir.exists() {
+    fs::create_dir_all(&twig_dir).context("Failed to create .twig directory")?;
+  }
+
+  let gitignore_path = twig_dir.join(".gitignore");
+  if gitignore_path.exists() {
+    let content = fs::read_to_string(&gitignore_path).context("Failed to read .twig/.gitignore")?;
+    if content.lines().any(|line| line.trim() == "*") {
+      return Ok(());
+    }
+  }
+
+  fs::write(&gitignore_path, "*\n").context("Failed to update .twig/.gitignore")?;
+
+  Ok(())
+}
+
 /// Represents a repository in the registry
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Repository {
@@ -251,31 +273,8 @@ impl RepoState {
 
     if !twig_dir.exists() {
       fs::create_dir_all(&twig_dir).context("Failed to create .twig directory")?;
-
-      // Add .twig to .gitignore if it doesn't already contain it
-      let gitignore_path = repo_path.as_ref().join(".gitignore");
-      let mut gitignore_content = String::new();
-      let mut needs_twig_entry = true;
-
-      if gitignore_path.exists() {
-        gitignore_content = fs::read_to_string(&gitignore_path).context("Failed to read .gitignore file")?;
-
-        // Check if .twig is already in .gitignore
-        if gitignore_content.lines().any(|line| line.trim() == ".twig/") {
-          needs_twig_entry = false;
-        }
-      }
-
-      if needs_twig_entry {
-        // Ensure there's a newline before adding .twig/
-        if !gitignore_content.is_empty() && !gitignore_content.ends_with('\n') {
-          gitignore_content.push('\n');
-        }
-
-        gitignore_content.push_str(".twig/\n");
-        fs::write(&gitignore_path, gitignore_content).context("Failed to update .gitignore file")?;
-      }
     }
+    ensure_twig_internal_gitignore(repo_path.as_ref())?;
 
     // Update timestamp before saving
     let mut state_to_save = self.clone();
@@ -1193,38 +1192,56 @@ mod tests {
   }
 
   #[test]
-  fn test_gitignore_creation() {
+  fn test_internal_gitignore_creation() {
     let temp_dir = TempDir::new().unwrap();
     let repo_path = temp_dir.path();
 
     let state = RepoState::default();
     state.save(repo_path).unwrap();
 
-    // Check that .gitignore was created with .twig/ entry
-    let gitignore_path = repo_path.join(".gitignore");
-    assert!(gitignore_path.exists());
+    // Check that .twig/.gitignore was created with a catch-all rule
+    let twig_gitignore_path = repo_path.join(".twig/.gitignore");
+    assert!(twig_gitignore_path.exists());
 
-    let gitignore_content = fs::read_to_string(gitignore_path).unwrap();
-    assert!(gitignore_content.contains(".twig/"));
+    let gitignore_content = fs::read_to_string(twig_gitignore_path).unwrap();
+    assert_eq!(gitignore_content, "*\n");
   }
 
   #[test]
-  fn test_gitignore_append() {
+  fn test_repo_gitignore_left_untouched() {
     let temp_dir = TempDir::new().unwrap();
     let repo_path = temp_dir.path();
 
     // Create existing .gitignore
     let gitignore_path = repo_path.join(".gitignore");
-    fs::write(&gitignore_path, "*.log\ntarget/").unwrap();
+    let original_content = "*.log\ntarget/";
+    fs::write(&gitignore_path, original_content).unwrap();
 
     let state = RepoState::default();
     state.save(repo_path).unwrap();
 
-    // Check that .twig/ was appended
+    // Check that the root .gitignore content remains unchanged
     let gitignore_content = fs::read_to_string(gitignore_path).unwrap();
-    assert!(gitignore_content.contains("*.log"));
-    assert!(gitignore_content.contains("target/"));
-    assert!(gitignore_content.contains(".twig/"));
+    assert_eq!(gitignore_content, original_content);
+
+    // Ensure the self-referential ignore file exists
+    let twig_gitignore_path = repo_path.join(".twig/.gitignore");
+    assert!(twig_gitignore_path.exists());
+  }
+
+  #[test]
+  fn test_ensure_twig_internal_gitignore_idempotent() {
+    let temp_dir = TempDir::new().unwrap();
+    let repo_path = temp_dir.path();
+
+    ensure_twig_internal_gitignore(repo_path).unwrap();
+    ensure_twig_internal_gitignore(repo_path).unwrap();
+
+    let gitignore_path = repo_path.join(".twig/.gitignore");
+    let gitignore_content = fs::read_to_string(gitignore_path).unwrap();
+    let twig_entries = gitignore_content.lines().filter(|line| line.trim() == "*").count();
+
+    assert_eq!(twig_entries, 1);
   }
 
   #[test]
