@@ -9,16 +9,22 @@ use {clap, emojis};
 /// Enum representing different color modes for output
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorMode {
-  /// Enable colored output
+  /// Enable colored output (accepts aliases like `on`/`true`)
+  #[value(alias = "on")]
+  #[value(alias = "true")]
   Yes,
   /// Enable colored output (alias for Yes)
+  #[value(alias = "on")]
   Always,
   /// Automatically detect if colors should be used based on terminal
   /// capabilities
   Auto,
-  /// Disable colored output
+  /// Disable colored output (accepts aliases like `off`/`false`)
+  #[value(alias = "off")]
+  #[value(alias = "false")]
   No,
   /// Disable colored output (alias for No)
+  #[value(alias = "off")]
   Never,
 }
 
