@@ -32,14 +32,27 @@ mod tests {
 
   use super::*;
 
-  // Test resolve_repository_path with a valid path
+  // Test resolve_repository_path with a valid path that is a git repository
   #[test]
-  fn test_resolve_repository_path_with_valid_path() {
-    // Create a temporary directory to use as our "repository"
+  fn test_resolve_repository_path_with_valid_git_repository() {
+    // Create a temporary git repository without changing the working directory
+    let git_repo = GitRepoTestGuard::new();
+    let repo_path = git_repo.path().canonicalize().unwrap();
+
+    // Resolve using the explicit repository path argument
+    let result = resolve_repository_path(Some(repo_path.to_str().unwrap()));
+
+    assert!(result.is_ok());
+    let resolved_path = result.unwrap().canonicalize().unwrap();
+    assert_eq!(resolved_path, repo_path);
+  }
+
+  // Test resolve_repository_path with a path that exists but is not a git
+  // repository
+  #[test]
+  fn test_resolve_repository_path_with_non_repository_path() {
     let temp_dir = TempDir::new().unwrap();
 
-    // This is a bit of a hack, but we can't easily mock these functions
-    // without changing the code structure, so we'll just test the error path
     let result = resolve_repository_path(Some(temp_dir.path().to_str().unwrap()));
 
     // If the path exists but isn't a git repo, we'll get an error about failing to
