@@ -6,11 +6,11 @@
 use std::io;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::Args;
 use git2::Repository as Git2Repository;
 use tree_renderer::TreeRenderer;
-use twig_core::output::{format_command, print_info, print_warning};
+use twig_core::output::{format_command, print_error, print_info, print_warning};
 use twig_core::{detect_repository, tree_renderer};
 
 use crate::user_defined_dependency_resolver::UserDefinedDependencyResolver;
@@ -26,6 +26,10 @@ pub struct TreeArgs {
   #[arg(short = 'd', long = "max-depth", value_name = "DEPTH")]
   pub max_depth: Option<u32>,
 
+  /// Limit output to one or more specific root branches
+  #[arg(long = "root", value_name = "BRANCH", num_args = 1.., value_delimiter = ',')]
+  pub roots: Vec<String>,
+
   /// Disable colored output
   #[arg(long = "no-color")]
   pub no_color: bool,
@@ -38,8 +42,17 @@ pub struct TreeArgs {
 /// loads the repository state, resolves user-defined dependencies, and
 /// renders the branch tree.
 pub(crate) fn handle_tree_command(tree: TreeArgs) -> Result<()> {
+  let TreeArgs {
+    repo,
+    max_depth,
+    roots: requested_roots,
+    no_color,
+  } = tree;
+
+  let filtering = !requested_roots.is_empty();
+
   // Get the repository path
-  let repo_path = if let Some(repo_arg) = tree.repo {
+  let repo_path = if let Some(repo_arg) = repo {
     PathBuf::from(repo_arg)
   } else {
     detect_repository().context("Not in a git repository")?
@@ -68,13 +81,45 @@ pub(crate) fn handle_tree_command(tree: TreeArgs) -> Result<()> {
   let has_dependencies = repo_state.has_user_defined_dependencies();
   let has_root_branches = !repo_state.get_root_branches().is_empty();
 
-  if !has_dependencies && !has_root_branches {
+  if !has_dependencies && !has_root_branches && requested_roots.is_empty() {
     display_empty_state_help();
     return Ok(());
   }
 
   // Get root branches and orphaned branches for the tree
-  let (roots, orphaned) = resolver.build_tree_from_user_dependencies(&branch_nodes, &repo_state);
+  let (resolved_roots, orphaned) = resolver.build_tree_from_user_dependencies(&branch_nodes, &repo_state);
+
+  let roots = if requested_roots.is_empty() {
+    resolved_roots.clone()
+  } else {
+    let mut matched = Vec::new();
+    let mut missing = Vec::new();
+
+    for root in requested_roots {
+      if branch_nodes.contains_key(&root) {
+        matched.push(root);
+      } else {
+        missing.push(root);
+      }
+    }
+
+    if !missing.is_empty() {
+      let missing_display = missing
+        .iter()
+        .map(|name| format!("'{name}'"))
+        .collect::<Vec<_>>()
+        .join(", ");
+      let message = if missing.len() == 1 {
+        format!("Branch {missing_display} not found")
+      } else {
+        format!("Branches not found: {missing_display}")
+      };
+      print_error(&message);
+      return Err(anyhow!(message));
+    }
+
+    matched
+  };
 
   if roots.is_empty() {
     display_no_roots_warning(&branch_nodes);
@@ -82,13 +127,25 @@ pub(crate) fn handle_tree_command(tree: TreeArgs) -> Result<()> {
   }
 
   // Create and configure the tree renderer
-  let mut renderer = TreeRenderer::new(&branch_nodes, &roots, tree.max_depth, tree.no_color);
+  let mut renderer = TreeRenderer::new(&branch_nodes, &roots, max_depth, no_color);
   let mut stdout = io::stdout();
   renderer.render(&mut stdout, &roots, Some("\n"))?;
 
   // Display orphaned branches if any
   if !orphaned.is_empty() {
-    display_orphaned_branches(&orphaned);
+    if filtering {
+      let filtered_orphaned: Vec<String> = orphaned
+        .iter()
+        .filter(|branch| roots.contains(branch))
+        .cloned()
+        .collect();
+
+      if !filtered_orphaned.is_empty() {
+        display_orphaned_branches(&filtered_orphaned);
+      }
+    } else {
+      display_orphaned_branches(&orphaned);
+    }
   }
 
   // Show summary and help text
