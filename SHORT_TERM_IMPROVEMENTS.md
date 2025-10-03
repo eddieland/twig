@@ -47,7 +47,7 @@ This plan focuses on core branch-centric flows that most Twig users rely on: `tw
 1. Extend `twig-gh` to expose helpers for fetching PR head refs (e.g., via `pulls/{id}` or GraphQL) and optionally copying remote URLs.
 2. Update `create_branch_from_github_pr` to:
    - Fetch the PR's head ref into `refs/remotes/twig/pr/<id>` (support forks by honoring the PR head repository URL).
-   - Create a local branch that tracks the fetched ref.
+   - Create a local branch whose name exactly matches the PR head branch (e.g., `feature/abc-123`), tracking the fetched ref.
    - Optionally configure upstream tracking (so `git status` and `git pull` work out-of-the-box).
 3. Handle forks where the PR head repo differs from `origin` by adding temporary remotes or using `git fetch <url> <ref>`.
 4. Persist GitHub metadata exactly as today after creating the branch.
