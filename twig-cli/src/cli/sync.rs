@@ -3,29 +3,17 @@
 //! Derive-based implementation of the sync command for automatically linking
 //! branches to Jira issues and GitHub PRs.
 
-use std::sync::LazyLock;
-
 use anyhow::{Context, Result};
 use clap::Parser;
 use directories::BaseDirs;
 use git2::{BranchType, Repository as Git2Repository};
 use indicatif::{ProgressBar, ProgressStyle};
-use regex::Regex;
 use tokio::runtime::Runtime;
+use twig_core::jira_parser::detect_jira_issue_from_branch;
 use twig_core::output::{print_info, print_success, print_warning};
 use twig_core::state::{BranchMetadata, RepoState};
 
 use crate::clients;
-
-static JIRA_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
-  vec![
-    Regex::new(r"^([A-Z]{2,}-\d+)(?:/|-)").unwrap(),
-    Regex::new(r"/([A-Z]{2,}-\d+)-").unwrap(),
-    Regex::new(r"-([A-Z]{2,}-\d+)-").unwrap(),
-    Regex::new(r"^([A-Z]{2,}-\d+)$").unwrap(),
-    Regex::new(r"/([A-Z]{2,}-\d+)$").unwrap(),
-  ]
-});
 
 /// Command for automatically linking branches to Jira issues and GitHub PRs
 #[derive(Parser)]
@@ -214,25 +202,6 @@ fn sync_branches(
   }
 
   Ok(())
-}
-
-/// Detect Jira issue key from branch name
-fn detect_jira_issue_from_branch(branch_name: &str) -> Option<String> {
-  // Patterns to match:
-  // 1. PROJ-123/feature-name (issue key at start)
-  // 2. PROJ-123-feature-name (issue key at start)
-  // 3. feature/PROJ-123-description (issue key after slash)
-  // 4. feature-PROJ-123-description (issue key in middle)
-  // 5. PROJ-123 (just the issue key)
-  for pattern in JIRA_PATTERNS.iter() {
-    if let Some(captures) = pattern.captures(branch_name)
-      && let Some(issue_match) = captures.get(1)
-    {
-      return Some(issue_match.as_str().to_string());
-    }
-  }
-
-  None
 }
 
 /// Detect GitHub PR number from branch using GitHub API
