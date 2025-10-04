@@ -70,6 +70,16 @@ static COMMIT_MESSAGE_PATTERN: LazyLock<Regex> =
 static COMMIT_MESSAGE_STRICT_PATTERN: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r"^([A-Z]{2,}-\d+):").expect("Failed to compile strict commit message Jira regex"));
 
+static BRANCH_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
+  vec![
+    Regex::new(r"^([A-Z]{2,}-\d+)(?:/|-)").expect("Failed to compile branch Jira regex (prefix)"),
+    Regex::new(r"/([A-Z]{2,}-\d+)-").expect("Failed to compile branch Jira regex (slash-middle)"),
+    Regex::new(r"-([A-Z]{2,}-\d+)-").expect("Failed to compile branch Jira regex (hyphen-middle)"),
+    Regex::new(r"^([A-Z]{2,}-\d+)$").expect("Failed to compile branch Jira regex (exact)"),
+    Regex::new(r"/([A-Z]{2,}-\d+)$").expect("Failed to compile branch Jira regex (suffix)"),
+  ]
+});
+
 impl JiraTicketParser {
   /// Create a new parser with the given configuration
   pub fn new(config: JiraParsingConfig) -> Self {
@@ -196,6 +206,20 @@ pub fn create_jira_parser() -> Option<JiraTicketParser> {
   Some(JiraTicketParser::new(jira_config))
 }
 
+/// Attempt to detect a Jira issue key from a branch name using common naming
+/// patterns.
+pub fn detect_jira_issue_from_branch(branch_name: &str) -> Option<String> {
+  for pattern in BRANCH_PATTERNS.iter() {
+    if let Some(captures) = pattern.captures(branch_name) {
+      if let Some(issue_match) = captures.get(1) {
+        return Some(issue_match.as_str().to_string());
+      }
+    }
+  }
+
+  None
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -306,5 +330,37 @@ mod tests {
 
     assert_eq!(parser.parse("ME-0123").unwrap(), "ME-0123");
     assert_eq!(parser.parse("me0123").unwrap(), "ME-0123");
+  }
+
+  #[test]
+  fn test_detect_jira_issue_from_branch_patterns() {
+    assert_eq!(
+      detect_jira_issue_from_branch("PROJ-123/feature-name"),
+      Some("PROJ-123".to_string())
+    );
+    assert_eq!(
+      detect_jira_issue_from_branch("feature/PROJ-456-description"),
+      Some("PROJ-456".to_string())
+    );
+    assert_eq!(
+      detect_jira_issue_from_branch("feature-PROJ-789-description"),
+      Some("PROJ-789".to_string())
+    );
+    assert_eq!(
+      detect_jira_issue_from_branch("PROJ-101112"),
+      Some("PROJ-101112".to_string())
+    );
+    assert_eq!(
+      detect_jira_issue_from_branch("feature/PROJ-1314"),
+      Some("PROJ-1314".to_string())
+    );
+  }
+
+  #[test]
+  fn test_detect_jira_issue_from_branch_non_matches() {
+    assert_eq!(detect_jira_issue_from_branch("feature-branch"), None);
+    assert_eq!(detect_jira_issue_from_branch("main"), None);
+    assert_eq!(detect_jira_issue_from_branch("proj-123"), None);
+    assert_eq!(detect_jira_issue_from_branch("P-123"), None);
   }
 }
