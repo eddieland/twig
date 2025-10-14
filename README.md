@@ -1,28 +1,26 @@
-# twig
+# Twig
 
 [![CI](https://github.com/eddieland/twig/actions/workflows/ci.yml/badge.svg)](https://github.com/eddieland/twig/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/eddieland/twig?display_name=tag&sort=semver)](https://github.com/eddieland/twig/releases/latest)
 
-A Git-based developer productivity tool that enhances workflows by integrating git repository management with Jira issue tracking and GitHub pull request workflows.
+Twig is a Git-first productivity tool that keeps branches, issues, and pull requests aligned across everything you are building. It was shaped around stacked pull-request workflows: make a change on one branch, and Twig will help you carry it forward to each dependent branch by rebasing in sequence. Multi-repo management, worktrees, and Jira or GitHub integrations sit on top of that core experience so you can keep related work in sync without babysitting each branch.
 
 ## Overview
 
-Twig streamlines common developer workflows across multiple repositories, providing consistent branch naming and management, integrating issue tracking with code development, and enabling batch operations across tracked repositories.
+Twig coordinates branch management, issue tracking, and review work across one or many repositories. The CLI standardizes branch naming, keeps metadata alongside each repo, and offers batch operations when you need to run the same Git command everywhere.
 
-## Key Features
+## Highlights
 
-- **Multi-repository management**: Track and perform operations across multiple git repositories
-- **Worktree support**: Efficiently manage git worktrees for feature development
-- **Jira integration**: Connect branches to Jira issues and manage transitions
-- **GitHub integration**: Track PR status and review information
-- **Batch operations**: Execute commands across all tracked repositories
-- **Credential management**: Simplified setup for API access
+- Multi-repository management keeps related projects marching together.
+- Worktree helpers make it easy to hop between branches without disturbing your main checkout.
+- Jira integration links branches to issues and can transition cards as work progresses.
+- GitHub integration surfaces pull-request status and review information alongside your local state.
+- Batch commands let you fetch, execute shell commands, or check repository health in one go.
+- Credential helpers set up API access using familiar `.netrc` entries.
 
-## Technology Stack
+## Platform notes
 
-- **Language**: Rust (Edition 2024)
-- **MSRV**: 1.88.0
-- **Target Platforms**: Ubuntu 24.04 (primary), macOS (secondary), Windows (tertiary)
+Twig is written in Rust (Edition 2024). The minimum supported Rust version is 1.88.0. We develop primarily on Ubuntu 24.04, with macOS and Windows builds available as well.
 
 ## Installation
 
@@ -36,13 +34,16 @@ The easiest way to install Twig is to download a pre-built binary from the [GitH
    - `twig-macos-x86_64-v*.tar.gz` for macOS
    - `twig-windows-x86_64-v*.zip` for Windows
 3. Verify the download (recommended):
+
    ```bash
    # Verify checksum (Linux/macOS)
    sha256sum -c twig-*-v*.tar.gz.sha256
    ```
+
 4. Extract and install:
 
 **Linux/macOS:**
+
 ```bash
 tar -xzf twig-*-v*.tar.gz
 chmod +x twig
@@ -50,6 +51,7 @@ sudo mv twig /usr/local/bin/
 ```
 
 **Windows:**
+
 ```powershell
 # Extract the zip file, then move to a PATH location
 Move-Item -Path twig.exe -Destination "$env:LOCALAPPDATA\Microsoft\WindowsApps\"
@@ -72,6 +74,7 @@ cargo install --path twig-cli
 ```
 
 **Requirements:**
+
 - Rust 1.88.0 or later
 - Git
 
@@ -88,26 +91,47 @@ If you want to contribute to Twig, please refer to the [CONTRIBUTING.md](CONTRIB
 
 ## Basic Usage
 
-```bash
-# Initialize twig
-twig init
+Initialize Twig in a working directory, then point it at the repositories you want to manage:
 
-# Add repositories to track
+```bash
+twig init
 twig git add /path/to/repo
 twig git list
+```
 
-# Create a worktree for a feature branch
+Creating worktrees keeps your stacks tidy while you iterate:
+
+```bash
 twig worktree create feature/new-thing
+twig worktree list
+```
 
-# Fetch all tracked repositories
+Batch commands help you stay current everywhere:
+
+```bash
 twig git fetch --all
-
-# Create a branch from a Jira issue
-twig jira branch create PROJ-123
-
-# Check PR status
 twig github pr status
 ```
+
+### Managing a stack of pull requests
+
+When you open a Jira issue or decide to split a change across several branches, Twig can record the order of those branches and keep them synchronized. Suppose you start a branch from a Jira ticket and later build on top of it:
+
+```bash
+twig switch PROJ-123
+twig commit
+
+twig switch feature/new-ui
+git commit -am "Implement UI"
+```
+
+If you need to update the base branch after review feedback, run:
+
+```bash
+twig cascade
+```
+
+Twig will walk the dependency chain, rebasing `feature/new-ui` on top of the refreshed PROJ-123 branch. Each pull request stays reviewable, and your local branches reflect the order you intended.
 
 ## Command Structure
 
