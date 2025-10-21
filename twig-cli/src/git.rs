@@ -460,7 +460,7 @@ fn display_stale_branches<P: AsRef<Path>>(path: P, mut stale_branches: Vec<Stale
       );
 
       if let Some(parent) = &branch_info.parent_branch {
-        println!("     ↳ parent branch: {}", parent);
+        println!("     ↳ parent branch: {parent}");
       }
 
       if !branch_info.novel_commits.is_empty() {
@@ -474,7 +474,7 @@ fn display_stale_branches<P: AsRef<Path>>(path: P, mut stale_branches: Vec<Stale
           .join(", ");
 
         if total > 3 {
-          println!("     novel commits: {} … (showing 3 of {})", preview, total);
+          println!("     novel commits: {preview} … (showing 3 of {total})");
         } else {
           println!("     novel commits: {preview}");
         }
