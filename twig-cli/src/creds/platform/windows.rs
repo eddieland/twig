@@ -15,7 +15,6 @@ use windows_sys::Win32::Foundation::{ERROR_NOT_FOUND, GetLastError};
 use windows_sys::Win32::Security::Credentials::{
   CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC, CREDENTIALW, CredFree, CredReadW, CredWriteW,
 };
-use windows_sys::core::{PCWSTR, PWSTR};
 
 use super::{CredentialProvider, FilePermissions};
 use crate::creds::Credentials;
@@ -127,12 +126,13 @@ fn read_windows_credential(target_name: &str) -> Result<Option<Credentials>> {
   Ok(Some(Credentials { username, password }))
 }
 
+#[allow(dead_code)]
 fn write_windows_credential(target_name: &str, credentials: &Credentials) -> Result<()> {
   let mut target_name_wide = to_wide(target_name);
   let mut username_wide = to_wide(&credentials.username);
   let password_bytes = credentials.password.as_bytes();
 
-  let mut credential = CREDENTIALW {
+  let credential = CREDENTIALW {
     Flags: 0,
     Type: CRED_TYPE_GENERIC,
     TargetName: target_name_wide.as_mut_ptr(),
