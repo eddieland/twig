@@ -61,6 +61,14 @@ pub enum GitSubcommands {
                      attention, cleanup, or merging.\n\nThis command analyzes local branch information.")]
   #[command(alias = "stale")]
   StaleBranches(StaleBranchesCommand),
+
+  /// List branches whose work has landed upstream
+  #[command(long_about = "Detects local branches that have already landed upstream.\n\n\
+                     A branch is considered landed when its associated GitHub pull request\n\
+                     has been merged or when its configured upstream reference no longer\n\
+                     exists. This makes it easy to spot work that can be cleaned up or\n\
+                     ticket statuses that should be updated.")]
+  LandedBranches(LandedBranchesCommand),
 }
 
 /// Add a repository to the registry
@@ -127,6 +135,22 @@ pub struct StaleBranchesCommand {
   pub json: bool,
 }
 
+/// List branches whose work has landed upstream
+#[derive(Args)]
+pub struct LandedBranchesCommand {
+  /// Path to a specific repository (defaults to current repository)
+  #[arg(long, short = 'r', value_name = "PATH")]
+  pub repo: Option<String>,
+
+  /// Include branches whose pull request was closed without merging
+  #[arg(long)]
+  pub include_closed: bool,
+
+  /// Output landed branch information as JSON
+  #[arg(long)]
+  pub json: bool,
+}
+
 /// Handle the git command
 ///
 /// This function processes the git subcommands and executes the
@@ -168,6 +192,11 @@ pub(crate) fn handle_git_command(git: GitArgs) -> Result<()> {
       let repo_arg = cmd.repo.as_deref();
       let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
       crate::git::find_stale_branches(repo_path, days, cmd.prune, cmd.json)
+    }
+    GitSubcommands::LandedBranches(cmd) => {
+      let repo_arg = cmd.repo.as_deref();
+      let repo_path = crate::utils::resolve_repository_path(repo_arg)?;
+      crate::git::find_landed_branches(repo_path, cmd.include_closed, cmd.json)
     }
   }
 }
