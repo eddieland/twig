@@ -48,6 +48,24 @@ jobs:
         if: matrix.check == 'clippy'
         run: cargo clippy --workspace -- -D warnings
 
+      - name: Publish job summary
+        if: always()
+        shell: bash
+        run: |
+          check="${{ matrix.check }}"
+          runner_os="${{ runner.os }}"
+          if [[ "${{ job.status }}" == 'success' ]]; then
+            {
+              echo "### ✅ ${check} check succeeded"
+              echo "- Runner: ${runner_os}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### ❌ ${check} check failed"
+              echo "- Runner: ${runner_os}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   # Tests can run in parallel with the fast-checks
   test:
     name: Test
@@ -77,6 +95,25 @@ jobs:
           name: twig-${{ matrix.os }}
           path: target/debug/twig
 
+      - name: Publish job summary
+        if: always()
+        shell: bash
+        run: |
+          os="${{ matrix.os }}"
+          if [[ "${{ job.status }}" == 'success' ]]; then
+            {
+              echo "### ✅ Tests passed on ${os}"
+              echo "- Build: cargo build --workspace"
+              echo "- Tests: cargo nextest run --workspace"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### ❌ Tests failed on ${os}"
+              echo "- Build: cargo build --workspace"
+              echo "- Tests: cargo nextest run --workspace"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   test-windows:
     name: Test (Windows)
     runs-on: windows-latest
@@ -101,3 +138,22 @@ jobs:
         with:
           name: twig-windows
           path: target/ci-windows/twig.exe
+
+      - name: Publish job summary
+        if: always()
+        shell: bash
+        run: |
+          os_label="windows-latest"
+          if [[ "${{ job.status }}" == 'success' ]]; then
+            {
+              echo "### ✅ Tests passed on ${os_label}"
+              echo "- Build: cargo build --profile ci-windows --bin twig"
+              echo "- Tests: cargo nextest run --workspace --cargo-profile ci-windows"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### ❌ Tests failed on ${os_label}"
+              echo "- Build: cargo build --profile ci-windows --bin twig"
+              echo "- Tests: cargo nextest run --workspace --cargo-profile ci-windows"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
