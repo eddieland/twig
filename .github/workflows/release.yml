@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write # For creating releases
   actions: read # For artifact downloads
+  id-token: write # For build provenance attestations
 
 jobs:
   validate-version:
@@ -30,6 +31,9 @@ jobs:
     name: Build Linux
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v5
       - name: Install Rust
@@ -49,6 +53,10 @@ jobs:
         run: |
           tar -czf twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz -C target/release twig
           shasum -a 256 twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz > twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
+      - name: Generate build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -62,6 +70,9 @@ jobs:
     name: Build macOS
     runs-on: macos-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v5
       - name: Install Rust
@@ -81,6 +92,10 @@ jobs:
         run: |
           tar -czf twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz -C target/release twig
           shasum -a 256 twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz > twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
+      - name: Generate build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -96,6 +111,9 @@ jobs:
     timeout-minutes: 15
     # Make this job non-blocking
     continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v5
       - name: Install Rust
@@ -128,6 +146,11 @@ jobs:
             shasum -a 256 twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip > twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
           fi
           cat twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
+
+      - name: Generate build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
