@@ -366,6 +366,44 @@ fn parent_lookup_error(parent: &str) -> anyhow::Error {
   )
 }
 
+fn try_checkout_remote_branch(repo_path: &Path, branch_name: &str) -> Result<bool> {
+  let repo = Git2Repository::open(repo_path)?;
+
+  let remote_branch_name = format!("origin/{branch_name}");
+  let Some(commit_id) = lookup_branch_tip(&repo, branch_name)? else {
+    return Ok(false);
+  };
+
+  if repo.find_branch(&remote_branch_name, git2::BranchType::Remote).is_err() {
+    return Ok(false);
+  }
+
+  let commit = repo
+    .find_commit(commit_id)
+    .with_context(|| format!("Failed to locate remote commit for '{remote_branch_name}'"))?;
+
+  print_info(&format!(
+    "Branch '{branch_name}' found on origin. Creating local tracking branch..."
+  ));
+
+  repo
+    .branch(branch_name, &commit, false)
+    .with_context(|| format!("Failed to create local branch '{branch_name}' from origin"))?;
+
+  let mut local_branch = repo
+    .find_branch(branch_name, git2::BranchType::Local)
+    .with_context(|| format!("Failed to reopen branch '{branch_name}'"))?;
+  local_branch
+    .set_upstream(Some(&remote_branch_name))
+    .with_context(|| format!("Failed to set upstream for '{branch_name}'"))?;
+
+  drop(local_branch);
+
+  switch_to_branch(repo_path, branch_name)?;
+
+  Ok(true)
+}
+
 /// Handle switching to a branch based on Jira issue
 fn handle_jira_switch(
   jira: &JiraClient,
@@ -454,6 +492,10 @@ fn handle_branch_switch(
 
   // Branch doesn't exist
   if create_if_missing {
+    if try_checkout_remote_branch(repo_path, branch_name)? {
+      return Ok(());
+    }
+
     print_info(&format!("Branch '{branch_name}' doesn't exist. Creating it...",));
 
     // Resolve parent branch
@@ -862,6 +904,42 @@ mod tests {
       .find(|dep| dep.child == "feature/new")
       .expect("dependency recorded");
     assert_eq!(dependency.parent, "parent");
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_switch_to_remote_branch_creates_tracking_branch() -> Result<()> {
+    let (_env_guard, _config_dirs) = setup_test_env_with_init()?;
+    let repo_guard = GitRepoTestGuard::new();
+    let repo = &repo_guard.repo;
+
+    create_commit(repo, "base.txt", "base", "initial commit")?;
+
+    repo.remote("origin", "https://github.com/example/repo.git")?;
+
+    let head_commit = repo.head()?.peel_to_commit()?.id();
+    repo.reference(
+      "refs/remotes/origin/feature/existing",
+      head_commit,
+      true,
+      "test remote branch",
+    )?;
+
+    assert!(try_checkout_remote_branch(repo_guard.path(), "feature/existing")?);
+
+    let repo = git2::Repository::open(repo_guard.path())?;
+    let local_branch = repo.find_branch("feature/existing", BranchType::Local)?;
+    assert_eq!(repo.head()?.shorthand(), Some("feature/existing"));
+
+    let tip = local_branch
+      .get()
+      .target()
+      .expect("local branch should have a target commit");
+    assert_eq!(tip, head_commit);
+
+    let upstream = local_branch.upstream()?;
+    assert_eq!(upstream.name()?, Some("origin/feature/existing"));
 
     Ok(())
   }
