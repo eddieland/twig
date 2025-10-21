@@ -12,10 +12,9 @@ use git2::{BranchType, Repository as Git2Repository};
 use indicatif::{ProgressBar, ProgressStyle};
 use regex::Regex;
 use tokio::runtime::Runtime;
+use twig_core::clients;
 use twig_core::output::{print_info, print_success, print_warning};
 use twig_core::state::{BranchMetadata, RepoState};
-
-use crate::clients;
 
 static JIRA_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
   vec![

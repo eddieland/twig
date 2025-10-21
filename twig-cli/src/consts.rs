@@ -4,9 +4,6 @@
 //! application, including environment variable names, default values, and other
 //! static strings.
 
-/// Environment variable for the JIRA host URL
-pub const ENV_JIRA_HOST: &str = "JIRA_HOST";
-
 /// Platform-specific Git executable name
 #[cfg(windows)]
 #[cfg_attr(not(windows), allow(dead_code))]

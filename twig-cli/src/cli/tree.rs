@@ -11,9 +11,8 @@ use clap::Args;
 use git2::Repository as Git2Repository;
 use tree_renderer::TreeRenderer;
 use twig_core::output::{format_command, print_info, print_warning};
+use twig_core::user_defined_dependency_resolver::UserDefinedDependencyResolver;
 use twig_core::{detect_repository, tree_renderer};
-
-use crate::user_defined_dependency_resolver::UserDefinedDependencyResolver;
 
 /// Command for displaying branch dependency trees
 #[derive(Args)]

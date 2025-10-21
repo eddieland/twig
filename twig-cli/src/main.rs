@@ -13,15 +13,12 @@ use tracing_subscriber::{EnvFilter, fmt};
 
 mod auto_dependency_discovery;
 mod cli;
-mod clients;
 mod completion;
 mod consts;
-mod creds;
 mod diagnostics;
 mod fixup;
 mod git;
 mod plugin;
-mod user_defined_dependency_resolver;
 mod utils;
 
 fn main() -> Result<()> {

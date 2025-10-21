@@ -9,13 +9,13 @@ use std::{env, fs};
 
 use anyhow::Result;
 use directories::BaseDirs;
+use twig_core::clients::get_jira_host;
+use twig_core::creds::netrc::get_netrc_path;
+use twig_core::creds::{check_github_credentials, check_jira_credentials};
 use twig_core::get_config_dirs;
 use twig_core::output::{format_repo_path, print_error, print_header, print_success};
 
-use crate::clients::get_jira_host;
 use crate::consts;
-use crate::creds::netrc::get_netrc_path;
-use crate::creds::{check_github_credentials, check_jira_credentials};
 use crate::git::list_repositories;
 
 /// Run comprehensive system diagnostics
