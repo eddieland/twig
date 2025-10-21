@@ -77,12 +77,9 @@ jobs:
           name: twig-${{ matrix.os }}
           path: target/debug/twig
 
-  # Windows tests are optional and won't block the pipeline if they fail
   test-windows:
     name: Test (Windows)
     runs-on: windows-latest
-    # Make this job non-blocking
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v5
       - name: Install Rust
