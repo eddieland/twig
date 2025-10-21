@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["extract_repo_name","format_duration","get_current_branch_github_pr","get_current_branch_jira_issue","is_valid_branch_name","normalize_path_display","open_url_in_browser","resolve_repository_path","truncate_string"]};

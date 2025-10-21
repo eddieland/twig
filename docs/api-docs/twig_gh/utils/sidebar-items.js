@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"static":["GITHUB_PR_REGEX","GITHUB_REPO_REGEX"]};

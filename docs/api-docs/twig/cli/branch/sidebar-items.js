@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["BranchSubcommands","RootSubcommands"],"fn":["handle_branch_command"],"struct":["BranchArgs","DependCommand","RemoveDepCommand","RootAddCommand","RootCommand","RootListCommand","RootRemoveCommand"]};

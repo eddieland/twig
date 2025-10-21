@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["display_empty_state_help","display_no_roots_warning","display_orphaned_branches","display_summary","handle_tree_command"],"struct":["TreeArgs"]};

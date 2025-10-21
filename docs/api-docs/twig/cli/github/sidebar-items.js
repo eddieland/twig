@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["GitHubSubcommands","PrSubcommands"],"fn":["display_pr_status","handle_check_command","handle_checks_command","handle_github_command","handle_github_open_command","handle_pr_link_command","handle_pr_list_command","handle_pr_status_command"],"struct":["ChecksCommand","GitHubArgs","LinkCommand","ListCommand","OpenCommand","PrCommand"]};

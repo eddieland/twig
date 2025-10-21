@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["InputMode","SelectorAction"],"fn":["format_candidate_for_display","format_relative_time","select_commit"],"struct":["CommitSelector","SelectorState"]};

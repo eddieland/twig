@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["get_credential_provider"],"mod":["unix"],"trait":["CredentialProvider","FilePermissions"]};

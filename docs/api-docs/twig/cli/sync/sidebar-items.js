@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["apply_sync_changes","detect_github_pr_from_branch","detect_jira_issue_from_branch","handle_sync_command","print_sync_summary","sync_branches"],"static":["JIRA_PATTERNS"],"struct":["SyncArgs"]};

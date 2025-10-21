@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["branch_exists","current_branch","detect_repository","detect_repository_from_path","get_local_branches","get_repository","get_repository_from_path","get_upstream_branch","in_git_repository"]};

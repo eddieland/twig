@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["NoWorriesError"],"fn":["display_panic_message","extract_panic_message","generate_report_file","handle_panic","setup","setup_with_config","write_crash_report"],"macro":["no_worries"],"static":["CONFIG"],"struct":["Config","Metadata"],"type":["Result"]};

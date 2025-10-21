@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["check_config_directories","check_credentials","check_dependencies","check_git_configuration","check_network_connectivity","check_system_info","check_tracked_repositories","run_diagnostics"]};

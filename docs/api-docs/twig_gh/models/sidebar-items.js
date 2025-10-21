@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["CheckRun","CheckSuite","GitHubAuth","GitHubPullRequest","GitHubUser","PullRequestRef","PullRequestReview","PullRequestStatus"]};

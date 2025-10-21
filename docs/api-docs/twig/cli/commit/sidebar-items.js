@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["check_for_duplicate_commit_message","create_fixup_commit","create_normal_commit","generate_commit_message","handle_commit_command","prompt_for_fixup"],"struct":["CommitArgs"]};

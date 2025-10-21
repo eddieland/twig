@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_fixup_command"],"struct":["FixupArgs"]};
