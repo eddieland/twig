@@ -58,7 +58,10 @@ pub enum GitSubcommands {
   /// List stale branches in repositories
   #[command(long_about = "Identifies and lists branches that haven't been updated recently.\n\n\
                      This helps you identify abandoned or forgotten branches that might need\n\
-                     attention, cleanup, or merging.\n\nThis command analyzes local branch information.")]
+                     attention, cleanup, or merging.\n\nThe summary now surfaces parent branches,\n\
+                     outstanding commits, and linked Jira/PR metadata so you can decide what\n\
+                     to prune without switching to interactive mode.\n\nThis command analyzes\n\
+                     local branch information.")]
   #[command(alias = "stale")]
   StaleBranches(StaleBranchesCommand),
 }
