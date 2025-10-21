@@ -293,7 +293,9 @@ fn install_on_windows(data: &[u8], target_path: &Path, release_tag: &str) -> Res
      while (Get-Process -Id $pid -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 200 }}; \
      Move-Item -Force -Path $source -Destination $destination;"
   );
-  let escaped_script = script.replace('"', "\"");
+  let escaped_script = script
+    .replace('\'', "''")
+    .replace('"', "\"");
 
   let command =
     format!("Start-Process -FilePath powershell -ArgumentList '-NoProfile','-Command','{escaped_script}' -Verb RunAs");
