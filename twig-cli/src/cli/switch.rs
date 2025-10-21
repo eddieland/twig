@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result};
 use clap::Args;
 use directories::BaseDirs;
-use git2::Repository as Git2Repository;
+use git2::{ErrorClass, ErrorCode, Repository as Git2Repository};
 use regex::Regex;
 use tokio::runtime::Runtime;
 use twig_core::detect_repository;
@@ -344,9 +344,13 @@ fn lookup_branch_tip(repo: &Git2Repository, branch_name: &str) -> Result<Option<
 
   if let Ok(mut remote) = repo.find_remote("origin") {
     let mut fetch_options = git2::FetchOptions::new();
-    remote
-      .fetch(&[branch_name], Some(&mut fetch_options), None)
-      .with_context(|| format!("Failed to fetch '{branch_name}' from origin"))?;
+    if let Err(err) = remote.fetch(&[branch_name], Some(&mut fetch_options), None) {
+      if err.code() == ErrorCode::NotFound || err.class() == ErrorClass::Reference {
+        return Ok(None);
+      }
+
+      Err(err).with_context(|| format!("Failed to fetch '{branch_name}' from origin"))?;
+    }
 
     if let Ok(branch) = repo.find_branch(&remote_branch_name, git2::BranchType::Remote) {
       let commit = branch
@@ -364,6 +368,44 @@ fn parent_lookup_error(parent: &str) -> anyhow::Error {
   anyhow::anyhow!(
     "Parent branch '{parent}' was not found. Create it first and record dependencies with `twig branch depend` or `twig branch root add`."
   )
+}
+
+fn try_checkout_remote_branch(repo_path: &Path, branch_name: &str) -> Result<bool> {
+  let repo = Git2Repository::open(repo_path)?;
+
+  let remote_branch_name = format!("origin/{branch_name}");
+  let Some(commit_id) = lookup_branch_tip(&repo, branch_name)? else {
+    return Ok(false);
+  };
+
+  if repo.find_branch(&remote_branch_name, git2::BranchType::Remote).is_err() {
+    return Ok(false);
+  }
+
+  let commit = repo
+    .find_commit(commit_id)
+    .with_context(|| format!("Failed to locate remote commit for '{remote_branch_name}'"))?;
+
+  print_info(&format!(
+    "Branch '{branch_name}' found on origin. Creating local tracking branch..."
+  ));
+
+  repo
+    .branch(branch_name, &commit, false)
+    .with_context(|| format!("Failed to create local branch '{branch_name}' from origin"))?;
+
+  let mut local_branch = repo
+    .find_branch(branch_name, git2::BranchType::Local)
+    .with_context(|| format!("Failed to reopen branch '{branch_name}'"))?;
+  local_branch
+    .set_upstream(Some(&remote_branch_name))
+    .with_context(|| format!("Failed to set upstream for '{branch_name}'"))?;
+
+  drop(local_branch);
+
+  switch_to_branch(repo_path, branch_name)?;
+
+  Ok(true)
 }
 
 /// Handle switching to a branch based on Jira issue
@@ -454,6 +496,10 @@ fn handle_branch_switch(
 
   // Branch doesn't exist
   if create_if_missing {
+    if try_checkout_remote_branch(repo_path, branch_name)? {
+      return Ok(());
+    }
+
     print_info(&format!("Branch '{branch_name}' doesn't exist. Creating it...",));
 
     // Resolve parent branch
@@ -862,6 +908,42 @@ mod tests {
       .find(|dep| dep.child == "feature/new")
       .expect("dependency recorded");
     assert_eq!(dependency.parent, "parent");
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_switch_to_remote_branch_creates_tracking_branch() -> Result<()> {
+    let (_env_guard, _config_dirs) = setup_test_env_with_init()?;
+    let repo_guard = GitRepoTestGuard::new();
+    let repo = &repo_guard.repo;
+
+    create_commit(repo, "base.txt", "base", "initial commit")?;
+
+    repo.remote("origin", "https://github.com/example/repo.git")?;
+
+    let head_commit = repo.head()?.peel_to_commit()?.id();
+    repo.reference(
+      "refs/remotes/origin/feature/existing",
+      head_commit,
+      true,
+      "test remote branch",
+    )?;
+
+    assert!(try_checkout_remote_branch(repo_guard.path(), "feature/existing")?);
+
+    let repo = git2::Repository::open(repo_guard.path())?;
+    let local_branch = repo.find_branch("feature/existing", BranchType::Local)?;
+    assert_eq!(repo.head()?.shorthand(), Some("feature/existing"));
+
+    let tip = local_branch
+      .get()
+      .target()
+      .expect("local branch should have a target commit");
+    assert_eq!(tip, head_commit);
+
+    let upstream = local_branch.upstream()?;
+    assert_eq!(upstream.name()?, Some("origin/feature/existing"));
 
     Ok(())
   }
