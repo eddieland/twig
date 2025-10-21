@@ -12,10 +12,10 @@ use clap::Args;
 use git2::Repository as Git2Repository;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::tree_renderer::TreeRenderer;
+use twig_core::user_defined_dependency_resolver::UserDefinedDependencyResolver;
 use twig_core::{RepoState, detect_repository};
 
 use crate::consts;
-use crate::user_defined_dependency_resolver::UserDefinedDependencyResolver;
 
 /// Command for performing a cascading rebase
 #[derive(Args)]

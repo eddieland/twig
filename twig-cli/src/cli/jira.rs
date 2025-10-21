@@ -8,15 +8,13 @@ use clap::{Args, Subcommand};
 use directories::BaseDirs;
 use git2::Repository as Git2Repository;
 use owo_colors::OwoColorize;
+use twig_core::clients::get_jira_host;
 use twig_core::jira_parser::JiraTicketParser;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::{
-  BranchMetadata, RepoState, create_jira_parser, create_worktree, detect_repository, get_config_dirs,
+  BranchMetadata, RepoState, clients, create_jira_parser, create_worktree, detect_repository, get_config_dirs,
   get_current_branch_jira_issue,
 };
-
-use crate::clients;
-use crate::clients::get_jira_host;
 
 /// Command for Jira integration
 #[derive(Args)]

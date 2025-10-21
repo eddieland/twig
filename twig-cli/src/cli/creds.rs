@@ -9,19 +9,18 @@ use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use directories::BaseDirs;
 use tokio::runtime::Runtime;
+use twig_core::clients::get_jira_host;
+use twig_core::creds::netrc::{get_netrc_path, write_netrc_entry};
+#[cfg(unix)]
+use twig_core::creds::platform::FilePermissions;
+#[cfg(unix)]
+use twig_core::creds::platform::UnixFilePermissions;
+#[cfg(windows)]
+use twig_core::creds::platform::WindowsFilePermissions;
+use twig_core::creds::{check_github_credentials, check_jira_credentials};
 use twig_core::output::{format_command, format_repo_path, print_error, print_info, print_success, print_warning};
 use twig_gh::create_github_client;
 use twig_jira::create_jira_client;
-
-use crate::clients::get_jira_host;
-use crate::creds::netrc::{get_netrc_path, write_netrc_entry};
-#[cfg(unix)]
-use crate::creds::platform::FilePermissions;
-#[cfg(unix)]
-use crate::creds::platform::UnixFilePermissions;
-#[cfg(windows)]
-use crate::creds::platform::WindowsFilePermissions;
-use crate::creds::{check_github_credentials, check_jira_credentials};
 
 /// Command for credential management
 #[derive(Args)]
@@ -101,7 +100,7 @@ fn handle_check_command() -> Result<()> {
 
   #[cfg(windows)]
   {
-    use crate::creds::platform::FilePermissions;
+    use twig_core::creds::platform::FilePermissions;
     let _ = WindowsFilePermissions::has_secure_permissions(&netrc_path);
     print_warning("Secure file permissions are not fully supported on Windows.");
     print_warning("Your .netrc file may not be properly secured.");

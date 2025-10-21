@@ -1,0 +1,29 @@
+[package]
+name = "twig-flow"
+description = "twig plugin that combines branch tree visualization and smart switching"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "twig-flow"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+directories.workspace = true
+emojis.workspace = true
+git2.workspace = true
+owo-colors.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+twig-core = { path = "../twig-core" }
+twig-gh = { path = "../twig-gh" }
+twig-jira = { path = "../twig-jira" }
+
+[dev-dependencies]
+twig-test-utils = { path = "../twig-test-utils" }

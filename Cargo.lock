@@ -2491,8 +2491,33 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.17",
+ "tokio",
  "toml",
+ "tracing",
+ "twig-gh",
+ "twig-jira",
+ "twig-test-utils",
+ "url",
  "uuid",
+ "windows-sys 0.61.1",
+]
+
+[[package]]
+name = "twig-flow"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "directories",
+ "emojis",
+ "git2",
+ "owo-colors",
+ "tracing",
+ "tracing-subscriber",
+ "twig-core",
+ "twig-gh",
+ "twig-jira",
+ "twig-test-utils",
 ]
 
 [[package]]

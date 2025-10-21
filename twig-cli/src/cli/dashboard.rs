@@ -12,13 +12,12 @@ use serde::Serialize;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
+use twig_core::clients;
+use twig_core::creds::get_github_credentials;
 use twig_core::output::{print_error, print_warning};
 use twig_core::state::RepoState;
 use twig_gh::GitHubPullRequest;
 use twig_jira::Issue;
-
-use crate::clients;
-use crate::creds::get_github_credentials;
 
 // Structure to hold dashboard data
 #[derive(Serialize)]

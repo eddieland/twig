@@ -16,10 +16,8 @@ use twig_core::output::{
   format_check_status, format_command, format_pr_review_status, print_error, print_info, print_success, print_warning,
 };
 use twig_core::state::BranchMetadata;
-use twig_core::{RepoState, detect_repository, detect_repository_from_path, get_current_branch_github_pr};
+use twig_core::{RepoState, clients, detect_repository, detect_repository_from_path, get_current_branch_github_pr};
 use twig_gh::PullRequestStatus;
-
-use crate::clients;
 
 /// Command for GitHub integration
 #[derive(Args)]

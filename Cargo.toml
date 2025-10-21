@@ -4,6 +4,7 @@ members = [
     "twig-cli",
     "twig-core",
     "twig-gh",
+    "twig-flow",
     "twig-jira",
     "twig-test-utils",
 ]
