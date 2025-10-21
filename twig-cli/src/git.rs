@@ -357,10 +357,20 @@ pub fn find_stale_branches<P: AsRef<Path>>(path: P, days: u32, prune: bool, outp
 
   if prune {
     interactive_prune_branches(path, &repo, &repo_state, stale_branches, days)
-  } else if output_json {
-    display_stale_branches_json(&stale_branches)
   } else {
-    display_stale_branches(path, stale_branches)
+    let mut enriched_branches = stale_branches
+      .into_iter()
+      .map(|branch| enhance_branch_info(&repo, &repo_state, branch))
+      .collect::<Result<Vec<_>>>()?;
+
+    // Oldest branches first for easier triage
+    enriched_branches.sort_by(|a, b| a.last_commit_date.cmp(&b.last_commit_date));
+
+    if output_json {
+      display_stale_branches_json(&enriched_branches)
+    } else {
+      display_stale_branches(path, enriched_branches)
+    }
   }
 }
 
@@ -421,7 +431,7 @@ fn find_stale_branches_internal(
 }
 
 /// Display stale branches (non-prune mode)
-fn display_stale_branches<P: AsRef<Path>>(path: P, stale_branches: Vec<StaleBranchInfo>) -> Result<()> {
+fn display_stale_branches<P: AsRef<Path>>(path: P, mut stale_branches: Vec<StaleBranchInfo>) -> Result<()> {
   let path = path.as_ref();
 
   if stale_branches.is_empty() {
@@ -430,6 +440,9 @@ fn display_stale_branches<P: AsRef<Path>>(path: P, stale_branches: Vec<StaleBran
       format_repo_path(&path.display().to_string())
     );
   } else {
+    // Ensure the list mirrors chronological order regardless of upstream sorting
+    stale_branches.sort_by(|a, b| a.last_commit_date.cmp(&b.last_commit_date));
+
     print_warning(&format!(
       "Found {} stale branches in {}:",
       stale_branches.len(),
@@ -437,12 +450,51 @@ fn display_stale_branches<P: AsRef<Path>>(path: P, stale_branches: Vec<StaleBran
     ));
 
     for branch_info in stale_branches {
+      let relative_time = format_relative_time(&branch_info.last_commit_date);
+
       println!(
-        "  {} (last commit: {})",
-        branch_info.name,
-        format_timestamp(&branch_info.last_commit_date)
+        "  {} • last commit {} {}",
+        branch_info.name.cyan().bold(),
+        format_timestamp(&branch_info.last_commit_date).yellow(),
+        format!("({relative_time})").dimmed()
       );
+
+      if let Some(parent) = &branch_info.parent_branch {
+        println!("     ↳ parent branch: {}", parent);
+      }
+
+      if !branch_info.novel_commits.is_empty() {
+        let total = branch_info.novel_commits.len();
+        let preview = branch_info
+          .novel_commits
+          .iter()
+          .take(3)
+          .map(|commit| format!("{} {}", commit.hash.yellow(), commit.message))
+          .collect::<Vec<_>>()
+          .join(", ");
+
+        if total > 3 {
+          println!("     novel commits: {} … (showing 3 of {})", preview, total);
+        } else {
+          println!("     novel commits: {preview}");
+        }
+      }
+
+      if let Some(jira_issue) = &branch_info.jira_issue {
+        println!("     🎫 linked Jira: {jira_issue}");
+      }
+
+      if let Some(pr_number) = branch_info.github_pr {
+        println!("     🔀 linked GitHub PR: #{pr_number}");
+      }
+
+      println!();
     }
+
+    println!(
+      "Run {} for interactive cleanup with detailed guidance.",
+      format_command("twig git stale-branches --prune")
+    );
   }
 
   Ok(())
@@ -533,7 +585,19 @@ fn enhance_branch_info(
 
   // Find novel commits if parent exists
   if let Some(parent) = &branch_info.parent_branch {
-    branch_info.novel_commits = find_novel_commits(repo, &branch_info.name, parent)?;
+    match find_novel_commits(repo, &branch_info.name, parent) {
+      Ok(commits) => {
+        branch_info.novel_commits = commits;
+      }
+      Err(err) => {
+        tracing::debug!(
+          error = %err,
+          branch = %branch_info.name,
+          parent,
+          "Failed to compute novel commits for stale branch"
+        );
+      }
+    }
   }
 
   // Get Jira and GitHub metadata from repo state
@@ -704,6 +768,7 @@ fn display_prune_summary(summary: &PruneSummary) {
 
 #[cfg(test)]
 mod tests {
+  use chrono::Utc;
   use serde_json::Value;
   use twig_core::RepoState;
   use twig_test_utils::{
@@ -943,5 +1008,36 @@ mod tests {
     assert_eq!(json[0]["jira_issue"], "PROJ-123");
     assert_eq!(json[0]["github_pr"], 42);
     assert_eq!(json[0]["novel_commits"][0]["hash"], "abcdef12");
+  }
+
+  #[test]
+  fn test_enhance_branch_info_missing_parent_branch_does_not_fail() {
+    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let repo = &git_repo.repo;
+
+    create_commit(repo, "README.md", "# Test Repo", "Initial commit").unwrap();
+    create_branch(repo, "main", None).unwrap();
+    checkout_branch(repo, "main").unwrap();
+
+    create_branch(repo, "feature/child", Some("main")).unwrap();
+
+    let mut repo_state = RepoState::default();
+    repo_state
+      .add_dependency("feature/child".into(), "feature/missing-parent".into())
+      .unwrap();
+
+    let info = StaleBranchInfo {
+      name: "feature/child".into(),
+      last_commit_date: Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+      parent_branch: None,
+      novel_commits: vec![],
+      jira_issue: None,
+      github_pr: None,
+    };
+
+    let enhanced = enhance_branch_info(repo, &repo_state, info).unwrap();
+
+    assert_eq!(enhanced.parent_branch.as_deref(), Some("feature/missing-parent"));
+    assert!(enhanced.novel_commits.is_empty());
   }
 }
