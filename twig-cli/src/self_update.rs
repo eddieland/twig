@@ -220,8 +220,7 @@ fn install_on_unix(data: &[u8], target_path: &Path, release_tag: &str) -> Result
       }
       Err(err) => {
         print_warning(&format!(
-          "Failed to atomically replace twig: {}. Falling back to copy.",
-          err
+          "Failed to atomically replace twig: {err}. Falling back to copy."
         ));
       }
     }
@@ -256,15 +255,12 @@ fn install_with_sudo(stage_path: &Path, target_path: &Path, release_tag: &str) -
 
   match status {
     Ok(result) if result.success() => {
-      print_info(&format!("Installed Twig {} with elevated permissions.", release_tag));
+      print_info(&format!("Installed Twig {release_tag} with elevated permissions."));
       Ok(())
     }
     Ok(_) => bail!("sudo install did not complete successfully"),
     Err(err) if err.kind() == io::ErrorKind::NotFound => {
-      bail!(
-        "sudo is not available. Rerun 'twig self update' with elevated permissions to install {}.",
-        release_tag
-      )
+      bail!("sudo is not available. Rerun 'twig self update' with elevated permissions to install {release_tag}.")
     }
     Err(err) => Err(err).context("failed to invoke sudo"),
   }
@@ -293,9 +289,7 @@ fn install_on_windows(data: &[u8], target_path: &Path, release_tag: &str) -> Res
      while (Get-Process -Id $pid -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 200 }}; \
      Move-Item -Force -Path $source -Destination $destination;"
   );
-  let escaped_script = script
-    .replace('\'', "''")
-    .replace('"', "\"");
+  let escaped_script = script.replace('\'', "''").replace('"', "\"");
 
   let command =
     format!("Start-Process -FilePath powershell -ArgumentList '-NoProfile','-Command','{escaped_script}' -Verb RunAs");
