@@ -51,6 +51,12 @@ pub fn execute_plugin(plugin_name: &str, args: Vec<String>, verbosity: u8) -> Re
   std::process::exit(status.code().unwrap_or(1));
 }
 
+/// Determine if a plugin binary is available in the current PATH
+pub fn plugin_is_available(plugin_name: &str) -> Result<bool> {
+  let plugin_binary = format!("twig-{plugin_name}");
+  plugin_exists(&plugin_binary)
+}
+
 /// Check if a plugin exists in PATH
 fn plugin_exists(plugin_name: &str) -> Result<bool> {
   // Try 'which' command (Unix-like systems)
