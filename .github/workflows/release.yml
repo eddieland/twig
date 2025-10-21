@@ -9,6 +9,7 @@ permissions:
   contents: write # For creating releases
   actions: read # For artifact downloads
   id-token: write # For build provenance attestations
+  attestations: write # For build provenance attestations
 
 jobs:
   validate-version:
