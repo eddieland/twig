@@ -118,8 +118,8 @@ run: ## Run the application
 ### Installation
 
 .PHONY: install
-install: ## Install edlicense locally
-	cargo install --path .
+install: ## Install twig locally
+	cargo install --path twig-cli
 
 
 .PHONY: install-dev-tools
