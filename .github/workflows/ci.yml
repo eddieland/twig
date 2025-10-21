@@ -101,17 +101,17 @@ jobs:
         run: |
           os="${{ matrix.os }}"
           if [[ "${{ job.status }}" == 'success' ]]; then
-            cat <<EOF >> "$GITHUB_STEP_SUMMARY"
-### ✅ Tests passed on ${os}
-- Build: cargo build --workspace
-- Tests: cargo nextest run --workspace
-EOF
+            {
+              echo "### ✅ Tests passed on ${os}"
+              echo "- Build: cargo build --workspace"
+              echo "- Tests: cargo nextest run --workspace"
+            } >> "$GITHUB_STEP_SUMMARY"
           else
-            cat <<EOF >> "$GITHUB_STEP_SUMMARY"
-### ❌ Tests failed on ${os}
-- Build: cargo build --workspace
-- Tests: cargo nextest run --workspace
-EOF
+            {
+              echo "### ❌ Tests failed on ${os}"
+              echo "- Build: cargo build --workspace"
+              echo "- Tests: cargo nextest run --workspace"
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
   test-windows:
@@ -143,16 +143,17 @@ EOF
         if: always()
         shell: bash
         run: |
+          os_label="windows-latest"
           if [[ "${{ job.status }}" == 'success' ]]; then
-            cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
-### ✅ Tests passed on windows-latest
-- Build: cargo build --profile ci-windows --bin twig
-- Tests: cargo nextest run --workspace --cargo-profile ci-windows
-EOF
+            {
+              echo "### ✅ Tests passed on ${os_label}"
+              echo "- Build: cargo build --profile ci-windows --bin twig"
+              echo "- Tests: cargo nextest run --workspace --cargo-profile ci-windows"
+            } >> "$GITHUB_STEP_SUMMARY"
           else
-            cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
-### ❌ Tests failed on windows-latest
-- Build: cargo build --profile ci-windows --bin twig
-- Tests: cargo nextest run --workspace --cargo-profile ci-windows
-EOF
+            {
+              echo "### ❌ Tests failed on ${os_label}"
+              echo "- Build: cargo build --profile ci-windows --bin twig"
+              echo "- Tests: cargo nextest run --workspace --cargo-profile ci-windows"
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
