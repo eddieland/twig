@@ -14,5 +14,6 @@ pub mod diagnostics;
 pub mod fixup;
 pub mod git;
 pub mod plugin;
+pub mod self_update;
 pub mod user_defined_dependency_resolver;
 pub mod utils;

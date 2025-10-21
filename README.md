@@ -169,7 +169,7 @@ twig
 │   ├── check
 │   └── setup
 ├── diagnose (diag)        # System diagnostics
-├── update                 # Self-update
+├── self update            # Self-update
 ├── completion             # Shell completions
 └── version                # Version information
 ```

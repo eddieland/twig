@@ -16,6 +16,7 @@ mod git;
 mod github;
 mod jira;
 pub mod rebase;
+mod self_cmd;
 mod switch;
 mod sync;
 mod tree;
@@ -139,6 +140,12 @@ pub enum Commands {
             in your .netrc file for security and compatibility with other tools.")]
   #[command(arg_required_else_help = true)]
   Creds(creds::CredsArgs),
+
+  /// Twig maintenance commands
+  #[command(name = "self")]
+  #[command(long_about = "Twig maintenance utilities, including self-updating capabilities.")]
+  #[command(arg_required_else_help = true)]
+  SelfCmd(self_cmd::SelfArgs),
 
   /// Show a comprehensive dashboard of local branches, PRs, and issues
   #[command(
@@ -282,6 +289,7 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
       Commands::GitHub(github) => github::handle_github_command(github),
       Commands::Init => config::handle_init_command(),
       Commands::Jira(jira) => jira::handle_jira_command(jira),
+      Commands::SelfCmd(self_args) => self_cmd::handle_self_command(self_args),
       Commands::Panic => {
         panic!("This is an intentional test panic to verify no-worries integration");
       }
