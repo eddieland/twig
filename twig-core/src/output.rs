@@ -10,16 +10,14 @@ use {clap, emojis};
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorMode {
   /// Enable colored output
+  #[value(alias = "always")]
   Yes,
-  /// Enable colored output (alias for Yes)
-  Always,
   /// Automatically detect if colors should be used based on terminal
   /// capabilities
   Auto,
   /// Disable colored output
+  #[value(alias = "never")]
   No,
-  /// Disable colored output (alias for No)
-  Never,
 }
 
 /// Helper function to safely get an emoji or fallback to a default character

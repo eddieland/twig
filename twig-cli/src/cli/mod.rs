@@ -262,8 +262,8 @@ pub enum Commands {
 pub fn handle_cli(cli: Cli) -> Result<()> {
   // Set global color override based on --colors argument
   match cli.colors {
-    ColorMode::Always | ColorMode::Yes => owo_colors::set_override(true),
-    ColorMode::Never | ColorMode::No => owo_colors::set_override(false),
+    ColorMode::Yes => owo_colors::set_override(true),
+    ColorMode::No => owo_colors::set_override(false),
     ColorMode::Auto => {
       // Let owo_colors use its default auto-detection
       // Don't call set_override, allowing it to detect terminal automatically
