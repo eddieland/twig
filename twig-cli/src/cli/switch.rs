@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result};
 use clap::Args;
 use directories::BaseDirs;
-use git2::Repository as Git2Repository;
+use git2::{ErrorClass, ErrorCode, Repository as Git2Repository};
 use regex::Regex;
 use tokio::runtime::Runtime;
 use twig_core::detect_repository;
@@ -344,9 +344,13 @@ fn lookup_branch_tip(repo: &Git2Repository, branch_name: &str) -> Result<Option<
 
   if let Ok(mut remote) = repo.find_remote("origin") {
     let mut fetch_options = git2::FetchOptions::new();
-    remote
-      .fetch(&[branch_name], Some(&mut fetch_options), None)
-      .with_context(|| format!("Failed to fetch '{branch_name}' from origin"))?;
+    if let Err(err) = remote.fetch(&[branch_name], Some(&mut fetch_options), None) {
+      if err.code() == ErrorCode::NotFound || err.class() == ErrorClass::Reference {
+        return Ok(None);
+      }
+
+      Err(err).with_context(|| format!("Failed to fetch '{branch_name}' from origin"))?;
+    }
 
     if let Ok(branch) = repo.find_branch(&remote_branch_name, git2::BranchType::Remote) {
       let commit = branch
