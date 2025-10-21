@@ -48,6 +48,24 @@ jobs:
         if: matrix.check == 'clippy'
         run: cargo clippy --workspace -- -D warnings
 
+      - name: Publish job summary
+        if: always()
+        shell: bash
+        run: |
+          check="${{ matrix.check }}"
+          runner_os="${{ runner.os }}"
+          if [[ "${{ job.status }}" == 'success' ]]; then
+            cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+### ✅ ${check} check succeeded
+- Runner: ${runner_os}
+EOF
+          else
+            cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+### ❌ ${check} check failed
+- Runner: ${runner_os}
+EOF
+          fi
+
   # Tests can run in parallel with the fast-checks
   test:
     name: Test
@@ -77,6 +95,25 @@ jobs:
           name: twig-${{ matrix.os }}
           path: target/debug/twig
 
+      - name: Publish job summary
+        if: always()
+        shell: bash
+        run: |
+          os="${{ matrix.os }}"
+          if [[ "${{ job.status }}" == 'success' ]]; then
+            cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+### ✅ Tests passed on ${os}
+- Build: cargo build --workspace
+- Tests: cargo nextest run --workspace
+EOF
+          else
+            cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+### ❌ Tests failed on ${os}
+- Build: cargo build --workspace
+- Tests: cargo nextest run --workspace
+EOF
+          fi
+
   test-windows:
     name: Test (Windows)
     runs-on: windows-latest
@@ -101,3 +138,21 @@ jobs:
         with:
           name: twig-windows
           path: target/ci-windows/twig.exe
+
+      - name: Publish job summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ "${{ job.status }}" == 'success' ]]; then
+            cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+### ✅ Tests passed on windows-latest
+- Build: cargo build --profile ci-windows --bin twig
+- Tests: cargo nextest run --workspace --cargo-profile ci-windows
+EOF
+          else
+            cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+### ❌ Tests failed on windows-latest
+- Build: cargo build --profile ci-windows --bin twig
+- Tests: cargo nextest run --workspace --cargo-profile ci-windows
+EOF
+          fi
