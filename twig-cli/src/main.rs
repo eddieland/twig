@@ -21,6 +21,7 @@ mod diagnostics;
 mod fixup;
 mod git;
 mod plugin;
+mod self_update;
 mod user_defined_dependency_resolver;
 mod utils;
 

@@ -16,6 +16,7 @@ mod git;
 mod github;
 mod jira;
 pub mod rebase;
+mod self_update_cmd;
 mod switch;
 mod sync;
 mod tree;
@@ -165,6 +166,17 @@ pub enum Commands {
   #[command(alias = "diag")]
   Diagnostics,
 
+  /// Update Twig to the latest GitHub release
+  #[command(
+    long_about = "Download and install the latest Twig release that matches your platform.\n\n\
+            This command fetches the newest binary from GitHub Releases and replaces your current\n\
+            installation. If elevated permissions are required, it will request them automatically\n\
+            (via sudo on Unix or UAC on Windows)."
+  )]
+  #[command(alias = "upgrade")]
+  #[command(alias = "update")]
+  SelfUpdate(self_update_cmd::SelfUpdateArgs),
+
   /// Git repository management
   #[command(long_about = "Manage multiple Git repositories through twig.\n\n\
             This command group allows you to register, track, and perform operations\n\
@@ -292,6 +304,7 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
       Commands::Worktree(worktree) => worktree::handle_worktree_command(worktree),
       Commands::Commit(args) => commit::handle_commit_command(args),
       Commands::Fixup(fixup) => fixup::handle_fixup_command(fixup),
+      Commands::SelfUpdate(args) => self_update_cmd::handle_self_update_command(args),
     },
     None => handle_plugin_fallback(cli),
   }
