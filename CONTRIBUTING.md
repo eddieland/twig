@@ -39,9 +39,12 @@ The `rust-toolchain.toml` file in the repository will ensure the correct toolcha
 Once you have Rustup installed:
 
 ```bash
-# Clone the repository
-git clone https://github.com/eddieland/twig.git
+# Fork the repository on GitHub, then clone your fork
+git clone https://github.com/<your-github-username>/twig.git
 cd twig
+
+# Optionally add the upstream remote so you can sync with the canonical repo
+git remote add upstream https://github.com/eddieland/twig.git
 
 # Install development tools
 make install-dev-tools
@@ -132,12 +135,13 @@ Twig uses [Insta](https://insta.rs/) for snapshot testing, which helps ensure co
 
 ## Development Workflow
 
-1. Create a feature branch (`git checkout -b feature/amazing-feature`)
-2. Make your changes
-3. Ensure all tests pass and code quality checks succeed
-4. Commit your changes (`git commit -m 'Add some amazing feature'`)
-5. Push to the branch (`git push origin feature/amazing-feature`)
-6. Open a Pull Request
+1. Sync your fork with the upstream repository (`git fetch upstream && git checkout main && git merge upstream/main`)
+2. Create a feature branch off your fork (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Ensure all tests pass and code quality checks succeed
+5. Commit your changes (`git commit -m 'Add some amazing feature'`)
+6. Push the branch to your fork (`git push origin feature/amazing-feature`)
+7. Open a Pull Request from your fork's branch to `eddieland/twig`'s `main`
 
 ## Implementation Guidelines
 
