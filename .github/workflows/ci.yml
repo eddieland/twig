@@ -101,3 +101,19 @@ jobs:
         with:
           name: twig-windows
           path: target/ci-windows/twig.exe
+
+  windows-check:
+    name: Windows Cargo Check
+    runs-on: windows-latest
+    env:
+      RUSTFLAGS: -Ddead_code
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-windows-check-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cargo check (Windows)
+        run: cargo check --workspace --all-targets --profile ci-windows
