@@ -15,7 +15,7 @@ pub struct GitHubAuth {
 }
 
 /// Represents a GitHub user
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct GitHubUser {
   pub login: String,
   pub id: u64,
@@ -23,7 +23,7 @@ pub struct GitHubUser {
 }
 
 /// Represents a GitHub pull request
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct GitHubPullRequest {
   pub number: u32,
   pub title: String,
@@ -32,6 +32,8 @@ pub struct GitHubPullRequest {
   pub user: GitHubUser,
   pub created_at: String,
   pub updated_at: String,
+  pub closed_at: Option<String>,
+  pub merged_at: Option<String>,
   pub head: PullRequestRef,
   pub base: PullRequestRef,
   pub mergeable: Option<bool>,
@@ -40,7 +42,7 @@ pub struct GitHubPullRequest {
 }
 
 /// Represents a GitHub pull request reference (head or base)
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PullRequestRef {
   pub label: String,
   pub ref_name: Option<String>,
@@ -48,7 +50,7 @@ pub struct PullRequestRef {
 }
 
 /// Represents a GitHub pull request review
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PullRequestReview {
   pub id: u64,
   pub user: GitHubUser,
@@ -78,7 +80,7 @@ pub struct CheckSuite {
 }
 
 /// Represents a GitHub PR status summary
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct PullRequestStatus {
   pub pr: GitHubPullRequest,
   pub reviews: Vec<PullRequestReview>,
@@ -131,6 +133,8 @@ mod tests {
         },
         "created_at": "2011-01-26T19:01:12Z",
         "updated_at": "2011-01-26T19:01:12Z",
+        "closed_at": null,
+        "merged_at": null,
         "head": {
             "label": "octocat:new-feature",
             "ref_name": "new-feature",
@@ -153,6 +157,8 @@ mod tests {
     assert_eq!(pr.state, "open");
     assert_eq!(pr.mergeable, Some(true));
     assert_eq!(pr.draft, Some(false));
+    assert!(pr.merged_at.is_none());
+    assert!(pr.closed_at.is_none());
   }
 
   #[test]

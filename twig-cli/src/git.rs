@@ -3,12 +3,15 @@
 //! Core Git functionality including repository discovery, branch operations,
 //! fetching, and worktree management for the twig workflow system.
 
+use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::io::{self, Write};
 use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
+use directories::BaseDirs;
 use git2::{BranchType, FetchOptions, Repository as Git2Repository};
 use owo_colors::OwoColorize;
 use serde::Serialize;
@@ -19,7 +22,7 @@ use twig_core::output::{
 };
 use twig_core::{ConfigDirs, Registry, RepoState};
 
-use crate::consts;
+use crate::{clients, consts};
 
 /// Information about a stale branch for pruning
 #[derive(Debug, Clone, Serialize)]
@@ -37,6 +40,56 @@ pub struct StaleBranchInfo {
 pub struct CommitInfo {
   pub hash: String,
   pub message: String,
+}
+
+/// Information about a branch that has already landed upstream
+#[derive(Debug, Clone, Serialize)]
+pub struct LandedBranchInfo {
+  pub name: String,
+  pub status: LandedStatus,
+  pub last_commit_date: String,
+  pub jira_issue: Option<String>,
+  pub github_pr: Option<u32>,
+  pub merged_at: Option<String>,
+  pub closed_at: Option<String>,
+}
+
+/// Status indicating how a branch landed upstream
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LandedStatus {
+  /// The associated pull request was merged
+  Merged,
+  /// The associated pull request was closed without merging
+  Closed,
+  /// The configured upstream reference is no longer present
+  RemoteGone,
+}
+
+impl fmt::Display for LandedStatus {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::Merged => write!(f, "merged"),
+      Self::Closed => write!(f, "closed"),
+      Self::RemoteGone => write!(f, "upstream gone"),
+    }
+  }
+}
+
+#[derive(Debug, Clone)]
+struct BranchCandidate {
+  name: String,
+  last_commit_date: String,
+  jira_issue: Option<String>,
+  github_pr: Option<u32>,
+  remote_gone: bool,
+}
+
+#[derive(Debug, Clone)]
+struct GitHubPrStatus {
+  state: String,
+  merged_at: Option<String>,
+  closed_at: Option<String>,
 }
 
 /// Summary of pruning operation
@@ -455,6 +508,270 @@ fn display_stale_branches_json(stale_branches: &[StaleBranchInfo]) -> Result<()>
   Ok(())
 }
 
+/// Find branches that have landed upstream
+pub fn find_landed_branches<P: AsRef<Path>>(path: P, include_closed: bool, output_json: bool) -> Result<()> {
+  let path = path.as_ref();
+  let repo = Git2Repository::open(path).context(format!("Failed to open git repository at {}", path.display()))?;
+
+  let repo_state = RepoState::load(path)?;
+  let repo_config = repo.config().ok();
+
+  let remote_url = repo
+    .find_remote("origin")
+    .ok()
+    .and_then(|remote| remote.url().map(|url| url.to_string()));
+
+  let mut runtime = None;
+  let mut github_client = None;
+  let mut owner_repo = None;
+
+  if let Some(remote_url) = remote_url.as_ref() {
+    if let Some(base_dirs) = BaseDirs::new() {
+      match clients::create_github_runtime_and_client(base_dirs.home_dir()) {
+        Ok((rt, client)) => match client.extract_repo_info_from_url(remote_url) {
+          Ok((owner, repo_name)) => {
+            runtime = Some(rt);
+            github_client = Some(client);
+            owner_repo = Some((owner, repo_name));
+          }
+          Err(err) => {
+            print_warning(&format!("Skipping GitHub pull request lookup: {err}"));
+          }
+        },
+        Err(err) => {
+          print_warning(&format!("Skipping GitHub pull request lookup: {err}"));
+        }
+      }
+    } else {
+      print_warning("Unable to determine home directory; skipping GitHub pull request lookup.");
+    }
+  } else {
+    print_warning("Remote 'origin' not configured; skipping GitHub pull request lookup.");
+  }
+
+  let mut candidates = collect_branch_candidates(&repo, &repo_state, repo_config.as_ref())?;
+  candidates.sort_by(|a, b| a.name.cmp(&b.name));
+
+  let mut pr_statuses = HashMap::new();
+  if let (Some(rt), Some(client), Some((owner, repo_name))) =
+    (runtime.as_mut(), github_client.as_ref(), owner_repo.as_ref())
+  {
+    let mut fetched_prs = HashSet::new();
+    for candidate in &candidates {
+      if let Some(pr_number) = candidate.github_pr {
+        if fetched_prs.insert(pr_number) {
+          match rt.block_on(client.get_pull_request(owner, repo_name, pr_number)) {
+            Ok(pr) => {
+              let merged_at = pr.merged_at.as_deref().and_then(format_iso_timestamp);
+              let closed_at = pr.closed_at.as_deref().and_then(format_iso_timestamp);
+
+              pr_statuses.insert(
+                pr_number,
+                GitHubPrStatus {
+                  state: pr.state,
+                  merged_at,
+                  closed_at,
+                },
+              );
+            }
+            Err(err) => {
+              print_warning(&format!("Failed to fetch GitHub PR #{pr_number}: {err}"));
+            }
+          }
+        }
+      }
+    }
+  } else if include_closed {
+    print_warning("GitHub information unavailable; --include-closed will be ignored.");
+  }
+
+  let landed_branches = determine_landed_branches(candidates, Some(&pr_statuses), include_closed);
+
+  if output_json {
+    display_landed_branches_json(&landed_branches)
+  } else {
+    display_landed_branches(path, &landed_branches)
+  }
+}
+
+fn collect_branch_candidates(
+  repo: &Git2Repository,
+  repo_state: &RepoState,
+  repo_config: Option<&git2::Config>,
+) -> Result<Vec<BranchCandidate>> {
+  let mut candidates = Vec::new();
+
+  let branches = repo
+    .branches(Some(BranchType::Local))
+    .context("Failed to get branches")?;
+
+  for branch_result in branches {
+    let (branch, _) = branch_result.context("Failed to get branch")?;
+    let branch_name = branch
+      .name()
+      .context("Failed to get branch name")?
+      .unwrap_or("unknown")
+      .to_string();
+
+    if repo_state.is_root(&branch_name) {
+      continue;
+    }
+
+    let commit = branch.get().peel_to_commit().context("Failed to get commit")?;
+    let commit_time = commit.time().seconds();
+    let last_commit_date = chrono::DateTime::<chrono::Utc>::from_timestamp(commit_time, 0)
+      .unwrap()
+      .format("%Y-%m-%d %H:%M:%S")
+      .to_string();
+
+    let metadata = repo_state.get_branch_metadata(&branch_name);
+    let remote_configured = repo_config
+      .and_then(|config| config.get_string(&format!("branch.{branch_name}.remote")).ok())
+      .is_some();
+
+    let remote_gone = if remote_configured {
+      match branch.upstream() {
+        Ok(_) => false,
+        Err(err) => err.code() == git2::ErrorCode::NotFound,
+      }
+    } else {
+      false
+    };
+
+    candidates.push(BranchCandidate {
+      name: branch_name,
+      last_commit_date,
+      jira_issue: metadata.and_then(|m| m.jira_issue.clone()),
+      github_pr: metadata.and_then(|m| m.github_pr),
+      remote_gone,
+    });
+  }
+
+  Ok(candidates)
+}
+
+fn determine_landed_branches(
+  candidates: Vec<BranchCandidate>,
+  pr_statuses: Option<&HashMap<u32, GitHubPrStatus>>,
+  include_closed: bool,
+) -> Vec<LandedBranchInfo> {
+  let mut landed = Vec::new();
+
+  for candidate in candidates {
+    let mut status = None;
+    let mut merged_at = None;
+    let mut closed_at = None;
+
+    if let Some(pr_number) = candidate.github_pr {
+      if let Some(status_map) = pr_statuses {
+        if let Some(pr_status) = status_map.get(&pr_number) {
+          if pr_status.merged_at.is_some() {
+            status = Some(LandedStatus::Merged);
+            merged_at = pr_status.merged_at.clone();
+            closed_at = pr_status.closed_at.clone();
+          } else if pr_status.state == "closed" && include_closed {
+            status = Some(LandedStatus::Closed);
+            closed_at = pr_status.closed_at.clone();
+          }
+        }
+      }
+    }
+
+    if status.is_none() && candidate.remote_gone {
+      status = Some(LandedStatus::RemoteGone);
+    }
+
+    if let Some(status) = status {
+      landed.push(LandedBranchInfo {
+        name: candidate.name,
+        status,
+        last_commit_date: candidate.last_commit_date,
+        jira_issue: candidate.jira_issue,
+        github_pr: candidate.github_pr,
+        merged_at,
+        closed_at,
+      });
+    }
+  }
+
+  landed.sort_by(|a, b| a.name.cmp(&b.name));
+  landed
+}
+
+fn display_landed_branches<P: AsRef<Path>>(path: P, landed_branches: &[LandedBranchInfo]) -> Result<()> {
+  let path = path.as_ref();
+
+  if landed_branches.is_empty() {
+    println!(
+      "No landed branches detected in {}",
+      format_repo_path(&path.display().to_string())
+    );
+    return Ok(());
+  }
+
+  print_success(&format!(
+    "Found {} landed branches in {}:",
+    landed_branches.len(),
+    format_repo_path(&path.display().to_string())
+  ));
+
+  for info in landed_branches {
+    let status_display = match info.status {
+      LandedStatus::Merged => "merged".green().to_string(),
+      LandedStatus::Closed => "closed".yellow().to_string(),
+      LandedStatus::RemoteGone => "upstream gone".cyan().to_string(),
+    };
+
+    println!(
+      "  {} {}",
+      info.name.cyan().bold(),
+      format!("({status_display})").dimmed()
+    );
+
+    if let Some(pr) = info.github_pr {
+      println!("      PR: #{pr}");
+    }
+
+    if let Some(jira_issue) = &info.jira_issue {
+      println!("      Jira: {jira_issue}");
+    }
+
+    if let Some(merged_at) = &info.merged_at {
+      println!(
+        "      Landed: {} {}",
+        format_timestamp(merged_at),
+        format!("({})", format_relative_time(merged_at)).dimmed()
+      );
+    } else if let Some(closed_at) = &info.closed_at {
+      println!(
+        "      Closed: {} {}",
+        format_timestamp(closed_at),
+        format!("({})", format_relative_time(closed_at)).dimmed()
+      );
+    }
+
+    println!(
+      "      Last commit: {} {}",
+      format_timestamp(&info.last_commit_date),
+      format!("({})", format_relative_time(&info.last_commit_date)).dimmed()
+    );
+  }
+
+  Ok(())
+}
+
+fn display_landed_branches_json(landed_branches: &[LandedBranchInfo]) -> Result<()> {
+  let json = serde_json::to_string_pretty(landed_branches)?;
+  println!("{json}");
+  Ok(())
+}
+
+fn format_iso_timestamp(timestamp: &str) -> Option<String> {
+  chrono::DateTime::parse_from_rfc3339(timestamp)
+    .ok()
+    .map(|dt| dt.with_timezone(&chrono::Utc).format("%Y-%m-%d %H:%M:%S").to_string())
+}
+
 /// Interactive pruning workflow
 fn interactive_prune_branches<P: AsRef<Path>>(
   repo_path: P,
@@ -704,6 +1021,8 @@ fn display_prune_summary(summary: &PruneSummary) {
 
 #[cfg(test)]
 mod tests {
+  use std::collections::HashMap;
+
   use serde_json::Value;
   use twig_core::RepoState;
   use twig_test_utils::{
@@ -943,5 +1262,91 @@ mod tests {
     assert_eq!(json[0]["jira_issue"], "PROJ-123");
     assert_eq!(json[0]["github_pr"], 42);
     assert_eq!(json[0]["novel_commits"][0]["hash"], "abcdef12");
+  }
+
+  #[test]
+  fn test_determine_landed_branches_prefers_merged_status() {
+    let candidates = vec![BranchCandidate {
+      name: "feature/merged".to_string(),
+      last_commit_date: "2024-02-01 00:00:00".to_string(),
+      jira_issue: Some("PROJ-1".to_string()),
+      github_pr: Some(42),
+      remote_gone: false,
+    }];
+
+    let mut pr_statuses = HashMap::new();
+    pr_statuses.insert(
+      42,
+      GitHubPrStatus {
+        state: "closed".to_string(),
+        merged_at: Some("2024-02-02 12:00:00".to_string()),
+        closed_at: Some("2024-02-02 12:00:00".to_string()),
+      },
+    );
+
+    let landed = determine_landed_branches(candidates, Some(&pr_statuses), false);
+    assert_eq!(landed.len(), 1);
+    assert_eq!(landed[0].status, LandedStatus::Merged);
+    assert_eq!(landed[0].merged_at.as_deref(), Some("2024-02-02 12:00:00"));
+  }
+
+  #[test]
+  fn test_determine_landed_branches_includes_closed_when_requested() {
+    let candidates = vec![BranchCandidate {
+      name: "feature/closed".to_string(),
+      last_commit_date: "2024-02-03 00:00:00".to_string(),
+      jira_issue: None,
+      github_pr: Some(100),
+      remote_gone: false,
+    }];
+
+    let mut pr_statuses = HashMap::new();
+    pr_statuses.insert(
+      100,
+      GitHubPrStatus {
+        state: "closed".to_string(),
+        merged_at: None,
+        closed_at: Some("2024-02-04 15:30:00".to_string()),
+      },
+    );
+
+    let landed_without_closed = determine_landed_branches(candidates.clone(), Some(&pr_statuses), false);
+    assert!(landed_without_closed.is_empty());
+
+    let landed_with_closed = determine_landed_branches(candidates, Some(&pr_statuses), true);
+    assert_eq!(landed_with_closed.len(), 1);
+    assert_eq!(landed_with_closed[0].status, LandedStatus::Closed);
+  }
+
+  #[test]
+  fn test_collect_branch_candidates_detects_remote_gone() {
+    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let repo = &git_repo.repo;
+
+    create_commit(repo, "README.md", "# Test Repo", "Initial commit").unwrap();
+    create_branch(repo, "main", None).unwrap();
+    checkout_branch(repo, "main").unwrap();
+
+    create_branch(repo, "feature/landing", Some("main")).unwrap();
+    checkout_branch(repo, "feature/landing").unwrap();
+    create_commit(repo, "feature.txt", "work", "Feature work").unwrap();
+
+    repo.remote("origin", "https://example.com/test.git").unwrap();
+    let mut config = repo.config().unwrap();
+    config.set_str("branch.feature/landing.remote", "origin").unwrap();
+    config
+      .set_str("branch.feature/landing.merge", "refs/heads/feature/landing")
+      .unwrap();
+
+    let repo_state = RepoState::load(git_repo.path()).unwrap();
+    let repo_config = repo.config().ok();
+    let candidates = collect_branch_candidates(repo, &repo_state, repo_config.as_ref()).unwrap();
+
+    let feature = candidates
+      .into_iter()
+      .find(|candidate| candidate.name == "feature/landing")
+      .expect("feature branch should be discovered");
+
+    assert!(feature.remote_gone);
   }
 }
