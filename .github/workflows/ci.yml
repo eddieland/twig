@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [format, clippy]
+        check: [format, clippy, autofixers]
     steps:
       - uses: actions/checkout@v5
       - name: Install Rust
@@ -47,6 +47,19 @@ jobs:
       - name: Run clippy
         if: matrix.check == 'clippy'
         run: cargo clippy --workspace -- -D warnings
+
+      - name: Verify autofixers produce no diff
+        if: matrix.check == 'autofixers'
+        shell: bash
+        run: |
+          cargo fmt --all
+          cargo clippy --fix --allow-dirty --allow-staged --workspace
+          if ! git diff --quiet; then
+            echo "::error::Running Rust autofixers produced changes. Please run 'make fmt' locally before committing."
+            git status --short
+            git diff
+            exit 1
+          fi
 
       - name: Publish job summary
         if: always()
