@@ -375,24 +375,44 @@ fn install_on_windows(new_binary: &Path, current_exe: &Path) -> Result<InstallOu
 
   let requires_admin = windows_requires_admin(parent);
 
-  let script_path = parent.join(format!("twig-update-{}.ps1", Uuid::new_v4()));
+  let staging_dir = std::env::temp_dir().join(format!("twig-update-{}", Uuid::new_v4()));
+  fs::create_dir(&staging_dir)
+    .with_context(|| format!("Failed to create staging directory at {}", staging_dir.display()))?;
+
+  let script_path = staging_dir.join("install.ps1");
   let helper_script = build_powershell_script(new_binary, current_exe)?;
   fs::write(&script_path, helper_script)
     .with_context(|| format!("Failed to write helper script at {}", script_path.display()))?;
 
-  let staged_binary = if new_binary.parent() != Some(parent) {
-    let staged_path = parent.join(format!("twig-update-{}", Uuid::new_v4()));
-    fs::copy(new_binary, &staged_path)
-      .with_context(|| format!("Failed to copy staged binary into {}", parent.display()))?;
-    if let Err(err) = fs::remove_file(new_binary) {
-      print_warning(&format!("Failed to remove temporary binary: {err}"));
-    }
-    staged_path
-  } else {
-    new_binary.to_path_buf()
-  };
+  let staged_binary = staging_dir.join(new_binary.file_name().unwrap_or_else(|| OsStr::new("twig.exe")));
+  fs::copy(new_binary, &staged_binary)
+    .with_context(|| format!("Failed to copy staged binary into {}", staging_dir.display()))?;
+  if let Err(err) = fs::remove_file(new_binary) {
+    print_warning(&format!("Failed to remove temporary binary: {err}"));
+  }
 
-  start_powershell_helper(&script_path, &staged_binary, current_exe, requires_admin)?;
+  if let Err(err) = start_powershell_helper(&script_path, &staged_binary, current_exe, requires_admin) {
+    if let Err(remove_err) = fs::remove_file(&staged_binary) {
+      print_warning(&format!(
+        "Failed to remove staged binary {} after helper error: {remove_err}",
+        staged_binary.display()
+      ));
+    }
+    if let Err(remove_err) = fs::remove_file(&script_path) {
+      print_warning(&format!(
+        "Failed to remove helper script {} after helper error: {remove_err}",
+        script_path.display()
+      ));
+    }
+    if let Err(remove_err) = fs::remove_dir_all(&staging_dir) {
+      print_warning(&format!(
+        "Failed to clean staging directory {} after helper error: {remove_err}",
+        staging_dir.display()
+      ));
+    }
+    return Err(err);
+  }
+
   Ok(InstallOutcome::Deferred {
     elevated: requires_admin,
   })
@@ -456,6 +476,12 @@ try {{
 }} catch {{}}
 try {{
   Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+}} catch {{}}
+try {{
+  $stagingDir = Split-Path -Parent $Source
+  if ($stagingDir -and (Test-Path -LiteralPath $stagingDir)) {{
+    Remove-Item -LiteralPath $stagingDir -Force -Recurse -ErrorAction SilentlyContinue
+  }}
 }} catch {{}}
 "#
   ))
