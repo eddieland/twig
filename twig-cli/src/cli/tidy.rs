@@ -35,6 +35,16 @@ pub struct TidyArgs {
                 Use this flag to skip the confirmation and delete branches automatically."
   )]
   pub force: bool,
+
+  #[arg(
+    short = 'a',
+    long = "aggressive",
+    long_help = "Aggressively clean up by reparenting branches when intermediate branches have no changes\n\n\
+                When enabled, if an intermediate branch has no unique commits compared to its parent,\n\
+                its children will be reparented to the parent, and the intermediate branch will be deleted.\n\
+                For example: A -> B -> C, if B has no changes, C will be reparented to A and B deleted."
+  )]
+  pub aggressive: bool,
 }
 
 /// Subcommands for the tidy command
@@ -127,7 +137,7 @@ pub(crate) fn handle_tidy_command(tidy: TidyArgs) -> Result<()> {
       let clean_args = CleanArgs {
         dry_run: tidy.dry_run,
         force: tidy.force,
-        aggressive: false, // Default to non-aggressive for backward compatibility
+        aggressive: tidy.aggressive,
       };
       handle_clean_command(clean_args)
     }
