@@ -69,14 +69,17 @@ pub struct SwitchArgs {
     value_name = "PARENT",
     num_args = 0..=1,
     default_missing_value = "current",
+    require_equals = true,
     long_help = "Set parent dependency for the new branch (only applies when creating a new branch)\n\n\
                Specify a parent branch to create a dependency relationship when a new branch is created.\n\
                This option is ignored when switching to existing branches.\n\
                Values can be:\n\
-               • 'current' (default if flag used without value): Use current branch\n\
-               • A branch name: Use the specified branch\n\
-               • A Jira issue key (e.g., PROJ-123): Use branch associated with Jira issue\n\
-               • 'none': Don't set any parent (use default root)"
+               • 'current' (default if flag used without value): Use -p (without value) or -p=current\n\
+               • A branch name: Use -p=<branch-name>\n\
+               • A Jira issue key (e.g., PROJ-123): Use -p=PROJ-123\n\
+               • 'none': Use -p=none to not set any parent (use default root)\n\n\
+               Note: When providing a value, you must use the equals sign (e.g., -p=main or --parent=main).\n\
+               Without a value (-p or --parent), the current branch is used as parent."
   )]
   pub parent: Option<String>,
 }
