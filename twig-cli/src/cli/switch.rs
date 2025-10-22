@@ -598,13 +598,31 @@ fn create_and_switch_to_branch(
     .find_commit(branch_base.commit)
     .with_context(|| format!("Failed to locate base commit for '{branch_name}'"))?;
 
+  // Check if we have uncommitted changes before creating the branch
+  let statuses = repo.statuses(None)?;
+  let has_uncommitted_changes = statuses.iter().any(|status_entry| {
+    let flags = status_entry.status();
+    flags.is_wt_modified() || flags.is_wt_new() || flags.is_wt_deleted()
+  });
+
+  // Get current HEAD to compare with base commit
+  let current_head = repo.head()?.peel_to_commit()?.id();
+
   repo
     .branch(branch_name, &base_commit, false)
     .with_context(|| format!("Failed to create branch '{branch_name}'",))?;
 
   print_success(&format!("Created branch '{branch_name}'",));
 
-  switch_to_branch(repo_path, branch_name)?;
+  // If we're creating a branch from the same commit as HEAD and we have uncommitted changes,
+  // just update the HEAD reference instead of doing a full checkout
+  if has_uncommitted_changes && base_commit.id() == current_head {
+    tracing::info!("Preserving uncommitted changes when switching to new branch based on current HEAD");
+    repo.set_head(&format!("refs/heads/{branch_name}"))?;
+    print_success(&format!("Switched to branch '{branch_name}'"));
+  } else {
+    switch_to_branch(repo_path, branch_name)?;
+  }
 
   if let Some(parent) = branch_base.parent_name() {
     add_branch_dependency(repo_path, branch_name, parent)?;
@@ -714,10 +732,8 @@ fn create_or_switch_to_jira_branch(
     create_and_switch_to_branch(repo_path, &branch_name, &branch_base)?;
 
     // Store the association and dependency in a single transaction
-    let parent_branch = match parent_option {
-      Some(p) => Some(p),
-      None => branch_base.base.parent_name(),
-    };
+    // Use the resolved parent name from branch_base, not the raw parent_option
+    let parent_branch = branch_base.base.parent_name();
     store_jira_association_with_dependency(repo_path, &branch_name, issue_key, parent_branch)?;
 
     print_success(&format!(
