@@ -1,0 +1,11 @@
+{
+  "github.copilot.chat.mcp.servers": {
+    "twig": {
+      "command": "twig",
+      "args": ["mcp-server"],
+      "env": {
+        "RUST_LOG": "info"
+      }
+    }
+  }
+}
