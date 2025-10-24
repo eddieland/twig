@@ -22,18 +22,43 @@ class TwigBranchTreeProvider implements vscode.TreeDataProvider<TwigBranchItem> 
             return new Promise((resolve) => {
                 const workspaceRoot = getWorkspaceRoot();
                 if (!workspaceRoot) {
+                    console.error('Twig: No workspace folder found');
                     resolve([new TwigBranchItem('No workspace folder open', [], true, false, false, true)]);
                     return;
                 }
                 
-                exec('twig tree', { cwd: workspaceRoot }, (err, stdout, stderr) => {
-                    if (err) {
-                        const errorMsg = stderr ? stderr : err.message;
-                        resolve([new TwigBranchItem(`Error fetching branch tree: ${errorMsg}`, [], true, false, false, true)]);
+                console.log(`Twig: Executing 'twig tree' in directory: ${workspaceRoot}`);
+                
+                // First check if twig command is available
+                exec('where twig', (whereErr, whereStdout) => {
+                    if (whereErr) {
+                        console.error('Twig: "twig" command not found in PATH');
+                        resolve([
+                            new TwigBranchItem('Error: twig command not found in PATH', [], true, false, false, true),
+                            new TwigBranchItem('Install twig CLI: cargo install --path twig-cli', [], true, false, false, false)
+                        ]);
                         return;
                     }
-                    const items = parseTwigBranchTree(stdout);
-                    resolve(items);
+                    console.log(`Twig: Found twig at: ${whereStdout.trim()}`);
+                    
+                    // Use --repo flag to explicitly specify repository path
+                    exec(`twig tree --repo "${workspaceRoot}"`, (err, stdout, stderr) => {
+                        if (err) {
+                            const errorMsg = stderr ? stderr : err.message;
+                            console.error(`Twig: Error executing 'twig tree': ${errorMsg}`);
+                            console.error(`Twig: Working directory was: ${workspaceRoot}`);
+                            console.error(`Twig: stderr: ${stderr}`);
+                            console.error(`Twig: stdout: ${stdout}`);
+                            resolve([
+                                new TwigBranchItem(`Error fetching branch tree: ${errorMsg}`, [], true, false, false, true),
+                                new TwigBranchItem(`Working directory: ${workspaceRoot}`, [], true, false, false, false)
+                            ]);
+                            return;
+                        }
+                        console.log('Twig: Successfully fetched branch tree');
+                        const items = parseTwigBranchTree(stdout);
+                        resolve(items);
+                    });
                 });
             });
         }
