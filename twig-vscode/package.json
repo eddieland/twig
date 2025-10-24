@@ -1,0 +1,79 @@
+{
+  "name": "twig-vscode",
+  "displayName": "Twig Branch Tree",
+  "description": "Displays the current Twig branch tree and selected branch in VS Code.",
+  "version": "0.0.1",
+  "publisher": "eddieland",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:twigBranchTreeView",
+    "onCommand:twig.refreshBranchTree"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "views": {
+      "scm": [
+        {
+          "id": "twigBranchTreeView",
+          "name": "Twig Branch Tree"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "twig.refreshBranchTree",
+        "title": "Refresh Twig Branch Tree",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "twig.switchBranch",
+        "title": "Switch to this Twig branch",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "twig.createBranchFromCurrent",
+        "title": "Create new Twig branch from current",
+        "icon": "$(add)"
+      }
+    ],
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "twig.switchBranch",
+          "when": "view == twigBranchTreeView && viewItem == branch",
+          "group": "inline"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "twig.refreshBranchTree",
+          "when": "view == twigBranchTreeView",
+          "group": "navigation"
+        },
+        {
+          "command": "twig.createBranchFromCurrent",
+          "when": "view == twigBranchTreeView",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.70.0",
+    "typescript": "^4.9.5"
+  },
+  "dependencies": {}
+}
