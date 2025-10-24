@@ -55,6 +55,7 @@ no-worries = { path = "../no-worries" }
 twig-core = { path = "../twig-core" }
 twig-gh = { path = "../twig-gh" }
 twig-jira = { path = "../twig-jira" }
+twig-mcp = { path = "../twig-mcp" }
 
 # Platform-specific dependencies
 [target.'cfg(windows)'.dependencies]

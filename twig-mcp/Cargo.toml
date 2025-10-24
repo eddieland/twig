@@ -1,0 +1,30 @@
+[package]
+name = "twig-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Model Context Protocol server for twig - enables LLM integration for Git branch tree management"
+
+[dependencies]
+# Twig crates
+twig-core = { path = "../twig-core" }
+
+# Core dependencies
+anyhow.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+
+# Git operations
+git2.workspace = true
+
+# Async utilities
+async-trait = "0.1"
+
+[dev-dependencies]
+tempfile.workspace = true
+twig-test-utils = { path = "../twig-test-utils" }

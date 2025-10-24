@@ -15,6 +15,7 @@ pub mod fixup;
 mod git;
 mod github;
 mod jira;
+mod mcp;
 mod nodejs;
 pub mod rebase;
 mod switch;
@@ -199,6 +200,19 @@ pub enum Commands {
             and creating branches from issues.")]
   Jira(jira::JiraArgs),
 
+  /// Start MCP server for LLM integration
+  #[command(name = "mcp-server")]
+  #[command(long_about = "Start the Model Context Protocol (MCP) server for LLM integration.\n\n\
+            This command starts a JSON-RPC server that communicates over stdio,\n\
+            exposing twig's branch tree management capabilities to AI assistants\n\
+            like GitHub Copilot in VS Code.\n\n\
+            The server provides:\n\
+            • Tools for listing branches, viewing tree structure, and querying metadata\n\
+            • Resources for accessing registry, branch state, and dependency trees\n\n\
+            This command is typically invoked automatically by the MCP client (e.g., VS Code)\n\
+            and not run directly by users.")]
+  McpServer,
+
   /// Node.js integration
   #[command(name = "nodejs")]
   #[command(long_about = "Integrate with Node.js projects and tooling.\n\n\
@@ -323,6 +337,7 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
       Commands::GitHub(github) => github::handle_github_command(github),
       Commands::Init => config::handle_init_command(),
       Commands::Jira(jira) => jira::handle_jira_command(jira),
+      Commands::McpServer => mcp::handle_mcp_server_command(),
       Commands::NodeJs(nodejs) => nodejs::handle_nodejs_command(nodejs),
       Commands::Panic => {
         panic!("This is an intentional test panic to verify no-worries integration");
