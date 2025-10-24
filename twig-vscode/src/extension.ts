@@ -20,7 +20,13 @@ class TwigBranchTreeProvider implements vscode.TreeDataProvider<TwigBranchItem> 
         } else {
             // Return root elements by parsing twig tree
             return new Promise((resolve) => {
-                exec('twig tree', { cwd: vscode.workspace.rootPath }, (err, stdout, stderr) => {
+                const workspaceRoot = getWorkspaceRoot();
+                if (!workspaceRoot) {
+                    resolve([new TwigBranchItem('No workspace folder open', [], true, false, false, true)]);
+                    return;
+                }
+                
+                exec('twig tree', { cwd: workspaceRoot }, (err, stdout, stderr) => {
                     if (err) {
                         const errorMsg = stderr ? stderr : err.message;
                         resolve([new TwigBranchItem(`Error fetching branch tree: ${errorMsg}`, [], true, false, false, true)]);
@@ -66,9 +72,25 @@ class TwigBranchItem extends vscode.TreeItem {
     }
 }
 
+/**
+ * Get the workspace root path for executing twig commands
+ */
+function getWorkspaceRoot(): string | undefined {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    return workspaceFolders && workspaceFolders.length > 0 
+        ? workspaceFolders[0].uri.fsPath 
+        : undefined;
+}
 
 function updateStatusBar() {
-    exec('twig current-branch', { cwd: vscode.workspace.rootPath }, (err, stdout) => {
+    const workspaceRoot = getWorkspaceRoot();
+    if (!workspaceRoot) {
+        statusBarItem.text = 'Twig: No workspace';
+        statusBarItem.hide();
+        return;
+    }
+    
+    exec('twig current-branch', { cwd: workspaceRoot }, (err, stdout) => {
         if (err) {
             statusBarItem.text = 'Twig: Error';
         } else {
@@ -393,6 +415,12 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Helper function to switch branches
     function switchToBranch(targetBranch: string, treeDataProvider: TwigBranchTreeProvider) {
+        const workspaceRoot = getWorkspaceRoot();
+        if (!workspaceRoot) {
+            vscode.window.showErrorMessage('No workspace folder open');
+            return;
+        }
+        
         if (currentBranch === targetBranch) {
             vscode.window.showInformationMessage(`Already on branch: ${targetBranch}`);
             return;
@@ -403,7 +431,7 @@ export function activate(context: vscode.ExtensionContext) {
             title: `Switching to ${targetBranch}` 
         }, async () => {
             return new Promise<void>((resolve) => {
-                exec(`twig switch "${targetBranch}"`, { cwd: vscode.workspace.rootPath }, (err, stdout, stderr) => {
+                exec(`twig switch "${targetBranch}"`, { cwd: workspaceRoot }, (err, stdout, stderr) => {
                     if (err) {
                         vscode.window.showErrorMessage(`Failed to switch branch: ${stderr ? stderr : err.message}`);
                     } else {
@@ -419,8 +447,14 @@ export function activate(context: vscode.ExtensionContext) {
     }
     context.subscriptions.push(
         vscode.commands.registerCommand('twig.createBranchFromCurrent', async () => {
+            const workspaceRoot = getWorkspaceRoot();
+            if (!workspaceRoot) {
+                vscode.window.showErrorMessage('No workspace folder open');
+                return;
+            }
+            
             // Detect the current branch from 'twig tree' output
-            exec('twig tree', { cwd: vscode.workspace.rootPath }, (err, stdout) => {
+            exec('twig tree', { cwd: workspaceRoot }, (err, stdout) => {
                 if (err) {
                     vscode.window.showErrorMessage('Failed to fetch branch list.');
                     return;
@@ -454,7 +488,7 @@ export function activate(context: vscode.ExtensionContext) {
                     vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Creating branch ${newBranch} from ${originalBranch}` }, async () => {
                         return new Promise<void>((resolve) => {
                             // Create new branch by switching to it
-                            exec(`twig switch -p "${originalBranch}" "${newBranch}"`, { cwd: vscode.workspace.rootPath }, (err1, stdout1, stderr1) => {
+                            exec(`twig switch -p "${originalBranch}" "${newBranch}"`, { cwd: workspaceRoot }, (err1, stdout1, stderr1) => {
                                 if (err1) {
                                     vscode.window.showErrorMessage(`Failed to create branch: ${stderr1 ? stderr1 : err1.message}`);
                                 } else {
