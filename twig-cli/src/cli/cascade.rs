@@ -125,8 +125,17 @@ fn rebase_downstream(
   // The current branch is considered rebased as it's the starting point
   rebased_branches.insert(current_branch_name.clone());
 
-  // Perform the cascading rebase
-  for branch in rebase_order {
+  // Track branches that were skipped and need to be retried
+  let mut deferred_branches: VecDeque<String> = VecDeque::new();
+  let mut branches_to_process: VecDeque<String> = rebase_order.into_iter().collect();
+
+  // Keep processing until all branches are either rebased or permanently deferred
+  let max_iterations = branches_to_process.len() * 2; // Prevent infinite loops
+  let mut iteration_count = 0;
+
+  while !branches_to_process.is_empty() && iteration_count < max_iterations {
+    iteration_count += 1;
+    let branch = branches_to_process.pop_front().unwrap();
     // Check if the branch exists before attempting operations
     if !branch_exists(repo_path, &branch)? {
       print_warning(&format!("Branch '{}' does not exist, skipping rebase", branch));
@@ -156,8 +165,12 @@ fn rebase_downstream(
     }
 
     if !all_parents_ready {
-      // Skip this branch for now - it will be handled when its parent is ready
-      // Note: This shouldn't happen with a proper topological sort, but it's a safety check
+      // Defer this branch - add it to the back of the queue to retry later
+      print_warning(&format!(
+        "Deferring rebase of {} until parent branches are ready",
+        branch
+      ));
+      deferred_branches.push_back(branch.clone());
       continue;
     }
 
@@ -393,6 +406,26 @@ fn rebase_downstream(
           continue;
         }
       }
+    }
+    
+    // After processing all parents for this branch, check if we have deferred branches to retry
+    // Move deferred branches back to the processing queue if their dependencies might now be satisfied
+    if branches_to_process.is_empty() && !deferred_branches.is_empty() {
+      let deferred_count = deferred_branches.len();
+      print_info(&format!("Retrying {} deferred branches...", deferred_count));
+      
+      // Move all deferred branches back to the processing queue
+      while let Some(deferred) = deferred_branches.pop_front() {
+        branches_to_process.push_back(deferred);
+      }
+    }
+  }
+  
+  // Report any branches that couldn't be rebased
+  if !deferred_branches.is_empty() {
+    print_warning(&format!("{} branches could not be rebased due to unmet dependencies:", deferred_branches.len()));
+    for branch in &deferred_branches {
+      print_warning(&format!("  - {}", branch));
     }
   }
 
