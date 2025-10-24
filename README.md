@@ -14,6 +14,7 @@ Twig streamlines common developer workflows across multiple repositories, provid
 - **GitHub integration**: Track PR status and review information
 - **Batch operations**: Execute commands across all tracked repositories
 - **Credential management**: Simplified setup for API access
+- **MCP Server**: AI assistant integration via Model Context Protocol for GitHub Copilot and other LLMs
 
 ## Technology Stack
 
@@ -263,3 +264,35 @@ If you encounter issues when using Twig on Windows:
 4. **Check path normalization**: If you're experiencing path-related issues, try using forward slashes even on Windows, as Git often works better with Unix-style paths.
 
 Providing these details when reporting Windows-specific issues will help us identify and fix problems more effectively.
+
+## AI Assistant Integration (MCP Server)
+
+Twig includes a **Model Context Protocol (MCP) server** that enables AI assistants like GitHub Copilot in VS Code to interact with your Git repository through natural language.
+
+### Quick Setup for VS Code
+
+Add to your `.vscode/settings.json`:
+
+```json
+{
+  "github.copilot.chat.mcp.servers": {
+    "twig": {
+      "command": "twig",
+      "args": ["mcp-server"]
+    }
+  }
+}
+```
+
+### What You Can Do
+
+Once configured, ask Copilot natural language questions about your repository:
+
+- "What branches do I have?"
+- "Show me the branch tree"
+- "What's the status of my feature branches?"
+- "List all my worktrees"
+- "Which repositories are registered with twig?"
+
+For detailed setup instructions and troubleshooting, see the [MCP Server Documentation](twig-mcp/README.md).
+
