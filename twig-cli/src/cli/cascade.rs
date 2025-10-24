@@ -120,6 +120,11 @@ fn rebase_downstream(
   // Build a dependency graph to determine the order of rebasing
   let rebase_order = determine_rebase_order(&repo_state, &current_branch_name, &children);
 
+  // Track which branches have been successfully rebased
+  let mut rebased_branches: HashSet<String> = HashSet::new();
+  // The current branch is considered rebased as it's the starting point
+  rebased_branches.insert(current_branch_name.clone());
+
   // Perform the cascading rebase
   for branch in rebase_order {
     // Check if the branch exists before attempting operations
@@ -133,6 +138,26 @@ fn rebase_downstream(
 
     if parents.is_empty() {
       print_warning(&format!("No parent branches found for {branch}, skipping",));
+      continue;
+    }
+
+    // Check if all parents that are part of the cascade have been rebased
+    let mut all_parents_ready = true;
+    for parent in &parents {
+      // If this parent is in our children list (part of the cascade), ensure it's been rebased
+      if children.contains(&parent.to_string()) && !rebased_branches.contains(&**parent) {
+        print_warning(&format!(
+          "Parent branch '{}' has not been rebased yet, deferring rebase of {}",
+          parent, branch
+        ));
+        all_parents_ready = false;
+        break;
+      }
+    }
+
+    if !all_parents_ready {
+      // Skip this branch for now - it will be handled when its parent is ready
+      // Note: This shouldn't happen with a proper topological sort, but it's a safety check
       continue;
     }
 
@@ -163,6 +188,9 @@ fn rebase_downstream(
         RebaseResult::Success => {
           print_success(&format!("Successfully rebased {branch} onto {parent}",));
           
+          // Mark this branch as successfully rebased
+          rebased_branches.insert(branch.clone());
+          
           // Force push if requested
           if force_push {
             if let Err(e) = handle_force_push(repo_path, &branch) {
@@ -180,6 +208,9 @@ fn rebase_downstream(
               RebaseResult::Success => {
                 print_success(&format!("Successfully force-rebased {branch} onto {parent}",));
                 
+                // Mark this branch as successfully rebased
+                rebased_branches.insert(branch.clone());
+                
                 // Force push if requested
                 if force_push {
                   if let Err(e) = handle_force_push(repo_path, &branch) {
@@ -196,81 +227,145 @@ fn rebase_downstream(
             }
           } else {
             print_info(&format!("Branch {branch} is already up-to-date with {parent}",));
+            // Even if up-to-date, mark as rebased for dependency tracking
+            rebased_branches.insert(branch.clone());
           }
         }
         RebaseResult::Conflict => {
-          // Handle conflict
-          print_warning(&format!("Conflicts detected while rebasing {branch} onto {parent}",));
-          let resolution = handle_rebase_conflict(repo_path, &branch)?;
+          // Handle conflicts - may need to loop for multiple conflicts
+          let mut conflict_handled = false;
+          while !conflict_handled {
+            print_warning(&format!("Conflicts detected while rebasing {branch} onto {parent}",));
+            let resolution = handle_rebase_conflict(repo_path, &branch)?;
 
-          match resolution {
-            ConflictResolution::Continue => {
-              // Continue the rebase
-              let continue_result = execute_git_command(repo_path, &["rebase", "--continue"])?;
-              print_info(&continue_result);
-              print_success(&format!(
-                "Rebase of {branch} onto {parent} completed after resolving conflicts",
-              ));
-              
-              // Force push if requested
-              if force_push {
-                if let Err(e) = handle_force_push(repo_path, &branch) {
-                  print_error(&format!("Failed to force push {branch}: {e}"));
-                  // Continue with other branches rather than aborting the whole process
-                }
-              }
-            }
-            ConflictResolution::AbortToOriginal => {
-              // Abort the rebase and go back to the original branch
-              let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
-              print_info(&abort_result);
-              print_info(&format!("Rebase of {branch} onto {parent} aborted",));
-
-              // Checkout the original branch
-              let checkout_result = execute_git_command(repo_path, &["checkout", &current_branch_name])?;
-              print_info(&checkout_result);
-
-              return Ok(());
-            }
-            ConflictResolution::AbortStayHere => {
-              // Abort the rebase but stay on the current branch
-              let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
-              print_info(&abort_result);
-              print_info(&format!("Rebase of {branch} onto {parent} aborted",));
-              continue;
-            }
-            ConflictResolution::Skip => {
-              // Skip the current commit
-              let skip_result = execute_git_command(repo_path, &["rebase", "--skip"])?;
-              print_info(&skip_result);
-
-              // Check if the rebase is still in progress after skip
-              if is_rebase_in_progress(repo_path) {
-                // There might be more conflicts, continue handling the rebase
-                print_warning("Rebase is still in progress after skip. Checking for additional conflicts...");
-
-                // Check the status after skip
-                let status_output = execute_git_command(repo_path, &["status", "--porcelain"])?;
-                if !status_output.trim().is_empty() {
-                  // There are still conflicts or other issues
-                  print_warning("Additional conflicts detected after skip. Please resolve them manually.");
-                  print_info("You can:");
-                  print_info("  • Continue the rebase: git rebase --continue");
-                  print_info("  • Abort the rebase: git rebase --abort");
-                  print_info("  • Skip more commits: git rebase --skip");
+            match resolution {
+              ConflictResolution::Continue => {
+                // Continue the rebase
+                let continue_result = execute_git_command(repo_path, &["rebase", "--continue"])?;
+                
+                // Check if the continue output indicates more conflicts
+                if continue_result.contains("CONFLICT") {
+                  print_info("Additional conflicts detected after continue. Need to resolve more conflicts...");
+                  // Loop will continue to handle the next conflict
                   continue;
                 }
-              } else {
-                // Rebase completed successfully after skip
+                
+                // Check if rebase is still in progress
+                if is_rebase_in_progress(repo_path) {
+                  // Check for conflicts in the working directory
+                  let status_output = execute_git_command(repo_path, &["status", "--porcelain"])?;
+                  if status_output.lines().any(|line| line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD")) {
+                    print_warning("More conflicts detected. Continuing conflict resolution...");
+                    continue;
+                  }
+                  
+                  // Rebase in progress but no conflicts - something else is going on
+                  print_info(&continue_result);
+                  print_warning("Rebase is still in progress but no conflicts detected. You may need to manually continue.");
+                  print_info("Run: git rebase --continue");
+                  conflict_handled = true;
+                  continue; // Continue to next parent/branch
+                }
+                
+                // Rebase completed successfully
+                print_info(&continue_result);
                 print_success(&format!(
-                  "Rebase of {branch} onto {parent} completed after skipping commit",
+                  "Rebase of {branch} onto {parent} completed after resolving conflicts",
                 ));
+                
+                // Mark this branch as successfully rebased
+                rebased_branches.insert(branch.clone());
+                
+                // Force push if requested
+                if force_push {
+                  if let Err(e) = handle_force_push(repo_path, &branch) {
+                    print_error(&format!("Failed to force push {branch}: {e}"));
+                    // Continue with other branches rather than aborting the whole process
+                  }
+                }
+                
+                conflict_handled = true;
               }
+              ConflictResolution::AbortToOriginal => {
+                // Abort the rebase and go back to the original branch
+                let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
+                print_info(&abort_result);
+                print_info(&format!("Rebase of {branch} onto {parent} aborted",));
 
-              // Clean up any unmerged entries in the index and working directory after skip
-              cleanup_index_after_skip(repo_path)?;
+                // Checkout the original branch
+                let checkout_result = execute_git_command(repo_path, &["checkout", &current_branch_name])?;
+                print_info(&checkout_result);
 
-              print_info(&format!("Skipped commit during rebase of {branch} onto {parent}",));
+                return Ok(());
+              }
+              ConflictResolution::AbortStayHere => {
+                // Abort the rebase but stay on the current branch
+                let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
+                print_info(&abort_result);
+                print_info(&format!("Rebase of {branch} onto {parent} aborted",));
+                // Break out of conflict loop to continue with next parent (if any)
+                break;
+              }
+              ConflictResolution::Skip => {
+                // Skip the current commit
+                let skip_result = execute_git_command(repo_path, &["rebase", "--skip"])?;
+                
+                // Check if the skip output indicates more conflicts
+                if skip_result.contains("CONFLICT") {
+                  print_info("Additional conflicts detected after skip. Need to resolve more conflicts...");
+                  // Loop will continue to handle the next conflict
+                  continue;
+                }
+                
+                print_info(&skip_result);
+
+                // Check if the rebase is still in progress after skip
+                if is_rebase_in_progress(repo_path) {
+                  // Check the status after skip to see if there are conflicts
+                  let status_output = execute_git_command(repo_path, &["status", "--porcelain"])?;
+                  
+                  // Check for conflict markers in status
+                  if status_output.lines().any(|line| line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD")) {
+                    print_warning("Additional conflicts detected after skip. Continuing conflict resolution...");
+                    // Loop will continue to handle the next conflict
+                    continue;
+                  } else if !status_output.trim().is_empty() {
+                    // There are changes but not conflicts - might be other rebase state
+                    print_warning("Rebase is still in progress after skip.");
+                    print_info("You can:");
+                    print_info("  • Continue the rebase: git rebase --continue");
+                    print_info("  • Abort the rebase: git rebase --abort");
+                    print_info("  • Skip more commits: git rebase --skip");
+                    conflict_handled = true;
+                    continue; // Continue to next parent/branch
+                  }
+                  
+                  // Rebase in progress but no conflicts or changes - unusual state
+                  print_warning("Rebase state unclear. Please check manually.");
+                  conflict_handled = true;
+                  continue; // Continue to next parent/branch
+                } else {
+                  // Rebase completed successfully after skip
+                  print_success(&format!(
+                    "Rebase of {branch} onto {parent} completed after skipping commit(s)",
+                  ));
+                  
+                  // Mark this branch as successfully rebased
+                  rebased_branches.insert(branch.clone());
+                  
+                  // Force push if requested
+                  if force_push {
+                    if let Err(e) = handle_force_push(repo_path, &branch) {
+                      print_error(&format!("Failed to force push {branch}: {e}"));
+                    }
+                  }
+                }
+
+                // Clean up any unmerged entries in the index and working directory after skip
+                cleanup_index_after_skip(repo_path)?;
+                
+                conflict_handled = true;
+              }
             }
           }
         }
@@ -774,5 +869,132 @@ mod tests {
     // but may return an error for non-existent paths
     // Either outcome is acceptable for this test - we're just ensuring it doesn't panic
     assert!(result.is_ok() || result.is_err(), "handle_force_push should handle non-existent paths gracefully");
+  }
+
+  #[test]
+  fn test_rebased_branches_tracking() {
+    // Test that rebased_branches HashSet correctly tracks which branches have been rebased
+    use std::collections::HashSet;
+    
+    let mut rebased_branches: HashSet<String> = HashSet::new();
+    
+    // Initially empty
+    assert!(rebased_branches.is_empty());
+    
+    // Add current branch as starting point
+    rebased_branches.insert("main".to_string());
+    assert!(rebased_branches.contains("main"));
+    assert!(!rebased_branches.contains("feature"));
+    
+    // Add a feature branch after rebasing
+    rebased_branches.insert("feature".to_string());
+    assert!(rebased_branches.contains("main"));
+    assert!(rebased_branches.contains("feature"));
+    
+    // Verify we can check if a parent is in the set
+    let parent = "main";
+    assert!(rebased_branches.contains(&**&parent));
+  }
+
+  #[test]
+  fn test_parent_dependency_check_logic() {
+    // Test the logic for checking if all parents are ready before rebasing
+    use std::collections::HashSet;
+    
+    let mut rebased_branches: HashSet<String> = HashSet::new();
+    rebased_branches.insert("main".to_string());
+    rebased_branches.insert("feature".to_string());
+    
+    let children = vec!["feature".to_string(), "sub-feature".to_string()];
+    
+    // Test case 1: Parent is in children list and has been rebased
+    let parents = vec!["feature"];
+    let mut all_parents_ready = true;
+    for parent in &parents {
+      if children.contains(&parent.to_string()) && !rebased_branches.contains(&**parent) {
+        all_parents_ready = false;
+        break;
+      }
+    }
+    assert!(all_parents_ready, "feature has been rebased, so all_parents_ready should be true");
+    
+    // Test case 2: Parent is in children list but has NOT been rebased
+    let parents = vec!["sub-feature"];
+    let mut all_parents_ready = true;
+    for parent in &parents {
+      if children.contains(&parent.to_string()) && !rebased_branches.contains(&**parent) {
+        all_parents_ready = false;
+        break;
+      }
+    }
+    assert!(!all_parents_ready, "sub-feature has not been rebased, so all_parents_ready should be false");
+    
+    // Test case 3: Parent is NOT in children list (external dependency like main)
+    let parents = vec!["main"];
+    let mut all_parents_ready = true;
+    for parent in &parents {
+      if children.contains(&parent.to_string()) && !rebased_branches.contains(&**parent) {
+        all_parents_ready = false;
+        break;
+      }
+    }
+    assert!(all_parents_ready, "main is not in children list, so it doesn't need to be checked");
+  }
+
+  #[test]
+  fn test_conflict_marker_detection() {
+    // Test the logic for detecting conflict markers in git status output
+    
+    // Test case 1: No conflicts
+    let status_output = "M  file1.txt\nA  file2.txt\n";
+    let has_conflicts = status_output.lines().any(|line| {
+      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD")
+    });
+    assert!(!has_conflicts, "Should not detect conflicts in normal status");
+    
+    // Test case 2: UU conflict (both modified)
+    let status_output = "UU file1.txt\nM  file2.txt\n";
+    let has_conflicts = status_output.lines().any(|line| {
+      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD")
+    });
+    assert!(has_conflicts, "Should detect UU conflict marker");
+    
+    // Test case 3: AA conflict (both added)
+    let status_output = "AA file1.txt\n";
+    let has_conflicts = status_output.lines().any(|line| {
+      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD")
+    });
+    assert!(has_conflicts, "Should detect AA conflict marker");
+    
+    // Test case 4: DD conflict (both deleted)
+    let status_output = "DD file1.txt\nM  file2.txt\n";
+    let has_conflicts = status_output.lines().any(|line| {
+      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD")
+    });
+    assert!(has_conflicts, "Should detect DD conflict marker");
+    
+    // Test case 5: Multiple conflicts
+    let status_output = "UU file1.txt\nAA file2.txt\nM  file3.txt\n";
+    let has_conflicts = status_output.lines().any(|line| {
+      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD")
+    });
+    assert!(has_conflicts, "Should detect multiple conflict markers");
+  }
+
+  #[test]
+  fn test_rebase_output_conflict_detection() {
+    // Test the logic for detecting conflicts in git command output
+    
+    // Test case 1: No conflicts
+    let output = "Successfully rebased and updated refs/heads/feature.";
+    assert!(!output.contains("CONFLICT"), "Should not detect conflicts in success message");
+    
+    // Test case 2: Conflict present
+    let output = "CONFLICT (content): Merge conflict in file.txt\nAutomatic merge failed; fix conflicts and then commit the result.";
+    assert!(output.contains("CONFLICT"), "Should detect CONFLICT in output");
+    
+    // Test case 3: Multiple conflicts
+    let output = "CONFLICT (content): Merge conflict in file1.txt\nCONFLICT (content): Merge conflict in file2.txt";
+    assert!(output.contains("CONFLICT"), "Should detect CONFLICT in output with multiple conflicts");
   }
 }
