@@ -1264,4 +1264,128 @@ mod tests {
     let root = state.find_dependency_tree_root("feature");
     assert_eq!(root, "main");
   }
+
+  #[test]
+  fn test_circular_dependency_direct() {
+    // Test direct circular dependency: A -> B, then try B -> A
+    let mut state = RepoState::default();
+
+    // Add A -> B
+    state.add_dependency("A".to_string(), "B".to_string()).unwrap();
+
+    // Try to add B -> A (should fail)
+    let result = state.add_dependency("B".to_string(), "A".to_string());
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("circular dependency"));
+  }
+
+  #[test]
+  fn test_circular_dependency_indirect() {
+    // Test indirect circular dependency: A -> B -> C, then try C -> A
+    let mut state = RepoState::default();
+
+    // Add A -> B -> C
+    state.add_dependency("A".to_string(), "B".to_string()).unwrap();
+    state.add_dependency("B".to_string(), "C".to_string()).unwrap();
+
+    // Try to add C -> A (should fail)
+    let result = state.add_dependency("C".to_string(), "A".to_string());
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("circular dependency"));
+  }
+
+  #[test]
+  fn test_circular_dependency_long_chain() {
+    // Test longer circular dependency: A -> B -> C -> D, then try D -> A
+    let mut state = RepoState::default();
+
+    // Add A -> B -> C -> D
+    state.add_dependency("A".to_string(), "B".to_string()).unwrap();
+    state.add_dependency("B".to_string(), "C".to_string()).unwrap();
+    state.add_dependency("C".to_string(), "D".to_string()).unwrap();
+
+    // Try to add D -> A (should fail)
+    let result = state.add_dependency("D".to_string(), "A".to_string());
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("circular dependency"));
+
+    // Also try D -> B (should also fail)
+    let result = state.add_dependency("D".to_string(), "B".to_string());
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("circular dependency"));
+  }
+
+  #[test]
+  fn test_circular_dependency_self_reference() {
+    // Test self-referencing: A -> A (should fail)
+    let mut state = RepoState::default();
+
+    let result = state.add_dependency("A".to_string(), "A".to_string());
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("circular dependency"));
+  }
+
+  #[test]
+  fn test_circular_dependency_complex_graph() {
+    // Test complex graph with multiple paths:
+    //     A
+    //    / \
+    //   B   C
+    //    \ /
+    //     D
+    // Then try D -> A (should fail)
+    let mut state = RepoState::default();
+
+    state.add_dependency("B".to_string(), "A".to_string()).unwrap();
+    state.add_dependency("C".to_string(), "A".to_string()).unwrap();
+    state.add_dependency("D".to_string(), "B".to_string()).unwrap();
+    state.add_dependency("D".to_string(), "C".to_string()).unwrap();
+
+    // Try to add D -> A (should fail because D has paths to A through both B and C)
+    let result = state.add_dependency("A".to_string(), "D".to_string());
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("circular dependency"));
+  }
+
+  #[test]
+  fn test_non_circular_dependencies_allowed() {
+    // Test that valid non-circular dependencies are allowed
+    let mut state = RepoState::default();
+
+    // Create a valid tree:
+    //     main
+    //    / | \
+    //   A  B  C
+    //  /   |
+    // D    E
+    state.add_dependency("A".to_string(), "main".to_string()).unwrap();
+    state.add_dependency("B".to_string(), "main".to_string()).unwrap();
+    state.add_dependency("C".to_string(), "main".to_string()).unwrap();
+    state.add_dependency("D".to_string(), "A".to_string()).unwrap();
+    state.add_dependency("E".to_string(), "B".to_string()).unwrap();
+
+    // All dependencies should be added successfully
+    assert_eq!(state.dependencies.len(), 5);
+
+    // Adding another valid dependency should work
+    let result = state.add_dependency("F".to_string(), "C".to_string());
+    assert!(result.is_ok());
+    assert_eq!(state.dependencies.len(), 6);
+  }
+
+  #[test]
+  fn test_duplicate_dependency_rejected() {
+    // Test that duplicate dependencies are rejected
+    let mut state = RepoState::default();
+
+    state.add_dependency("child".to_string(), "parent".to_string()).unwrap();
+
+    // Try to add the same dependency again
+    let result = state.add_dependency("child".to_string(), "parent".to_string());
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("already exists"));
+
+    // Should still only have one dependency
+    assert_eq!(state.dependencies.len(), 1);
+  }
 }
