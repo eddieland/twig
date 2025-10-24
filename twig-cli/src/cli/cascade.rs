@@ -17,6 +17,28 @@ use twig_core::{RepoState, detect_repository};
 use crate::consts;
 use crate::user_defined_dependency_resolver::UserDefinedDependencyResolver;
 
+/// Helper function to check waiting branches and enqueue those whose dependencies are satisfied
+fn check_and_enqueue_ready_branches(
+  waiting_branches: &mut HashMap<String, HashSet<String>>,
+  rebased_branches: &HashSet<String>,
+  processing_queue: &mut VecDeque<String>,
+) {
+  let mut branches_to_remove = Vec::new();
+  
+  for (branch, unmet_deps) in waiting_branches.iter() {
+    // Check if all dependencies are now satisfied
+    if unmet_deps.iter().all(|dep| rebased_branches.contains(dep)) {
+      processing_queue.push_back(branch.clone());
+      branches_to_remove.push(branch.clone());
+    }
+  }
+  
+  // Remove branches that are now queued for processing
+  for branch in branches_to_remove {
+    waiting_branches.remove(&branch);
+  }
+}
+
 /// Command for performing a cascading rebase
 #[derive(Args)]
 pub struct CascadeArgs {
@@ -125,17 +147,35 @@ fn rebase_downstream(
   // The current branch is considered rebased as it's the starting point
   rebased_branches.insert(current_branch_name.clone());
 
-  // Track branches that were skipped and need to be retried
-  let mut deferred_branches: VecDeque<String> = VecDeque::new();
-  let mut branches_to_process: VecDeque<String> = rebase_order.into_iter().collect();
+  // Use a queue-based approach: process branches as their dependencies are satisfied
+  let mut processing_queue: VecDeque<String> = VecDeque::new();
+  let mut waiting_branches: HashMap<String, HashSet<String>> = HashMap::new();
+  
+  // Initialize: separate branches into ready-to-process vs waiting
+  for branch in rebase_order {
+    let parents = repo_state.get_dependency_parents(&branch);
+    
+    // Find which parents (that are part of this cascade) are not yet rebased
+    let unmet_deps: HashSet<String> = parents
+      .iter()
+      .filter(|p| {
+        let parent_str: &str = p;
+        children.contains(&parent_str.to_string()) && !rebased_branches.contains(parent_str)
+      })
+      .map(|p| p.to_string())
+      .collect();
+    
+    if unmet_deps.is_empty() {
+      // All dependencies met, can process immediately
+      processing_queue.push_back(branch);
+    } else {
+      // Has unmet dependencies, add to waiting list
+      waiting_branches.insert(branch, unmet_deps);
+    }
+  }
 
-  // Keep processing until all branches are either rebased or permanently deferred
-  let max_iterations = branches_to_process.len() * 2; // Prevent infinite loops
-  let mut iteration_count = 0;
-
-  while !branches_to_process.is_empty() && iteration_count < max_iterations {
-    iteration_count += 1;
-    let branch = branches_to_process.pop_front().unwrap();
+  // Process branches from the queue
+  while let Some(branch) = processing_queue.pop_front() {
     // Check if the branch exists before attempting operations
     if !branch_exists(repo_path, &branch)? {
       print_warning(&format!("Branch '{}' does not exist, skipping rebase", branch));
@@ -147,30 +187,11 @@ fn rebase_downstream(
 
     if parents.is_empty() {
       print_warning(&format!("No parent branches found for {branch}, skipping",));
-      continue;
-    }
-
-    // Check if all parents that are part of the cascade have been rebased
-    let mut all_parents_ready = true;
-    for parent in &parents {
-      // If this parent is in our children list (part of the cascade), ensure it's been rebased
-      if children.contains(&parent.to_string()) && !rebased_branches.contains(&**parent) {
-        print_warning(&format!(
-          "Parent branch '{}' has not been rebased yet, deferring rebase of {}",
-          parent, branch
-        ));
-        all_parents_ready = false;
-        break;
-      }
-    }
-
-    if !all_parents_ready {
-      // Defer this branch - add it to the back of the queue to retry later
-      print_warning(&format!(
-        "Deferring rebase of {} until parent branches are ready",
-        branch
-      ));
-      deferred_branches.push_back(branch.clone());
+      // Even without parents, mark as processed so dependents can proceed
+      rebased_branches.insert(branch.clone());
+      
+      // Check if any waiting branches can now be processed
+      check_and_enqueue_ready_branches(&mut waiting_branches, &rebased_branches, &mut processing_queue);
       continue;
     }
 
@@ -204,6 +225,9 @@ fn rebase_downstream(
           // Mark this branch as successfully rebased
           rebased_branches.insert(branch.clone());
           
+          // Check if any waiting branches can now be processed
+          check_and_enqueue_ready_branches(&mut waiting_branches, &rebased_branches, &mut processing_queue);
+          
           // Force push if requested
           if force_push {
             if let Err(e) = handle_force_push(repo_path, &branch) {
@@ -224,6 +248,9 @@ fn rebase_downstream(
                 // Mark this branch as successfully rebased
                 rebased_branches.insert(branch.clone());
                 
+                // Check if any waiting branches can now be processed
+                check_and_enqueue_ready_branches(&mut waiting_branches, &rebased_branches, &mut processing_queue);
+                
                 // Force push if requested
                 if force_push {
                   if let Err(e) = handle_force_push(repo_path, &branch) {
@@ -242,6 +269,9 @@ fn rebase_downstream(
             print_info(&format!("Branch {branch} is already up-to-date with {parent}",));
             // Even if up-to-date, mark as rebased for dependency tracking
             rebased_branches.insert(branch.clone());
+            
+            // Check if any waiting branches can now be processed
+            check_and_enqueue_ready_branches(&mut waiting_branches, &rebased_branches, &mut processing_queue);
           }
         }
         RebaseResult::Conflict => {
@@ -407,25 +437,13 @@ fn rebase_downstream(
         }
       }
     }
-    
-    // After processing all parents for this branch, check if we have deferred branches to retry
-    // Move deferred branches back to the processing queue if their dependencies might now be satisfied
-    if branches_to_process.is_empty() && !deferred_branches.is_empty() {
-      let deferred_count = deferred_branches.len();
-      print_info(&format!("Retrying {} deferred branches...", deferred_count));
-      
-      // Move all deferred branches back to the processing queue
-      while let Some(deferred) = deferred_branches.pop_front() {
-        branches_to_process.push_back(deferred);
-      }
-    }
   }
   
-  // Report any branches that couldn't be rebased
-  if !deferred_branches.is_empty() {
-    print_warning(&format!("{} branches could not be rebased due to unmet dependencies:", deferred_branches.len()));
-    for branch in &deferred_branches {
-      print_warning(&format!("  - {}", branch));
+  // Report any branches that couldn't be rebased due to unsatisfied dependencies
+  if !waiting_branches.is_empty() {
+    print_warning(&format!("{} branches could not be rebased due to unmet dependencies:", waiting_branches.len()));
+    for (branch, unmet_deps) in &waiting_branches {
+      print_warning(&format!("  - {} (waiting for: {})", branch, unmet_deps.iter().cloned().collect::<Vec<_>>().join(", ")));
     }
   }
 
