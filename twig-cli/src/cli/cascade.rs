@@ -240,7 +240,25 @@ fn rebase_downstream(
 
             match resolution {
               ConflictResolution::Continue => {
-                // Continue the rebase
+                // First, check if there are still unresolved conflicts
+                let status_output = execute_git_command(repo_path, &["status", "--porcelain"])?;
+                if status_output.lines().any(|line| line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") || line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")) {
+                  print_error("❌ Cannot continue: conflicts are still unresolved!");
+                  print_warning("Please resolve all conflicts before continuing.");
+                  print_info("Conflicting files are marked with conflict markers (<<<<<<, ======, >>>>>>).");
+                  print_info("After resolving conflicts:");
+                  print_info("  1. Stage the resolved files: git add <file>");
+                  print_info("  2. Then select 'Continue' again");
+                  print_info("");
+                  print_info("Or you can:");
+                  print_info("  • Abort and return to original branch");
+                  print_info("  • Abort but stay on current branch");
+                  print_info("  • Skip this commit");
+                  // Loop back to prompt again
+                  continue;
+                }
+                
+                // Conflicts are resolved, now continue the rebase
                 let continue_result = execute_git_command(repo_path, &["rebase", "--continue"])?;
                 
                 // Check if the continue output indicates more conflicts
@@ -254,7 +272,7 @@ fn rebase_downstream(
                 if is_rebase_in_progress(repo_path) {
                   // Check for conflicts in the working directory
                   let status_output = execute_git_command(repo_path, &["status", "--porcelain"])?;
-                  if status_output.lines().any(|line| line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD")) {
+                  if status_output.lines().any(|line| line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") || line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")) {
                     print_warning("More conflicts detected. Continuing conflict resolution...");
                     continue;
                   }
@@ -324,8 +342,8 @@ fn rebase_downstream(
                   // Check the status after skip to see if there are conflicts
                   let status_output = execute_git_command(repo_path, &["status", "--porcelain"])?;
                   
-                  // Check for conflict markers in status
-                  if status_output.lines().any(|line| line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD")) {
+                  // Check for conflict markers in status (UU, AA, DD, DU, UD, AU, UA)
+                  if status_output.lines().any(|line| line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") || line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")) {
                     print_warning("Additional conflicts detected after skip. Continuing conflict resolution...");
                     // Loop will continue to handle the next conflict
                     continue;
@@ -944,39 +962,68 @@ mod tests {
   #[test]
   fn test_conflict_marker_detection() {
     // Test the logic for detecting conflict markers in git status output
+    // Git status conflict markers:
+    // UU = both modified
+    // AA = both added
+    // DD = both deleted
+    // DU = deleted by us, modified by them
+    // UD = modified by us, deleted by them
+    // AU = added by us, modified by them
+    // UA = modified by us, added by them
     
     // Test case 1: No conflicts
     let status_output = "M  file1.txt\nA  file2.txt\n";
     let has_conflicts = status_output.lines().any(|line| {
-      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD")
+      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") ||
+      line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")
     });
     assert!(!has_conflicts, "Should not detect conflicts in normal status");
     
     // Test case 2: UU conflict (both modified)
     let status_output = "UU file1.txt\nM  file2.txt\n";
     let has_conflicts = status_output.lines().any(|line| {
-      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD")
+      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") ||
+      line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")
     });
     assert!(has_conflicts, "Should detect UU conflict marker");
     
     // Test case 3: AA conflict (both added)
     let status_output = "AA file1.txt\n";
     let has_conflicts = status_output.lines().any(|line| {
-      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD")
+      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") ||
+      line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")
     });
     assert!(has_conflicts, "Should detect AA conflict marker");
     
     // Test case 4: DD conflict (both deleted)
     let status_output = "DD file1.txt\nM  file2.txt\n";
     let has_conflicts = status_output.lines().any(|line| {
-      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD")
+      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") ||
+      line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")
     });
     assert!(has_conflicts, "Should detect DD conflict marker");
     
-    // Test case 5: Multiple conflicts
-    let status_output = "UU file1.txt\nAA file2.txt\nM  file3.txt\n";
+    // Test case 5: DU conflict (deleted by us)
+    let status_output = "DU file1.txt\n";
     let has_conflicts = status_output.lines().any(|line| {
-      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD")
+      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") ||
+      line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")
+    });
+    assert!(has_conflicts, "Should detect DU conflict marker");
+    
+    // Test case 6: UD conflict (modified by us, deleted by them)
+    let status_output = "UD file1.txt\n";
+    let has_conflicts = status_output.lines().any(|line| {
+      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") ||
+      line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")
+    });
+    assert!(has_conflicts, "Should detect UD conflict marker");
+    
+    // Test case 7: Multiple different conflicts
+    let status_output = "UU file1.txt\nAA file2.txt\nDU file3.txt\nM  file4.txt\n";
+    let has_conflicts = status_output.lines().any(|line| {
+      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") ||
+      line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")
     });
     assert!(has_conflicts, "Should detect multiple conflict markers");
   }
