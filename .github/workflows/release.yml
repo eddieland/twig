@@ -56,7 +56,7 @@ jobs:
           tar -czf twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz -C target/release twig
           shasum -a 256 twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz > twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Generate build provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v3
         with:
           subject-path: twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Upload artifact
@@ -96,7 +96,7 @@ jobs:
           tar -czf twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz -C target/release twig
           shasum -a 256 twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz > twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Generate build provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v3
         with:
           subject-path: twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Upload artifact
@@ -150,7 +150,7 @@ jobs:
           cat twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
 
       - name: Generate build provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v3
         with:
           subject-path: twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip
 
