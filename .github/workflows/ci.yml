@@ -103,7 +103,7 @@ jobs:
       - name: Run tests
         run: cargo nextest run --workspace
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: twig-${{ matrix.os }}
           path: target/debug/twig
@@ -147,7 +147,7 @@ jobs:
       - name: Run tests
         run: cargo nextest run --workspace --cargo-profile ci-windows
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: twig-windows
           path: target/ci-windows/twig.exe

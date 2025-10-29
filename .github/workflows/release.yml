@@ -60,7 +60,7 @@ jobs:
         with:
           subject-path: twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: twig-linux
           path: |
@@ -100,7 +100,7 @@ jobs:
         with:
           subject-path: twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: twig-macos
           path: |
@@ -155,7 +155,7 @@ jobs:
           subject-path: twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: twig-windows
           path: |
