@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use chrono::Utc;
 
 /// Resolve a repository path to its canonical form
 pub fn resolve_repository_path<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
@@ -124,7 +125,8 @@ pub fn extract_repo_name<P: AsRef<Path>>(path: P) -> String {
 /// Get the Jira issue associated with the current branch
 pub fn get_current_branch_jira_issue() -> Result<Option<String>> {
   use crate::git::{current_branch, detect_repository};
-  use crate::state::RepoState;
+  use crate::jira_parser::detect_jira_issue_from_branch;
+  use crate::state::{BranchMetadata, RepoState};
 
   // Get the current repository path
   let repo_path = detect_repository().ok_or_else(|| anyhow::anyhow!("Not in a Git repository"))?;
@@ -133,14 +135,24 @@ pub fn get_current_branch_jira_issue() -> Result<Option<String>> {
   let branch_name = current_branch()?.ok_or_else(|| anyhow::anyhow!("Not on any branch"))?;
 
   // Load the repository state
-  let state = RepoState::load(&repo_path)?;
+  let mut state = RepoState::load(&repo_path)?;
 
-  // Get the branch metadata and return the Jira issue
-  Ok(
-    state
-      .get_branch_metadata(&branch_name)
-      .and_then(|metadata| metadata.jira_issue.clone()),
-  )
+  if let Some(metadata) = state.get_branch_metadata(&branch_name) {
+    return Ok(metadata.jira_issue.clone());
+  }
+
+  if let Some(detected_issue) = detect_jira_issue_from_branch(&branch_name) {
+    state.add_branch_issue(BranchMetadata {
+      branch: branch_name.clone(),
+      jira_issue: Some(detected_issue.clone()),
+      github_pr: None,
+      created_at: Utc::now().to_rfc3339(),
+    });
+    state.save(&repo_path)?;
+    return Ok(Some(detected_issue));
+  }
+
+  Ok(None)
 }
 
 /// Get the GitHub PR number associated with the current branch
