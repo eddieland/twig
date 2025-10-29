@@ -5,7 +5,7 @@
 
 use anyhow::{Context, Result};
 use reqwest::{StatusCode, header};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::client::JiraClient;
@@ -120,23 +120,32 @@ impl JiraClient {
     // Set up pagination
     let (max_results, start_at) = pagination_options.unwrap_or((50, 0));
 
-    // Build URL with query parameters
-    let url = format!(
-      "{}/rest/api/2/search?jql={}&maxResults={}&startAt={}",
-      self.base_url,
-      urlencoding::encode(&jql),
-      max_results,
-      start_at
-    );
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SearchJqlRequest<'a> {
+      jql: &'a str,
+      start_at: u32,
+      max_results: u32,
+      fields: Vec<&'a str>,
+    }
 
+    let url = format!("{}/rest/api/3/search/jql", self.base_url);
     trace!("Jira API URL: {}", url);
+
+    let request_body = SearchJqlRequest {
+      jql: &jql,
+      start_at,
+      max_results,
+      fields: vec!["*all"],
+    };
 
     // Send request
     let response = self
       .client
-      .get(&url)
+      .post(&url)
       .header(header::USER_AGENT, USER_AGENT)
       .basic_auth(&self.auth.username, Some(&self.auth.api_token))
+      .json(&request_body)
       .send()
       .await
       .inspect_err(|e| {
@@ -149,7 +158,7 @@ impl JiraClient {
           error!("Request configuration error");
         }
       })
-      .context(format!("GET {url} failed"))?;
+      .context(format!("POST {url} failed"))?;
 
     let status = response.status();
     debug!("Jira API response status: {}", status);
@@ -163,13 +172,41 @@ impl JiraClient {
           total: u32,
         }
 
-        let search_response = response
-          .json::<SearchResponse>()
-          .await
-          .context("Failed to parse Jira search response")?;
+        #[derive(Deserialize)]
+        struct MultiSearchResponse {
+          results: Vec<SearchResponse>,
+        }
 
-        info!("Successfully fetched {} Jira issues", search_response.issues.len());
-        Ok(search_response.issues)
+        let body = response
+          .text()
+          .await
+          .context("Failed to read Jira search response body")?;
+
+        let parse_result: Result<(Vec<Issue>, u32), serde_json::Error> = serde_json::from_str::<SearchResponse>(&body)
+          .map(|search_response| (search_response.issues, search_response.total))
+          .or_else(|_| {
+            let multi_response: MultiSearchResponse = serde_json::from_str(&body)?;
+            let (issues, total) = multi_response
+              .results
+              .into_iter()
+              .next()
+              .map(|res| (res.issues, res.total))
+              .unwrap_or_default();
+            Ok((issues, total))
+          });
+
+        match parse_result {
+          Ok((issues, total)) => {
+            info!("Successfully fetched {} Jira issues", issues.len());
+            trace!("Total issues reported by Jira: {}", total);
+            Ok(issues)
+          }
+          Err(err) => {
+            error!("Failed to parse Jira search response: {:?}", err);
+            debug!("Raw response body: {}", body);
+            Err::<Vec<Issue>, _>(err).context("Failed to parse Jira search response")
+          }
+        }
       }
       StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
         warn!("Authentication failed when accessing Jira API");
