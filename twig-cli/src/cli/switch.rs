@@ -369,6 +369,33 @@ fn parent_lookup_error(parent: &str) -> anyhow::Error {
   )
 }
 
+/// Find branches in the repository that contain the given ticket ID in their
+/// name
+fn find_branches_by_ticket(repo_path: &Path, issue_key: &str) -> Result<Vec<String>> {
+  let repo = Git2Repository::open(repo_path)?;
+  let mut matching_branches = Vec::new();
+
+  let branches = repo.branches(Some(git2::BranchType::Local))?;
+  for branch_result in branches {
+    let (branch, _) = branch_result?;
+    if let Some(branch_name) = branch.name()? {
+      // Check if the branch name starts with the ticket ID (case-insensitive match)
+      // e.g., "PROJ-123/feature" or "proj-123-feature"
+      let branch_upper = branch_name.to_uppercase();
+      let issue_upper = issue_key.to_uppercase();
+
+      if branch_upper.starts_with(&format!("{}/", issue_upper))
+        || branch_upper.starts_with(&format!("{}-", issue_upper))
+        || branch_upper == issue_upper
+      {
+        matching_branches.push(branch_name.to_string());
+      }
+    }
+  }
+
+  Ok(matching_branches)
+}
+
 /// Handle switching to a branch based on Jira issue
 fn handle_jira_switch(
   jira: &JiraClient,
@@ -382,6 +409,7 @@ fn handle_jira_switch(
 
   // Load repository state to find associated branch
   let repo_state = RepoState::load(repo_path)?;
+  let repo = Git2Repository::open(repo_path)?;
 
   // Look for existing branch association
   if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(issue_key) {
@@ -389,7 +417,6 @@ fn handle_jira_switch(
     tracing::info!("Found associated branch: {}", branch_name);
 
     // Verify the branch actually exists in Git before trying to switch to it
-    let repo = Git2Repository::open(repo_path)?;
     if repo.find_branch(branch_name, git2::BranchType::Local).is_ok() {
       return switch_to_branch(repo_path, branch_name);
     } else {
@@ -404,9 +431,43 @@ fn handle_jira_switch(
     }
   }
 
+  // Try to find branches that contain the ticket ID in their name
+  let matching_branches = find_branches_by_ticket(repo_path, issue_key)?;
+
+  if !matching_branches.is_empty() {
+    if matching_branches.len() == 1 {
+      let branch_name = &matching_branches[0];
+      print_info(&format!(
+        "Found existing branch '{}' matching ticket {}",
+        branch_name, issue_key
+      ));
+
+      // Store the association for future lookups
+      if let Err(e) = store_jira_association(repo_path, branch_name, issue_key) {
+        tracing::warn!("Failed to store Jira association: {}", e);
+      } else {
+        print_info(&format!("Associated branch '{}' with {}", branch_name, issue_key));
+      }
+
+      return switch_to_branch(repo_path, branch_name);
+    } else {
+      // Multiple branches found - let the user choose or show them
+      print_warning(&format!(
+        "Multiple branches found matching {}: {}",
+        issue_key,
+        matching_branches.join(", ")
+      ));
+      print_info("Please specify the exact branch name or link one with: twig jira link-branch");
+      if !create_if_missing {
+        return Ok(());
+      }
+      print_info("Creating a new branch since multiple matches were found...");
+    }
+  }
+
   // No existing association found, or associated branch was deleted
   if create_if_missing {
-    if repo_state.get_branch_issue_by_jira(issue_key).is_none() {
+    if repo_state.get_branch_issue_by_jira(issue_key).is_none() && matching_branches.is_empty() {
       print_info("No associated branch found. Creating new branch from Jira issue...");
     }
     create_or_switch_to_jira_branch(jira, repo_path, issue_key, parent_option, jira_parser)
@@ -617,8 +678,9 @@ fn create_and_switch_to_branch(
 
   print_success(&format!("Created branch '{branch_name}'",));
 
-  // If we're creating a branch from the same commit as HEAD and we have uncommitted changes,
-  // just update the HEAD reference instead of doing a full checkout
+  // If we're creating a branch from the same commit as HEAD and we have
+  // uncommitted changes, just update the HEAD reference instead of doing a full
+  // checkout
   if has_uncommitted_changes && base_commit.id() == current_head {
     tracing::info!("Preserving uncommitted changes when switching to new branch based on current HEAD");
     repo.set_head(&format!("refs/heads/{branch_name}"))?;
@@ -818,7 +880,9 @@ fn create_branch_from_jira_issue(
     };
 
     // Create branch name from issue key and summary
-    let safe_summary = issue.fields.summary
+    let safe_summary = issue
+      .fields
+      .summary
       .chars()
       .filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '-')
       .collect::<String>()
@@ -827,7 +891,7 @@ fn create_branch_from_jira_issue(
       .take(5) // Limit to first 5 words
       .collect::<Vec<_>>()
       .join("-");
-    
+
     let branch_name = format!("{}/{}", issue_key, safe_summary);
 
     print_info(&format!("Creating branch: {branch_name}",));
@@ -845,7 +909,7 @@ fn create_branch_from_jira_issue(
       "Created and switched to branch '{branch_name}' for Jira issue {issue_key}",
     ));
     print_info(&format!("Issue Summary: {}", issue.fields.summary));
-    
+
     Ok(())
   })
 }

@@ -202,7 +202,8 @@ pub enum Commands {
 
   /// Start MCP server for LLM integration
   #[command(name = "mcp-server")]
-  #[command(long_about = "Start the Model Context Protocol (MCP) server for LLM integration.\n\n\
+  #[command(
+    long_about = "Start the Model Context Protocol (MCP) server for LLM integration.\n\n\
             This command starts a JSON-RPC server that communicates over stdio,\n\
             exposing twig's branch tree management capabilities to AI assistants\n\
             like GitHub Copilot in VS Code.\n\n\
@@ -210,7 +211,8 @@ pub enum Commands {
             • Tools for listing branches, viewing tree structure, and querying metadata\n\
             • Resources for accessing registry, branch state, and dependency trees\n\n\
             This command is typically invoked automatically by the MCP client (e.g., VS Code)\n\
-            and not run directly by users.")]
+            and not run directly by users."
+  )]
   McpServer,
 
   /// Node.js integration
