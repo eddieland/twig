@@ -14,7 +14,7 @@ use thiserror::Error;
 pub struct JiraParsingConfig {
   /// The parsing mode to use
   pub mode: JiraParsingMode,
-  
+
   /// Jira host URL (e.g., https://company.atlassian.net)
   #[serde(default)]
   pub host: Option<String>,

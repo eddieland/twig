@@ -107,25 +107,6 @@ function getWorkspaceRoot(): string | undefined {
         : undefined;
 }
 
-function updateStatusBar() {
-    const workspaceRoot = getWorkspaceRoot();
-    if (!workspaceRoot) {
-        statusBarItem.text = 'Twig: No workspace';
-        statusBarItem.hide();
-        return;
-    }
-    
-    exec('twig current-branch', { cwd: workspaceRoot }, (err, stdout) => {
-        if (err) {
-            statusBarItem.text = 'Twig: Error';
-        } else {
-            statusBarItem.text = `Twig: ${stdout.trim()}`;
-        }
-        statusBarItem.show();
-    });
-}
-
-let statusBarItem: vscode.StatusBarItem;
 let currentBranch: string | null = null;
 
 function parseTwigBranchTree(output: string): TwigBranchItem[] {
@@ -276,49 +257,52 @@ function parseTwigBranchTree(output: string): TwigBranchItem[] {
     return result;
 }
 
-function updateStatusBarFromTree() {
-    if (currentBranch) {
-        statusBarItem.text = `Twig: ${currentBranch}`;
-    } else {
-        statusBarItem.text = 'Twig: (no branch detected)';
-    }
-    statusBarItem.show();
-}
-
 /**
  * Set up watchers to automatically refresh the tree view when Git repository state changes
  */
-function setupGitRepositoryWatchers(context: vscode.ExtensionContext, treeDataProvider: TwigBranchTreeProvider) {
-    // Get the built-in Git extension API
-    const gitExtension = vscode.extensions.getExtension('vscode.git');
-    
-    if (gitExtension) {
-        const git = gitExtension.exports.getAPI(1);
-        
-        // Watch for repository changes
-        if (git && git.repositories.length > 0) {
-            git.repositories.forEach((repo: any) => {
-                // Listen to state changes (commits, checkouts, rebases, etc.)
-                const disposable = repo.state.onDidChange(() => {
-                    console.log('Git repository state changed - refreshing Twig view');
-                    treeDataProvider.refresh();
-                    updateStatusBar();
-                });
-                context.subscriptions.push(disposable);
-            });
-            
-            // Watch for new repositories being opened
-            const onDidOpenRepository = git.onDidOpenRepository((repo: any) => {
-                console.log('New Git repository opened - setting up watchers');
-                const disposable = repo.state.onDidChange(() => {
-                    console.log('Git repository state changed - refreshing Twig view');
-                    treeDataProvider.refresh();
-                    updateStatusBar();
-                });
-                context.subscriptions.push(disposable);
-            });
-            context.subscriptions.push(onDidOpenRepository);
+async function setupGitRepositoryWatchers(context: vscode.ExtensionContext, treeDataProvider: TwigBranchTreeProvider) {
+    const gitExtension = vscode.extensions.getExtension<any>('vscode.git');
+    if (!gitExtension) {
+        console.warn('Twig: Built-in Git extension not found; automatic refresh disabled.');
+        return;
+    }
+
+    try {
+        if (!gitExtension.isActive) {
+            await gitExtension.activate();
         }
+    } catch (error) {
+        console.error('Twig: Failed to activate Git extension; automatic refresh disabled.', error);
+        return;
+    }
+
+    const gitApi = (gitExtension.exports && typeof gitExtension.exports.getAPI === 'function')
+        ? gitExtension.exports.getAPI(1)
+        : undefined;
+
+    if (!gitApi) {
+        console.warn('Twig: Git extension API unavailable; automatic refresh disabled.');
+        return;
+    }
+
+    if (gitApi.repositories.length > 0) {
+        gitApi.repositories.forEach((repo: any) => {
+            const disposable = repo.state.onDidChange(() => {
+                console.log('Git repository state changed - refreshing Twig view');
+                treeDataProvider.refresh();
+            });
+            context.subscriptions.push(disposable);
+        });
+
+        const onDidOpenRepository = gitApi.onDidOpenRepository((repo: any) => {
+            console.log('New Git repository opened - setting up watchers');
+            const disposable = repo.state.onDidChange(() => {
+                console.log('Git repository state changed - refreshing Twig view');
+                treeDataProvider.refresh();
+            });
+            context.subscriptions.push(disposable);
+        });
+        context.subscriptions.push(onDidOpenRepository);
     }
     
     // Also watch for file system changes to .twig directory
@@ -334,19 +318,16 @@ function setupGitRepositoryWatchers(context: vscode.ExtensionContext, treeDataPr
         twigWatcher.onDidChange(() => {
             console.log('.twig/state.json changed - refreshing Twig view');
             treeDataProvider.refresh();
-            updateStatusBar();
         });
         
         twigWatcher.onDidCreate(() => {
             console.log('.twig/state.json created - refreshing Twig view');
             treeDataProvider.refresh();
-            updateStatusBar();
         });
         
         twigWatcher.onDidDelete(() => {
             console.log('.twig/state.json deleted - refreshing Twig view');
             treeDataProvider.refresh();
-            updateStatusBar();
         });
         
         context.subscriptions.push(twigWatcher);
@@ -361,7 +342,6 @@ function setupGitRepositoryWatchers(context: vscode.ExtensionContext, treeDataPr
         gitHeadWatcher.onDidChange(() => {
             console.log('.git/HEAD changed - refreshing Twig view');
             treeDataProvider.refresh();
-            updateStatusBar();
         });
         
         context.subscriptions.push(gitHeadWatcher);
@@ -376,19 +356,16 @@ function setupGitRepositoryWatchers(context: vscode.ExtensionContext, treeDataPr
         gitRefsWatcher.onDidCreate(() => {
             console.log('Git branch created - refreshing Twig view');
             treeDataProvider.refresh();
-            updateStatusBar();
         });
         
         gitRefsWatcher.onDidDelete(() => {
             console.log('Git branch deleted - refreshing Twig view');
             treeDataProvider.refresh();
-            updateStatusBar();
         });
         
         gitRefsWatcher.onDidChange(() => {
             console.log('Git branch updated - refreshing Twig view');
             treeDataProvider.refresh();
-            updateStatusBar();
         });
         
         context.subscriptions.push(gitRefsWatcher);
@@ -404,7 +381,6 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('twig.refreshBranchTree', () => {
             treeDataProvider.refresh();
-            updateStatusBarFromTree();
         })
     );
     context.subscriptions.push(
@@ -461,9 +437,8 @@ export function activate(context: vscode.ExtensionContext) {
                         vscode.window.showErrorMessage(`Failed to switch branch: ${stderr ? stderr : err.message}`);
                     } else {
                         vscode.window.showInformationMessage(`Successfully switched to branch: ${targetBranch}`);
-                        // Refresh the tree view and status bar
+                        // Refresh the tree view to reflect the new state
                         treeDataProvider.refresh();
-                        updateStatusBarFromTree();
                     }
                     resolve();
                 });
@@ -518,9 +493,8 @@ export function activate(context: vscode.ExtensionContext) {
                                     vscode.window.showErrorMessage(`Failed to create branch: ${stderr1 ? stderr1 : err1.message}`);
                                 } else {
                                     vscode.window.showInformationMessage(`Successfully created and switched to branch: ${newBranch}`);
-                                    // Refresh the tree view and status bar
+                                    // Refresh the tree view to reflect the new state
                                     treeDataProvider.refresh();
-                                    updateStatusBarFromTree();
                                 }
                                 resolve();
                             });
@@ -530,11 +504,6 @@ export function activate(context: vscode.ExtensionContext) {
             });
         })
     );
-    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-    context.subscriptions.push(statusBarItem);
-    updateStatusBarFromTree();
-    vscode.workspace.onDidChangeWorkspaceFolders(updateStatusBarFromTree);
-    vscode.workspace.onDidChangeConfiguration(updateStatusBarFromTree);
 }
 
 export function deactivate() {}

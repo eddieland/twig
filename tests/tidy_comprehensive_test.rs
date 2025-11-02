@@ -1,8 +1,8 @@
 //! Comprehensive tests for tidy command Components 3.1-3.5
-//! 
+//!
 //! This module tests all aspects of the tidy command functionality:
 //! - Component 3.1: Safe Branch Detection
-//! - Component 3.2: Aggressive Mode 
+//! - Component 3.2: Aggressive Mode
 //! - Component 3.3: Safety Features
 //! - Component 3.4: Configuration Cleanup
 //! - Component 3.5: CLI Integration
@@ -106,10 +106,7 @@ fn run_tidy_clean(repo_path: &Path, force: bool, aggressive: bool) -> Result<Str
 fn run_tidy_prune(repo_path: &Path, force: bool) -> Result<String> {
   use twig_cli::cli::tidy::{PruneArgs, handle_prune_command};
 
-  let args = PruneArgs {
-    dry_run: false,
-    force,
-  };
+  let args = PruneArgs { dry_run: false, force };
 
   match handle_prune_command(args) {
     Ok(_) => Ok("Prune completed successfully".to_string()),
@@ -126,26 +123,26 @@ fn test_component_3_1_safe_branch_detection() -> Result<()> {
 
   // Create initial setup
   create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
-  
+
   let head_commit = repo.head()?.peel_to_commit()?;
   repo.branch("main", &head_commit, false)?;
   checkout_branch(repo, "main")?;
 
   // Create feature branch with no changes (should be detected as safe to delete)
   create_branch(repo, "feature-no-changes", Some("main"))?;
-  
+
   // Create feature branch with changes (should NOT be detected as safe to delete)
   create_branch(repo, "feature-with-changes", Some("main"))?;
   checkout_branch(repo, "feature-with-changes")?;
   create_commit(repo, "feature.txt", "Feature content", "Feature commit")?;
-  
+
   // Create current branch (should NOT be detected as safe to delete)
   create_branch(repo, "current-branch", Some("main"))?;
   checkout_branch(repo, "current-branch")?;
 
   // Set up dependencies
   add_branch_dependency(repo_path, "feature-no-changes", "main")?;
-  add_branch_dependency(repo_path, "feature-with-changes", "main")?;  
+  add_branch_dependency(repo_path, "feature-with-changes", "main")?;
   add_branch_dependency(repo_path, "current-branch", "main")?;
   add_root_branch(repo_path, "main", true)?;
 
@@ -161,10 +158,10 @@ fn test_component_3_1_safe_branch_detection() -> Result<()> {
 
   assert!(branches_before.contains(&"feature-no-changes".to_string()));
   assert!(branches_before.contains(&"feature-with-changes".to_string()));
-  
+
   // The tidy command should only detect feature-no-changes as safe to delete
   // (current-branch is current, feature-with-changes has commits)
-  
+
   Ok(())
 }
 
@@ -178,14 +175,14 @@ fn test_component_3_2_aggressive_mode() -> Result<()> {
   // Create initial setup: main -> feature1 -> feature2
   // where feature1 has no changes (should be reparented)
   create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
-  
+
   let head_commit = repo.head()?.peel_to_commit()?;
   repo.branch("main", &head_commit, false)?;
   checkout_branch(repo, "main")?;
 
   // Create feature1 with no changes
   create_branch(repo, "feature1", Some("main"))?;
-  
+
   // Create feature2 with changes
   create_branch(repo, "feature2", Some("feature1"))?;
   checkout_branch(repo, "feature2")?;
@@ -198,15 +195,19 @@ fn test_component_3_2_aggressive_mode() -> Result<()> {
 
   // Load state before aggressive cleanup
   let repo_state_before = RepoState::load(repo_path)?;
-  
+
   // Verify initial dependencies
   assert!(repo_state_before.get_dependency_children("main").contains(&"feature1"));
-  assert!(repo_state_before.get_dependency_children("feature1").contains(&"feature2"));
+  assert!(
+    repo_state_before
+      .get_dependency_children("feature1")
+      .contains(&"feature2")
+  );
 
   // Run aggressive cleanup
   checkout_branch(repo, "main")?; // Switch away from feature2
   let result = run_tidy_clean(repo_path, true, true)?;
-  
+
   // Should successfully reparent feature2 directly to main and delete feature1
   assert!(result.contains("successfully") || result.contains("completed"));
 
@@ -222,21 +223,21 @@ fn test_component_3_3_safety_features() -> Result<()> {
 
   // Create setup with branch that could be cleaned
   create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
-  
+
   let head_commit = repo.head()?.peel_to_commit()?;
   repo.branch("main", &head_commit, false)?;
   checkout_branch(repo, "main")?;
 
   create_branch(repo, "feature-safe-to-delete", Some("main"))?;
-  
+
   add_branch_dependency(repo_path, "feature-safe-to-delete", "main")?;
   add_root_branch(repo_path, "main", true)?;
 
   // Test dry run functionality
   use twig_cli::cli::tidy::{CleanArgs, handle_clean_command};
-  
+
   let dry_run_args = CleanArgs {
-    dry_run: true,  // Should show what would be deleted without actually doing it
+    dry_run: true, // Should show what would be deleted without actually doing it
     force: false,
     aggressive: false,
   };
@@ -264,11 +265,11 @@ fn test_component_3_3_safety_features() -> Result<()> {
 
   // Dry run should not change anything
   assert_eq!(branches_before.len(), branches_after_dry_run.len());
-  
+
   Ok(())
 }
 
-#[test] 
+#[test]
 fn test_component_3_4_configuration_cleanup() -> Result<()> {
   // Component 3.4: Configuration Cleanup - Prune deleted branches
   let git_repo = GitRepoTestGuard::new_and_change_dir();
@@ -277,7 +278,7 @@ fn test_component_3_4_configuration_cleanup() -> Result<()> {
 
   // Create initial setup
   create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
-  
+
   let head_commit = repo.head()?.peel_to_commit()?;
   repo.branch("main", &head_commit, false)?;
   checkout_branch(repo, "main")?;
@@ -292,7 +293,7 @@ fn test_component_3_4_configuration_cleanup() -> Result<()> {
   // Load state - should still have reference to deleted branch
   let repo_state_before = RepoState::load(repo_path)?;
   let dependencies_before = repo_state_before.dependencies.len();
-  
+
   // Should have stale dependency reference
   assert!(dependencies_before > 0);
 
@@ -303,7 +304,7 @@ fn test_component_3_4_configuration_cleanup() -> Result<()> {
   // Load state after prune - should have cleaned up the stale reference
   let repo_state_after = RepoState::load(repo_path)?;
   let dependencies_after = repo_state_after.dependencies.len();
-  
+
   // Should have fewer dependencies after cleanup
   assert!(dependencies_after < dependencies_before);
 
@@ -313,7 +314,7 @@ fn test_component_3_4_configuration_cleanup() -> Result<()> {
 #[test]
 fn test_component_3_5_cli_integration() -> Result<()> {
   // Component 3.5: CLI Integration - Command routing and help
-  use twig_cli::cli::tidy::{TidyArgs, TidyCommand, CleanArgs, PruneArgs, handle_tidy_command};
+  use twig_cli::cli::tidy::{CleanArgs, PruneArgs, TidyArgs, TidyCommand, handle_tidy_command};
 
   // Test subcommand routing
   let clean_args = TidyArgs {
@@ -331,7 +332,7 @@ fn test_component_3_5_cli_integration() -> Result<()> {
       dry_run: true,
       force: false,
     })),
-    dry_run: false, 
+    dry_run: false,
     force: false,
   };
 
@@ -343,7 +344,8 @@ fn test_component_3_5_cli_integration() -> Result<()> {
   };
 
   // These should not panic and route correctly
-  // (We can't easily test the actual execution without a repo, but we can test structure)
+  // (We can't easily test the actual execution without a repo, but we can test
+  // structure)
   assert!(matches!(clean_args.command, Some(TidyCommand::Clean(_))));
   assert!(matches!(prune_args.command, Some(TidyCommand::Prune(_))));
   assert!(legacy_args.command.is_none()); // Should trigger backward compatibility
@@ -359,15 +361,15 @@ fn test_tidy_preserves_branches_with_children() -> Result<()> {
   let repo_path = git_repo.path();
 
   create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
-  
+
   let head_commit = repo.head()?.peel_to_commit()?;
   repo.branch("main", &head_commit, false)?;
   checkout_branch(repo, "main")?;
 
   // Create parent branch with no changes
   create_branch(repo, "parent-no-changes", Some("main"))?;
-  
-  // Create child branch  
+
+  // Create child branch
   create_branch(repo, "child-branch", Some("parent-no-changes"))?;
   checkout_branch(repo, "child-branch")?;
   create_commit(repo, "child.txt", "Child content", "Child commit")?;
@@ -397,7 +399,7 @@ fn test_tidy_complex_dependency_chain() -> Result<()> {
   let repo_path = git_repo.path();
 
   create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
-  
+
   let head_commit = repo.head()?.peel_to_commit()?;
   repo.branch("main", &head_commit, false)?;
   checkout_branch(repo, "main")?;
@@ -407,7 +409,7 @@ fn test_tidy_complex_dependency_chain() -> Result<()> {
   create_branch(repo, "branch-a", Some("main"))?;
   create_branch(repo, "branch-b", Some("branch-a"))?;
   create_branch(repo, "branch-c", Some("branch-b"))?;
-  
+
   // Only add changes to branch-c
   checkout_branch(repo, "branch-c")?;
   create_commit(repo, "c.txt", "C content", "C commit")?;

@@ -8,8 +8,8 @@ use std::io::{self, Write};
 
 use owo_colors::OwoColorize;
 
-use crate::state::BranchMetadata;
 use crate::diamond_detector::{DiamondDetector, DiamondPattern};
+use crate::state::BranchMetadata;
 
 /// Information about a branch's role in diamond patterns
 #[derive(Debug, Default)]
@@ -158,9 +158,9 @@ impl<'a> TreeRenderer<'a> {
 
   /// Enhanced cross-reference rendering with better visual indicators
   pub fn render_with_enhanced_cross_refs<W: Write>(
-    &mut self, 
-    writer: &mut W, 
-    roots: &[String], 
+    &mut self,
+    writer: &mut W,
+    roots: &[String],
     delimiter: Option<&str>,
     show_cross_refs: bool,
     max_ref_depth: Option<u32>,
@@ -184,7 +184,9 @@ impl<'a> TreeRenderer<'a> {
     self.visited.clear();
 
     for (i, root) in roots.iter().enumerate() {
-      if let Some(delim) = delimiter && i > 0 {
+      if let Some(delim) = delimiter
+        && i > 0
+      {
         write!(writer, "{delim}")?;
       }
       let is_last_root = i == roots.len() - 1;
@@ -214,14 +216,18 @@ impl<'a> TreeRenderer<'a> {
     circular_deps: &[Vec<String>],
   ) -> io::Result<()> {
     // Check max depth
-    if let Some(max_depth) = self.max_depth && depth > max_depth {
+    if let Some(max_depth) = self.max_depth
+      && depth > max_depth
+    {
       return Ok(());
     }
 
     // Enhanced circular dependency check - don't just avoid infinite loops,
     // but provide clear indicators when we encounter circular references
-    let is_in_circular_dep = circular_deps.iter().any(|cycle| cycle.contains(&branch_name.to_string()));
-    
+    let is_in_circular_dep = circular_deps
+      .iter()
+      .any(|cycle| cycle.contains(&branch_name.to_string()));
+
     if self.visited.contains(branch_name) {
       // Branch already visited - show reference indicator
       self.print_branch_reference(writer, branch_name, depth, prefix, is_last_sibling, is_in_circular_dep)?;
@@ -254,7 +260,7 @@ impl<'a> TreeRenderer<'a> {
 
     for (i, child) in children.iter().enumerate() {
       let is_last = i == child_count - 1;
-      
+
       // Check if we should limit cross-reference depth
       let should_render_child = if let Some(max_ref_depth) = max_ref_depth {
         depth < max_ref_depth || !self.cross_refs.contains_key(child)
@@ -275,7 +281,15 @@ impl<'a> TreeRenderer<'a> {
         }
 
         // Recursively render child
-        self.render_tree_with_enhanced_cross_refs(writer, child, depth + 1, &new_prefix, is_last, max_ref_depth, circular_deps)?;
+        self.render_tree_with_enhanced_cross_refs(
+          writer,
+          child,
+          depth + 1,
+          &new_prefix,
+          is_last,
+          max_ref_depth,
+          circular_deps,
+        )?;
       }
     }
 
@@ -772,9 +786,9 @@ impl<'a> TreeRenderer<'a> {
 
   /// Render tree with enhanced diamond pattern visualization
   pub fn render_with_diamonds<W: Write>(
-    &mut self, 
-    writer: &mut W, 
-    roots: &[String], 
+    &mut self,
+    writer: &mut W,
+    roots: &[String],
     delimiter: Option<&str>,
     show_diamonds: bool,
   ) -> io::Result<()> {
@@ -789,7 +803,9 @@ impl<'a> TreeRenderer<'a> {
     self.visited.clear();
 
     for (i, root) in roots.iter().enumerate() {
-      if let Some(delim) = delimiter && i > 0 {
+      if let Some(delim) = delimiter
+        && i > 0
+      {
         write!(writer, "{delim}")?;
       }
       let is_last_root = i == roots.len() - 1;
@@ -809,7 +825,9 @@ impl<'a> TreeRenderer<'a> {
     diamond_patterns: &[DiamondPattern],
   ) -> io::Result<()> {
     // Check max depth
-    if let Some(max_depth) = self.max_depth && depth > max_depth {
+    if let Some(max_depth) = self.max_depth
+      && depth > max_depth
+    {
       return Ok(());
     }
 
@@ -925,7 +943,7 @@ impl<'a> TreeRenderer<'a> {
       // Use special symbols for diamond ancestors
       if is_last_sibling { "└◇─ " } else { "├◇─ " }.to_string()
     } else if diamond_info.is_diamond_merge {
-      // Use special symbols for diamond merge points  
+      // Use special symbols for diamond merge points
       if is_last_sibling { "└◆─ " } else { "├◆─ " }.to_string()
     } else if diamond_info.is_diamond_path {
       // Use special symbols for diamond path branches
@@ -1044,7 +1062,7 @@ impl<'a> TreeRenderer<'a> {
     config: &DeepNestingConfig,
   ) -> io::Result<RenderStats> {
     let mut stats = RenderStats::default();
-    
+
     // Pre-calculate tree statistics
     stats.total_branches = self.branch_nodes.len();
     stats.memory_usage_estimate = self.estimate_memory_usage();
@@ -1055,7 +1073,8 @@ impl<'a> TreeRenderer<'a> {
 
     if !circular_deps.is_empty() {
       writeln!(writer, "⚠️  {} circular dependencies detected", circular_deps.len())?;
-      for (i, cycle) in circular_deps.iter().enumerate().take(3) { // Show max 3 cycles
+      for (i, cycle) in circular_deps.iter().enumerate().take(3) {
+        // Show max 3 cycles
         writeln!(writer, "  Cycle {}: {}", i + 1, cycle.join(" → "))?;
       }
       if circular_deps.len() > 3 {
@@ -1066,7 +1085,11 @@ impl<'a> TreeRenderer<'a> {
 
     // Check if we need to prune the tree
     if config.enable_pruning && stats.total_branches > config.prune_threshold {
-      writeln!(writer, "🌳 Large tree detected ({} branches). Applying intelligent pruning...", stats.total_branches)?;
+      writeln!(
+        writer,
+        "🌳 Large tree detected ({} branches). Applying intelligent pruning...",
+        stats.total_branches
+      )?;
       writeln!(writer)?;
     }
 
@@ -1076,18 +1099,10 @@ impl<'a> TreeRenderer<'a> {
       if i > 0 {
         writeln!(writer)?;
       }
-      
-      let branch_stats = self.render_branch_with_deep_nesting(
-        writer, 
-        root, 
-        0, 
-        &[], 
-        true, 
-        config,
-        &mut stats,
-        &circular_deps
-      )?;
-      
+
+      let branch_stats =
+        self.render_branch_with_deep_nesting(writer, root, 0, &[], true, config, &mut stats, &circular_deps)?;
+
       stats.max_depth_reached = stats.max_depth_reached.max(branch_stats.max_depth_reached);
       stats.branches_pruned += branch_stats.branches_pruned;
     }
@@ -1135,8 +1150,10 @@ impl<'a> TreeRenderer<'a> {
     }
 
     // Check if already visited
-    let is_in_circular_dep = circular_deps.iter().any(|cycle| cycle.contains(&branch_name.to_string()));
-    
+    let is_in_circular_dep = circular_deps
+      .iter()
+      .any(|cycle| cycle.contains(&branch_name.to_string()));
+
     if self.visited.contains(branch_name) {
       self.print_branch_reference(writer, branch_name, depth, prefix, is_last_sibling, is_in_circular_dep)?;
       return Ok(branch_stats);
@@ -1169,7 +1186,7 @@ impl<'a> TreeRenderer<'a> {
       for page in 0..((child_count + config.page_size - 1) / config.page_size) {
         let start = page * config.page_size;
         let end = std::cmp::min(start + config.page_size, child_count);
-        
+
         if page > 0 {
           self.print_pagination_separator(writer, depth + 1, prefix, page, start, end, child_count)?;
         }
@@ -1182,21 +1199,25 @@ impl<'a> TreeRenderer<'a> {
 
           let mut new_prefix = prefix.to_vec();
           if depth > 0 {
-            let next_symbol = if is_last { "    ".to_string() } else { "│   ".to_string() };
+            let next_symbol = if is_last {
+              "    ".to_string()
+            } else {
+              "│   ".to_string()
+            };
             new_prefix.push(next_symbol);
           }
 
           let child_stats = self.render_branch_with_deep_nesting(
-            writer, 
-            child, 
-            depth + 1, 
-            &new_prefix, 
-            is_last, 
-            config, 
-            stats, 
-            circular_deps
+            writer,
+            child,
+            depth + 1,
+            &new_prefix,
+            is_last,
+            config,
+            stats,
+            circular_deps,
           )?;
-          
+
           branch_stats.max_depth_reached = branch_stats.max_depth_reached.max(child_stats.max_depth_reached);
           branch_stats.branches_pruned += child_stats.branches_pruned;
         }
@@ -1208,21 +1229,25 @@ impl<'a> TreeRenderer<'a> {
 
         let mut new_prefix = prefix.to_vec();
         if depth > 0 {
-          let next_symbol = if is_last { "    ".to_string() } else { "│   ".to_string() };
+          let next_symbol = if is_last {
+            "    ".to_string()
+          } else {
+            "│   ".to_string()
+          };
           new_prefix.push(next_symbol);
         }
 
         let child_stats = self.render_branch_with_deep_nesting(
-          writer, 
-          child, 
-          depth + 1, 
-          &new_prefix, 
-          is_last, 
-          config, 
-          stats, 
-          circular_deps
+          writer,
+          child,
+          depth + 1,
+          &new_prefix,
+          is_last,
+          config,
+          stats,
+          circular_deps,
         )?;
-        
+
         branch_stats.max_depth_reached = branch_stats.max_depth_reached.max(child_stats.max_depth_reached);
         branch_stats.branches_pruned += child_stats.branches_pruned;
       }
@@ -1362,9 +1387,11 @@ impl<'a> TreeRenderer<'a> {
     let pruning_msg = if self.no_color {
       format!("{} ... [pruned subtree with {} children] ...", branch_name, child_count)
     } else {
-      format!("{} ... [pruned subtree with {} children] ...", 
-              branch_name, 
-              child_count.to_string().yellow())
+      format!(
+        "{} ... [pruned subtree with {} children] ...",
+        branch_name,
+        child_count.to_string().yellow()
+      )
     };
     line.push_str(&pruning_msg);
 
@@ -1392,11 +1419,13 @@ impl<'a> TreeRenderer<'a> {
     let separator_msg = if self.no_color {
       format!("├── ... Page {} ({}-{} of {}) ...", page + 1, start + 1, end, total)
     } else {
-      format!("├── ... Page {} ({}-{} of {}) ...", 
-              (page + 1).to_string().cyan(),
-              (start + 1).to_string().cyan(),
-              end.to_string().cyan(),
-              total.to_string().cyan())
+      format!(
+        "├── ... Page {} ({}-{} of {}) ...",
+        (page + 1).to_string().cyan(),
+        (start + 1).to_string().cyan(),
+        end.to_string().cyan(),
+        total.to_string().cyan()
+      )
     };
     line.push_str(&separator_msg);
 
@@ -1454,7 +1483,7 @@ impl<'a> TreeRenderer<'a> {
   /// Estimate memory usage of the tree
   fn estimate_memory_usage(&self) -> usize {
     let mut size = 0;
-    
+
     for (name, node) in self.branch_nodes {
       size += name.len();
       size += node.name.len();
@@ -1462,10 +1491,10 @@ impl<'a> TreeRenderer<'a> {
       size += node.children.iter().map(|c| c.len()).sum::<usize>();
       size += 64; // Estimate for struct overhead
     }
-    
+
     size += self.cross_refs.len() * 64; // Cross-refs map overhead
     size += self.visited.len() * 32; // Visited set overhead
-    
+
     size
   }
 }
@@ -2368,12 +2397,34 @@ mod tests {
   #[test]
   fn test_diamond_visualization() {
     let mut branches = HashMap::new();
-    
+
     // Create a simple diamond: main -> feature1, feature2 -> merge
-    branches.insert("main".to_string(), create_test_branch("main", false, vec![], vec!["feature1".to_string(), "feature2".to_string()]));
-    branches.insert("feature1".to_string(), create_test_branch("feature1", false, vec!["main".to_string()], vec!["merge".to_string()]));
-    branches.insert("feature2".to_string(), create_test_branch("feature2", false, vec!["main".to_string()], vec!["merge".to_string()]));
-    branches.insert("merge".to_string(), create_test_branch("merge", false, vec!["feature1".to_string(), "feature2".to_string()], vec![]));
+    branches.insert(
+      "main".to_string(),
+      create_test_branch(
+        "main",
+        false,
+        vec![],
+        vec!["feature1".to_string(), "feature2".to_string()],
+      ),
+    );
+    branches.insert(
+      "feature1".to_string(),
+      create_test_branch("feature1", false, vec!["main".to_string()], vec!["merge".to_string()]),
+    );
+    branches.insert(
+      "feature2".to_string(),
+      create_test_branch("feature2", false, vec!["main".to_string()], vec!["merge".to_string()]),
+    );
+    branches.insert(
+      "merge".to_string(),
+      create_test_branch(
+        "merge",
+        false,
+        vec!["feature1".to_string(), "feature2".to_string()],
+        vec![],
+      ),
+    );
 
     let roots = vec!["main".to_string()];
     let mut renderer = TreeRenderer::new(&branches, &roots, None, true);
@@ -2381,30 +2432,55 @@ mod tests {
     // Test diamond visualization
     let mut output = Vec::new();
     renderer.render_with_diamonds(&mut output, &roots, None, true).unwrap();
-    
+
     let output_str = String::from_utf8(output).unwrap();
     println!("Diamond visualization output:\n{}", output_str);
 
     // Verify diamond symbols are present
-    assert!(output_str.contains("◇") || output_str.contains("◆") || output_str.contains("◊"), 
-            "Expected diamond symbols in output: {}", output_str);
-    
+    assert!(
+      output_str.contains("◇") || output_str.contains("◆") || output_str.contains("◊"),
+      "Expected diamond symbols in output: {}",
+      output_str
+    );
+
     // Verify all branches are rendered
     assert!(output_str.contains("main"));
     assert!(output_str.contains("feature1"));
-    assert!(output_str.contains("feature2")); 
+    assert!(output_str.contains("feature2"));
     assert!(output_str.contains("merge"));
   }
 
   #[test]
   fn test_diamond_vs_regular_rendering() {
     let mut branches = HashMap::new();
-    
+
     // Create a simple diamond
-    branches.insert("main".to_string(), create_test_branch("main", false, vec![], vec!["feature1".to_string(), "feature2".to_string()]));
-    branches.insert("feature1".to_string(), create_test_branch("feature1", false, vec!["main".to_string()], vec!["merge".to_string()]));
-    branches.insert("feature2".to_string(), create_test_branch("feature2", false, vec!["main".to_string()], vec!["merge".to_string()]));
-    branches.insert("merge".to_string(), create_test_branch("merge", false, vec!["feature1".to_string(), "feature2".to_string()], vec![]));
+    branches.insert(
+      "main".to_string(),
+      create_test_branch(
+        "main",
+        false,
+        vec![],
+        vec!["feature1".to_string(), "feature2".to_string()],
+      ),
+    );
+    branches.insert(
+      "feature1".to_string(),
+      create_test_branch("feature1", false, vec!["main".to_string()], vec!["merge".to_string()]),
+    );
+    branches.insert(
+      "feature2".to_string(),
+      create_test_branch("feature2", false, vec!["main".to_string()], vec!["merge".to_string()]),
+    );
+    branches.insert(
+      "merge".to_string(),
+      create_test_branch(
+        "merge",
+        false,
+        vec!["feature1".to_string(), "feature2".to_string()],
+        vec![],
+      ),
+    );
 
     let roots = vec!["main".to_string()];
     let mut renderer = TreeRenderer::new(&branches, &roots, None, true);
@@ -2417,12 +2493,17 @@ mod tests {
     // Test diamond rendering
     renderer.visited.clear(); // Reset for second rendering
     let mut diamond_output = Vec::new();
-    renderer.render_with_diamonds(&mut diamond_output, &roots, None, true).unwrap();
+    renderer
+      .render_with_diamonds(&mut diamond_output, &roots, None, true)
+      .unwrap();
     let diamond_str = String::from_utf8(diamond_output).unwrap();
 
     // They should be different (diamond rendering should have special symbols)
-    assert_ne!(regular_str, diamond_str, "Diamond and regular rendering should be different");
-    
+    assert_ne!(
+      regular_str, diamond_str,
+      "Diamond and regular rendering should be different"
+    );
+
     // Both should contain all branch names
     for branch in ["main", "feature1", "feature2", "merge"] {
       assert!(regular_str.contains(branch), "Regular output should contain {}", branch);
@@ -2433,18 +2514,27 @@ mod tests {
   #[test]
   fn test_circular_dependency_detection() {
     let mut branches = HashMap::new();
-    
+
     // Create a circular dependency: A -> B -> C -> A
-    branches.insert("A".to_string(), create_test_branch("A", false, vec!["C".to_string()], vec!["B".to_string()]));
-    branches.insert("B".to_string(), create_test_branch("B", false, vec!["A".to_string()], vec!["C".to_string()]));
-    branches.insert("C".to_string(), create_test_branch("C", false, vec!["B".to_string()], vec!["A".to_string()]));
+    branches.insert(
+      "A".to_string(),
+      create_test_branch("A", false, vec!["C".to_string()], vec!["B".to_string()]),
+    );
+    branches.insert(
+      "B".to_string(),
+      create_test_branch("B", false, vec!["A".to_string()], vec!["C".to_string()]),
+    );
+    branches.insert(
+      "C".to_string(),
+      create_test_branch("C", false, vec!["B".to_string()], vec!["A".to_string()]),
+    );
 
     let roots = vec!["A".to_string()];
     let renderer = TreeRenderer::new(&branches, &roots, None, true);
 
     let circular_deps = renderer.detect_circular_dependencies();
     assert!(!circular_deps.is_empty(), "Should detect circular dependency");
-    
+
     // Verify the cycle contains the expected branches
     let cycle = &circular_deps[0];
     assert!(cycle.len() >= 3, "Cycle should contain at least 3 branches");
@@ -2456,28 +2546,52 @@ mod tests {
   #[test]
   fn test_enhanced_cross_reference_rendering() {
     let mut branches = HashMap::new();
-    
+
     // Create branches with multiple parents and cross-references
-    branches.insert("main".to_string(), create_test_branch("main", false, vec![], vec!["feature1".to_string(), "feature2".to_string()]));
-    branches.insert("feature1".to_string(), create_test_branch("feature1", false, vec!["main".to_string()], vec!["merge".to_string()]));
-    branches.insert("feature2".to_string(), create_test_branch("feature2", false, vec!["main".to_string()], vec!["merge".to_string()]));
-    branches.insert("merge".to_string(), create_test_branch("merge", false, vec!["feature1".to_string(), "feature2".to_string()], vec![]));
+    branches.insert(
+      "main".to_string(),
+      create_test_branch(
+        "main",
+        false,
+        vec![],
+        vec!["feature1".to_string(), "feature2".to_string()],
+      ),
+    );
+    branches.insert(
+      "feature1".to_string(),
+      create_test_branch("feature1", false, vec!["main".to_string()], vec!["merge".to_string()]),
+    );
+    branches.insert(
+      "feature2".to_string(),
+      create_test_branch("feature2", false, vec!["main".to_string()], vec!["merge".to_string()]),
+    );
+    branches.insert(
+      "merge".to_string(),
+      create_test_branch(
+        "merge",
+        false,
+        vec!["feature1".to_string(), "feature2".to_string()],
+        vec![],
+      ),
+    );
 
     let roots = vec!["main".to_string()];
     let mut renderer = TreeRenderer::new(&branches, &roots, None, true);
 
     let mut output = Vec::new();
-    renderer.render_with_enhanced_cross_refs(&mut output, &roots, None, true, Some(10)).unwrap();
-    
+    renderer
+      .render_with_enhanced_cross_refs(&mut output, &roots, None, true, Some(10))
+      .unwrap();
+
     let output_str = String::from_utf8(output).unwrap();
     println!("Enhanced cross-reference output:\n{}", output_str);
 
     // Should contain cross-references summary
     assert!(output_str.contains("Cross-references summary"));
-    
+
     // Should contain merge branch with multiple parents indicator
     assert!(output_str.contains("merge"));
-    
+
     // Should show the cross-reference in summary
     assert!(output_str.contains("merge ← feature1, feature2"));
   }
@@ -2485,13 +2599,33 @@ mod tests {
   #[test]
   fn test_branch_reference_indicators() {
     let mut branches = HashMap::new();
-    
+
     // Create a simple case where a branch appears multiple times
-    branches.insert("main".to_string(), create_test_branch("main", false, vec![], vec!["feature1".to_string()]));
-    branches.insert("feature1".to_string(), create_test_branch("feature1", false, vec!["main".to_string()], vec!["sub1".to_string(), "sub2".to_string()]));
-    branches.insert("sub1".to_string(), create_test_branch("sub1", false, vec!["feature1".to_string()], vec!["common".to_string()]));
-    branches.insert("sub2".to_string(), create_test_branch("sub2", false, vec!["feature1".to_string()], vec!["common".to_string()]));
-    branches.insert("common".to_string(), create_test_branch("common", false, vec!["sub1".to_string(), "sub2".to_string()], vec![]));
+    branches.insert(
+      "main".to_string(),
+      create_test_branch("main", false, vec![], vec!["feature1".to_string()]),
+    );
+    branches.insert(
+      "feature1".to_string(),
+      create_test_branch(
+        "feature1",
+        false,
+        vec!["main".to_string()],
+        vec!["sub1".to_string(), "sub2".to_string()],
+      ),
+    );
+    branches.insert(
+      "sub1".to_string(),
+      create_test_branch("sub1", false, vec!["feature1".to_string()], vec!["common".to_string()]),
+    );
+    branches.insert(
+      "sub2".to_string(),
+      create_test_branch("sub2", false, vec!["feature1".to_string()], vec!["common".to_string()]),
+    );
+    branches.insert(
+      "common".to_string(),
+      create_test_branch("common", false, vec!["sub1".to_string(), "sub2".to_string()], vec![]),
+    );
 
     let roots = vec!["main".to_string()];
     let renderer = TreeRenderer::new(&branches, &roots, None, true);
@@ -2499,7 +2633,7 @@ mod tests {
     // Test reference count calculation
     let common_refs = renderer.count_branch_references("common");
     assert_eq!(common_refs, 2, "Common branch should have 2 references");
-    
+
     let feature1_refs = renderer.count_branch_references("feature1");
     assert_eq!(feature1_refs, 1, "Feature1 branch should have 1 reference");
   }
@@ -2507,32 +2641,61 @@ mod tests {
   #[test]
   fn test_no_circular_dependency_in_normal_tree() {
     let mut branches = HashMap::new();
-    
+
     // Create a normal tree without circular dependencies
-    branches.insert("main".to_string(), create_test_branch("main", false, vec![], vec!["feature1".to_string(), "feature2".to_string()]));
-    branches.insert("feature1".to_string(), create_test_branch("feature1", false, vec!["main".to_string()], vec![]));
-    branches.insert("feature2".to_string(), create_test_branch("feature2", false, vec!["main".to_string()], vec![]));
+    branches.insert(
+      "main".to_string(),
+      create_test_branch(
+        "main",
+        false,
+        vec![],
+        vec!["feature1".to_string(), "feature2".to_string()],
+      ),
+    );
+    branches.insert(
+      "feature1".to_string(),
+      create_test_branch("feature1", false, vec!["main".to_string()], vec![]),
+    );
+    branches.insert(
+      "feature2".to_string(),
+      create_test_branch("feature2", false, vec!["main".to_string()], vec![]),
+    );
 
     let roots = vec!["main".to_string()];
     let renderer = TreeRenderer::new(&branches, &roots, None, true);
 
     let circular_deps = renderer.detect_circular_dependencies();
-    assert!(circular_deps.is_empty(), "Normal tree should have no circular dependencies");
+    assert!(
+      circular_deps.is_empty(),
+      "Normal tree should have no circular dependencies"
+    );
   }
 
   #[test]
   fn test_deep_nesting_basic_rendering() {
     let mut branches = HashMap::new();
-    
+
     // Create a deeply nested tree: main -> level1 -> level2 -> level3
-    branches.insert("main".to_string(), create_test_branch("main", false, vec![], vec!["level1".to_string()]));
-    branches.insert("level1".to_string(), create_test_branch("level1", false, vec!["main".to_string()], vec!["level2".to_string()]));
-    branches.insert("level2".to_string(), create_test_branch("level2", false, vec!["level1".to_string()], vec!["level3".to_string()]));
-    branches.insert("level3".to_string(), create_test_branch("level3", false, vec!["level2".to_string()], vec![]));
+    branches.insert(
+      "main".to_string(),
+      create_test_branch("main", false, vec![], vec!["level1".to_string()]),
+    );
+    branches.insert(
+      "level1".to_string(),
+      create_test_branch("level1", false, vec!["main".to_string()], vec!["level2".to_string()]),
+    );
+    branches.insert(
+      "level2".to_string(),
+      create_test_branch("level2", false, vec!["level1".to_string()], vec!["level3".to_string()]),
+    );
+    branches.insert(
+      "level3".to_string(),
+      create_test_branch("level3", false, vec!["level2".to_string()], vec![]),
+    );
 
     let roots = vec!["main".to_string()];
     let mut renderer = TreeRenderer::new(&branches, &roots, None, true);
-    
+
     let config = DeepNestingConfig {
       max_depth: Some(10),
       max_branches_per_level: Some(50),
@@ -2545,7 +2708,7 @@ mod tests {
 
     let mut output = Vec::new();
     let stats = renderer.render_with_deep_nesting(&mut output, &roots, &config).unwrap();
-    
+
     let output_str = String::from_utf8(output).unwrap();
     println!("Deep nesting basic output:\n{}", output_str);
 
@@ -2554,12 +2717,12 @@ mod tests {
     assert!(output_str.contains("level1"));
     assert!(output_str.contains("level2"));
     assert!(output_str.contains("level3"));
-    
+
     // Verify depth indicators are present
     assert!(output_str.contains("[depth:1]"));
     assert!(output_str.contains("[depth:2]"));
     assert!(output_str.contains("[depth:3]"));
-    
+
     // Verify statistics
     assert_eq!(stats.total_branches, 4);
     assert_eq!(stats.max_depth_reached, 3);
@@ -2569,17 +2732,32 @@ mod tests {
   #[test]
   fn test_deep_nesting_with_depth_limit() {
     let mut branches = HashMap::new();
-    
+
     // Create a deeply nested tree
-    branches.insert("main".to_string(), create_test_branch("main", false, vec![], vec!["level1".to_string()]));
-    branches.insert("level1".to_string(), create_test_branch("level1", false, vec!["main".to_string()], vec!["level2".to_string()]));
-    branches.insert("level2".to_string(), create_test_branch("level2", false, vec!["level1".to_string()], vec!["level3".to_string()]));
-    branches.insert("level3".to_string(), create_test_branch("level3", false, vec!["level2".to_string()], vec!["level4".to_string()]));
-    branches.insert("level4".to_string(), create_test_branch("level4", false, vec!["level3".to_string()], vec![]));
+    branches.insert(
+      "main".to_string(),
+      create_test_branch("main", false, vec![], vec!["level1".to_string()]),
+    );
+    branches.insert(
+      "level1".to_string(),
+      create_test_branch("level1", false, vec!["main".to_string()], vec!["level2".to_string()]),
+    );
+    branches.insert(
+      "level2".to_string(),
+      create_test_branch("level2", false, vec!["level1".to_string()], vec!["level3".to_string()]),
+    );
+    branches.insert(
+      "level3".to_string(),
+      create_test_branch("level3", false, vec!["level2".to_string()], vec!["level4".to_string()]),
+    );
+    branches.insert(
+      "level4".to_string(),
+      create_test_branch("level4", false, vec!["level3".to_string()], vec![]),
+    );
 
     let roots = vec!["main".to_string()];
     let mut renderer = TreeRenderer::new(&branches, &roots, None, true);
-    
+
     let config = DeepNestingConfig {
       max_depth: Some(2), // Limit depth to 2
       max_branches_per_level: Some(50),
@@ -2592,21 +2770,21 @@ mod tests {
 
     let mut output = Vec::new();
     let stats = renderer.render_with_deep_nesting(&mut output, &roots, &config).unwrap();
-    
+
     let output_str = String::from_utf8(output).unwrap();
     println!("Deep nesting with depth limit output:\n{}", output_str);
 
     // Verify truncation message appears
     assert!(output_str.contains("truncated at depth 2"));
-    
+
     // Verify some branches are not fully rendered
     assert!(output_str.contains("main"));
     assert!(output_str.contains("level1"));
     assert!(output_str.contains("level2"));
-    
+
     // level3 and level4 should be truncated
     assert!(!output_str.contains("level4") || output_str.contains("truncated"));
-    
+
     // Verify pruned branches are counted
     assert!(stats.branches_pruned > 0);
   }
@@ -2614,20 +2792,24 @@ mod tests {
   #[test]
   fn test_deep_nesting_with_pagination() {
     let mut branches = HashMap::new();
-    
+
     // Create a tree with many children at one level
     let mut children = Vec::new();
-    for i in 1..=15 { // 15 children to test pagination
+    for i in 1..=15 {
+      // 15 children to test pagination
       let child_name = format!("child{}", i);
       children.push(child_name.clone());
-      branches.insert(child_name.clone(), create_test_branch(&child_name, false, vec!["main".to_string()], vec![]));
+      branches.insert(
+        child_name.clone(),
+        create_test_branch(&child_name, false, vec!["main".to_string()], vec![]),
+      );
     }
-    
+
     branches.insert("main".to_string(), create_test_branch("main", false, vec![], children));
 
     let roots = vec!["main".to_string()];
     let mut renderer = TreeRenderer::new(&branches, &roots, None, true);
-    
+
     let config = DeepNestingConfig {
       max_depth: Some(10),
       max_branches_per_level: Some(50),
@@ -2640,17 +2822,17 @@ mod tests {
 
     let mut output = Vec::new();
     let stats = renderer.render_with_deep_nesting(&mut output, &roots, &config).unwrap();
-    
+
     let output_str = String::from_utf8(output).unwrap();
     println!("Deep nesting with pagination output:\n{}", output_str);
 
     // Verify pagination indicators appear
     assert!(output_str.contains("Page 2") || output_str.contains("Page 3"));
-    
+
     // Verify all children are eventually rendered
     assert!(output_str.contains("child1"));
     assert!(output_str.contains("child15"));
-    
+
     // Verify statistics
     assert_eq!(stats.total_branches, 16); // main + 15 children
   }
@@ -2658,20 +2840,24 @@ mod tests {
   #[test]
   fn test_deep_nesting_with_pruning() {
     let mut branches = HashMap::new();
-    
+
     // Create a tree that will trigger pruning
     let mut children = Vec::new();
-    for i in 1..=120 { // Many branches to trigger pruning threshold
+    for i in 1..=120 {
+      // Many branches to trigger pruning threshold
       let child_name = format!("child{}", i);
       children.push(child_name.clone());
-      branches.insert(child_name.clone(), create_test_branch(&child_name, false, vec!["main".to_string()], vec![]));
+      branches.insert(
+        child_name.clone(),
+        create_test_branch(&child_name, false, vec!["main".to_string()], vec![]),
+      );
     }
-    
+
     branches.insert("main".to_string(), create_test_branch("main", false, vec![], children));
 
     let roots = vec!["main".to_string()];
     let mut renderer = TreeRenderer::new(&branches, &roots, None, true);
-    
+
     let config = DeepNestingConfig {
       max_depth: Some(10),
       max_branches_per_level: Some(50),
@@ -2684,13 +2870,13 @@ mod tests {
 
     let mut output = Vec::new();
     let stats = renderer.render_with_deep_nesting(&mut output, &roots, &config).unwrap();
-    
+
     let output_str = String::from_utf8(output).unwrap();
     println!("Deep nesting with pruning output:\n{}", output_str);
 
     // Verify pruning message appears
     assert!(output_str.contains("Large tree detected") && output_str.contains("pruning"));
-    
+
     // Verify statistics
     assert_eq!(stats.total_branches, 121); // main + 120 children
   }
@@ -2698,15 +2884,24 @@ mod tests {
   #[test]
   fn test_deep_nesting_with_circular_dependencies() {
     let mut branches = HashMap::new();
-    
+
     // Create a tree with circular dependency
-    branches.insert("main".to_string(), create_test_branch("main", false, vec![], vec!["feature".to_string()]));
-    branches.insert("feature".to_string(), create_test_branch("feature", false, vec!["main".to_string()], vec!["hotfix".to_string()]));
-    branches.insert("hotfix".to_string(), create_test_branch("hotfix", false, vec!["feature".to_string()], vec!["main".to_string()])); // Creates cycle
+    branches.insert(
+      "main".to_string(),
+      create_test_branch("main", false, vec![], vec!["feature".to_string()]),
+    );
+    branches.insert(
+      "feature".to_string(),
+      create_test_branch("feature", false, vec!["main".to_string()], vec!["hotfix".to_string()]),
+    );
+    branches.insert(
+      "hotfix".to_string(),
+      create_test_branch("hotfix", false, vec!["feature".to_string()], vec!["main".to_string()]),
+    ); // Creates cycle
 
     let roots = vec!["main".to_string()];
     let mut renderer = TreeRenderer::new(&branches, &roots, None, true);
-    
+
     let config = DeepNestingConfig {
       max_depth: Some(10),
       max_branches_per_level: Some(50),
@@ -2719,16 +2914,16 @@ mod tests {
 
     let mut output = Vec::new();
     let stats = renderer.render_with_deep_nesting(&mut output, &roots, &config).unwrap();
-    
+
     let output_str = String::from_utf8(output).unwrap();
     println!("Deep nesting with circular deps output:\n{}", output_str);
 
     // Verify circular dependency warning appears
     assert!(output_str.contains("circular dependencies detected"));
-    
+
     // Verify circular dependency indicators
     assert!(output_str.contains("[CIRCULAR]") || output_str.contains("🔄"));
-    
+
     // Verify statistics
     assert!(stats.circular_deps_detected > 0);
   }
@@ -2736,15 +2931,29 @@ mod tests {
   #[test]
   fn test_deep_nesting_memory_estimation() {
     let mut branches = HashMap::new();
-    
+
     // Create a moderately sized tree
-    branches.insert("main".to_string(), create_test_branch("main", false, vec![], vec!["feature1".to_string(), "feature2".to_string()]));
-    branches.insert("feature1".to_string(), create_test_branch("feature1", false, vec!["main".to_string()], vec![]));
-    branches.insert("feature2".to_string(), create_test_branch("feature2", false, vec!["main".to_string()], vec![]));
+    branches.insert(
+      "main".to_string(),
+      create_test_branch(
+        "main",
+        false,
+        vec![],
+        vec!["feature1".to_string(), "feature2".to_string()],
+      ),
+    );
+    branches.insert(
+      "feature1".to_string(),
+      create_test_branch("feature1", false, vec!["main".to_string()], vec![]),
+    );
+    branches.insert(
+      "feature2".to_string(),
+      create_test_branch("feature2", false, vec!["main".to_string()], vec![]),
+    );
 
     let roots = vec!["main".to_string()];
     let mut renderer = TreeRenderer::new(&branches, &roots, None, true);
-    
+
     let config = DeepNestingConfig {
       max_depth: Some(10),
       max_branches_per_level: Some(50),
@@ -2757,14 +2966,14 @@ mod tests {
 
     let mut output = Vec::new();
     let stats = renderer.render_with_deep_nesting(&mut output, &roots, &config).unwrap();
-    
+
     let output_str = String::from_utf8(output).unwrap();
     println!("Deep nesting memory estimation output:\n{}", output_str);
 
     // Verify memory estimation is reasonable
     assert!(stats.memory_usage_estimate > 0);
     assert!(stats.memory_usage_estimate < 10000); // Should be reasonable for small tree
-    
+
     // Verify memory info appears in output
     assert!(output_str.contains("Memory estimate:"));
   }
@@ -2772,22 +2981,32 @@ mod tests {
   #[test]
   fn test_deep_nesting_enhanced_symbols() {
     let mut branches = HashMap::new();
-    
+
     // Create a deeply nested tree to test enhanced symbols
     let mut current_branch = "main".to_string();
-    branches.insert(current_branch.clone(), create_test_branch(&current_branch, false, vec![], vec!["level1".to_string()]));
-    
+    branches.insert(
+      current_branch.clone(),
+      create_test_branch(&current_branch, false, vec![], vec!["level1".to_string()]),
+    );
+
     // Create 12 levels to test deep nesting symbols (>10)
     for level in 1..=12 {
       let parent = current_branch.clone();
       current_branch = format!("level{}", level);
-      let children = if level < 12 { vec![format!("level{}", level + 1)] } else { vec![] };
-      branches.insert(current_branch.clone(), create_test_branch(&current_branch, false, vec![parent], children));
+      let children = if level < 12 {
+        vec![format!("level{}", level + 1)]
+      } else {
+        vec![]
+      };
+      branches.insert(
+        current_branch.clone(),
+        create_test_branch(&current_branch, false, vec![parent], children),
+      );
     }
 
     let roots = vec!["main".to_string()];
     let mut renderer = TreeRenderer::new(&branches, &roots, None, true);
-    
+
     let config = DeepNestingConfig {
       max_depth: Some(15),
       max_branches_per_level: Some(50),
@@ -2800,19 +3019,19 @@ mod tests {
 
     let mut output = Vec::new();
     let stats = renderer.render_with_deep_nesting(&mut output, &roots, &config).unwrap();
-    
+
     let output_str = String::from_utf8(output).unwrap();
     println!("Deep nesting enhanced symbols output:\n{}", output_str);
 
     // Verify enhanced symbols for very deep nesting (⬇)
     assert!(output_str.contains("⬇") || output_str.contains("level11") || output_str.contains("level12"));
-    
+
     // Verify depth indicators
     assert!(output_str.contains("[depth:11]") || output_str.contains("[depth:12]"));
-    
+
     // Verify child count indicators for deep branches
     assert!(output_str.contains("[children:") || stats.max_depth_reached > 5);
-    
+
     // Verify deep nesting was achieved
     assert!(stats.max_depth_reached > 10);
   }
@@ -2820,39 +3039,105 @@ mod tests {
   #[test]
   fn test_component_8_full_integration() {
     let mut branches = HashMap::new();
-    
-    // Create a complex tree with diamond patterns, deep nesting, and circular dependencies
-    // Main diamond pattern with deep nesting
-    branches.insert("main".to_string(), create_test_branch("main", false, vec![], vec!["feature1".to_string(), "feature2".to_string()]));
-    
+
+    // Create a complex tree with diamond patterns, deep nesting, and circular
+    // dependencies Main diamond pattern with deep nesting
+    branches.insert(
+      "main".to_string(),
+      create_test_branch(
+        "main",
+        false,
+        vec![],
+        vec!["feature1".to_string(), "feature2".to_string()],
+      ),
+    );
+
     // First diamond arm with deep nesting
-    branches.insert("feature1".to_string(), create_test_branch("feature1", false, vec!["main".to_string()], vec!["deep1".to_string(), "merge".to_string()]));
-    branches.insert("deep1".to_string(), create_test_branch("deep1", false, vec!["feature1".to_string()], vec!["deep2".to_string()]));
-    branches.insert("deep2".to_string(), create_test_branch("deep2", false, vec!["deep1".to_string()], vec!["deep3".to_string(), "merge".to_string()]));
-    branches.insert("deep3".to_string(), create_test_branch("deep3", false, vec!["deep2".to_string()], vec!["deep4".to_string()]));
-    branches.insert("deep4".to_string(), create_test_branch("deep4", false, vec!["deep3".to_string()], vec!["merge".to_string()]));
-    
+    branches.insert(
+      "feature1".to_string(),
+      create_test_branch(
+        "feature1",
+        false,
+        vec!["main".to_string()],
+        vec!["deep1".to_string(), "merge".to_string()],
+      ),
+    );
+    branches.insert(
+      "deep1".to_string(),
+      create_test_branch("deep1", false, vec!["feature1".to_string()], vec!["deep2".to_string()]),
+    );
+    branches.insert(
+      "deep2".to_string(),
+      create_test_branch(
+        "deep2",
+        false,
+        vec!["deep1".to_string()],
+        vec!["deep3".to_string(), "merge".to_string()],
+      ),
+    );
+    branches.insert(
+      "deep3".to_string(),
+      create_test_branch("deep3", false, vec!["deep2".to_string()], vec!["deep4".to_string()]),
+    );
+    branches.insert(
+      "deep4".to_string(),
+      create_test_branch("deep4", false, vec!["deep3".to_string()], vec!["merge".to_string()]),
+    );
+
     // Second diamond arm
-    branches.insert("feature2".to_string(), create_test_branch("feature2", false, vec!["main".to_string()], vec!["hotfix".to_string(), "merge".to_string()]));
-    branches.insert("hotfix".to_string(), create_test_branch("hotfix", false, vec!["feature2".to_string()], vec!["feature1".to_string()])); // Creates circular dependency
-    
+    branches.insert(
+      "feature2".to_string(),
+      create_test_branch(
+        "feature2",
+        false,
+        vec!["main".to_string()],
+        vec!["hotfix".to_string(), "merge".to_string()],
+      ),
+    );
+    branches.insert(
+      "hotfix".to_string(),
+      create_test_branch(
+        "hotfix",
+        false,
+        vec!["feature2".to_string()],
+        vec!["feature1".to_string()],
+      ),
+    ); // Creates circular dependency
+
     // Diamond merge point with many children (for pagination test)
     let mut merge_children = Vec::new();
     for i in 1..=25 {
       let child_name = format!("post_merge_{}", i);
       merge_children.push(child_name.clone());
       let grandchildren = if i <= 3 { vec![format!("final_{}", i)] } else { vec![] };
-      branches.insert(child_name.clone(), create_test_branch(&child_name, false, vec!["merge".to_string()], grandchildren));
-      
+      branches.insert(
+        child_name.clone(),
+        create_test_branch(&child_name, false, vec!["merge".to_string()], grandchildren),
+      );
+
       // Add final level children for the first few
       if i <= 3 {
-        branches.insert(format!("final_{}", i), create_test_branch(&format!("final_{}", i), false, vec![child_name], vec![]));
+        branches.insert(
+          format!("final_{}", i),
+          create_test_branch(&format!("final_{}", i), false, vec![child_name], vec![]),
+        );
       }
     }
-    
-    branches.insert("merge".to_string(), create_test_branch("merge", false, 
-      vec!["feature1".to_string(), "feature2".to_string(), "deep2".to_string(), "deep4".to_string()], 
-      merge_children));
+
+    branches.insert(
+      "merge".to_string(),
+      create_test_branch(
+        "merge",
+        false,
+        vec![
+          "feature1".to_string(),
+          "feature2".to_string(),
+          "deep2".to_string(),
+          "deep4".to_string(),
+        ],
+        merge_children,
+      ),
+    );
 
     let roots = vec!["main".to_string()];
     let mut renderer = TreeRenderer::new(&branches, &roots, None, true);
@@ -2861,28 +3146,45 @@ mod tests {
     let detector = crate::diamond_detector::DiamondDetector::new(&renderer.branch_nodes);
     let diamond_patterns = detector.detect_diamond_patterns();
     println!("Detected {} diamond patterns", diamond_patterns.len());
-    assert!(!diamond_patterns.is_empty(), "Should detect diamond patterns in complex tree");
-    
+    assert!(
+      !diamond_patterns.is_empty(),
+      "Should detect diamond patterns in complex tree"
+    );
+
     println!("\n=== Testing Component 8.2: Diamond Visualization ===");
     let mut diamond_output = Vec::new();
-    renderer.render_with_diamonds(&mut diamond_output, &roots, None, true).unwrap();
+    renderer
+      .render_with_diamonds(&mut diamond_output, &roots, None, true)
+      .unwrap();
     let diamond_str = String::from_utf8(diamond_output).unwrap();
-    println!("Diamond visualization sample:\n{}", &diamond_str[..std::cmp::min(500, diamond_str.len())]);
-    
+    println!(
+      "Diamond visualization sample:\n{}",
+      &diamond_str[..std::cmp::min(500, diamond_str.len())]
+    );
+
     // Verify diamond symbols are present
-    assert!(diamond_str.contains("◇") || diamond_str.contains("◆") || diamond_str.contains("◊") || diamond_str.contains("◈"), 
-            "Should contain diamond symbols");
+    assert!(
+      diamond_str.contains("◇") || diamond_str.contains("◆") || diamond_str.contains("◊") || diamond_str.contains("◈"),
+      "Should contain diamond symbols"
+    );
     assert!(diamond_str.contains("merge"), "Should contain merge point");
 
     println!("\n=== Testing Component 8.3: Enhanced Cross-References ===");
     let mut cross_ref_output = Vec::new();
-    renderer.render_with_enhanced_cross_refs(&mut cross_ref_output, &roots, None, true, Some(10)).unwrap();
+    renderer
+      .render_with_enhanced_cross_refs(&mut cross_ref_output, &roots, None, true, Some(10))
+      .unwrap();
     let cross_ref_str = String::from_utf8(cross_ref_output).unwrap();
-    println!("Cross-reference sample:\n{}", &cross_ref_str[..std::cmp::min(500, cross_ref_str.len())]);
-    
+    println!(
+      "Cross-reference sample:\n{}",
+      &cross_ref_str[..std::cmp::min(500, cross_ref_str.len())]
+    );
+
     // Verify cross-reference handling
-    assert!(cross_ref_str.contains("↑") || cross_ref_str.contains("see above") || cross_ref_str.contains("CIRCULAR"),
-            "Should contain cross-reference indicators");
+    assert!(
+      cross_ref_str.contains("↑") || cross_ref_str.contains("see above") || cross_ref_str.contains("CIRCULAR"),
+      "Should contain cross-reference indicators"
+    );
 
     println!("\n=== Testing Component 8.4: Deep Nesting Support ===");
     let config = DeepNestingConfig {
@@ -2894,42 +3196,61 @@ mod tests {
       prune_threshold: 200,
       show_depth_indicators: true,
     };
-    
+
     let mut deep_output = Vec::new();
-    let stats = renderer.render_with_deep_nesting(&mut deep_output, &roots, &config).unwrap();
+    let stats = renderer
+      .render_with_deep_nesting(&mut deep_output, &roots, &config)
+      .unwrap();
     let deep_str = String::from_utf8(deep_output).unwrap();
-    println!("Deep nesting sample:\n{}", &deep_str[..std::cmp::min(500, deep_str.len())]);
-    
+    println!(
+      "Deep nesting sample:\n{}",
+      &deep_str[..std::cmp::min(500, deep_str.len())]
+    );
+
     // Verify deep nesting features
-    assert!(deep_str.contains("[depth:") || deep_str.contains("Page"), "Should show depth indicators or pagination");
+    assert!(
+      deep_str.contains("[depth:") || deep_str.contains("Page"),
+      "Should show depth indicators or pagination"
+    );
     assert!(stats.total_branches > 30, "Should handle large number of branches");
-    println!("DEBUG: Circular dependencies detected: {}", stats.circular_deps_detected);
-    
+    println!(
+      "DEBUG: Circular dependencies detected: {}",
+      stats.circular_deps_detected
+    );
+
     // Let's also check the circular detection method directly
     let circular_deps = renderer.detect_circular_dependencies();
     println!("DEBUG: Direct circular detection found: {} cycles", circular_deps.len());
     for (i, cycle) in circular_deps.iter().enumerate() {
       println!("  Cycle {}: {}", i + 1, cycle.join(" → "));
     }
-    
-    // The test tree should have at least one circular dependency (hotfix -> feature1 -> ... -> hotfix)
-    // But let's make it optional for now since the tree structure is complex
+
+    // The test tree should have at least one circular dependency (hotfix ->
+    // feature1 -> ... -> hotfix) But let's make it optional for now since the
+    // tree structure is complex
     if stats.circular_deps_detected == 0 && circular_deps.is_empty() {
       println!("WARNING: No circular dependencies detected in complex tree");
     }
-    
+
     println!("\n=== Integration Test Results ===");
     println!("✅ Diamond patterns detected: {}", diamond_patterns.len());
     println!("✅ Total branches handled: {}", stats.total_branches);
     println!("✅ Maximum depth reached: {}", stats.max_depth_reached);
-    println!("✅ Circular dependencies found: {} (stats) / {} (direct)", stats.circular_deps_detected, circular_deps.len());
+    println!(
+      "✅ Circular dependencies found: {} (stats) / {} (direct)",
+      stats.circular_deps_detected,
+      circular_deps.len()
+    );
     println!("✅ Memory usage estimate: {} bytes", stats.memory_usage_estimate);
     println!("✅ All Component 8 features integrated successfully!");
 
     // Final validation: All components should work together without errors
     assert!(diamond_patterns.len() > 0, "Diamond detection should work");
     assert!(diamond_str.len() > 100, "Diamond visualization should produce output");
-    assert!(cross_ref_str.len() > 100, "Cross-reference handling should produce output");  
+    assert!(
+      cross_ref_str.len() > 100,
+      "Cross-reference handling should produce output"
+    );
     assert!(deep_str.len() > 100, "Deep nesting should produce output");
     assert!(stats.total_branches >= 32, "Should handle all branches in complex tree"); // 1 main + 31 others
   }

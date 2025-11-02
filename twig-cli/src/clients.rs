@@ -16,8 +16,8 @@ use crate::consts::ENV_JIRA_HOST;
 use crate::creds::{get_github_credentials, get_jira_credentials};
 
 /// Get the Jira host from configuration or environment variable
-/// Checks configuration file first, then falls back to JIRA_HOST environment variable
-/// If the host doesn't include a scheme (http:// or https://), assumes https://
+/// Checks configuration file first, then falls back to JIRA_HOST environment
+/// variable If the host doesn't include a scheme (http:// or https://), assumes https://
 pub fn get_jira_host() -> Result<String> {
   // First check configuration file
   if let Ok(config_dirs) = twig_core::get_config_dirs() {
@@ -29,7 +29,7 @@ pub fn get_jira_host() -> Result<String> {
       }
     }
   }
-  
+
   // Fall back to environment variable
   let jira_host = std::env::var(ENV_JIRA_HOST);
   match jira_host {

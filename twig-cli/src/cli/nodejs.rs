@@ -4,7 +4,8 @@
 
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use twig_core::{nodejs::NodeJsTooling, output::print_info};
+use twig_core::nodejs::NodeJsTooling;
+use twig_core::output::print_info;
 
 /// Node.js integration commands
 #[derive(Args)]
@@ -47,7 +48,7 @@ pub enum NodeJsCommands {
     /// Path to Node.js project (defaults to current directory)
     #[arg(short, long)]
     path: Option<std::path::PathBuf>,
-    
+
     /// Show what would be added without actually modifying .gitignore
     #[arg(long)]
     dry_run: bool,
@@ -64,14 +65,14 @@ pub fn handle_nodejs_command(args: NodeJsArgs) -> Result<()> {
 
 fn handle_detect_command(path: Option<std::path::PathBuf>) -> Result<()> {
   let project_path = path.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| ".".into()));
-  
+
   if !NodeJsTooling::detect_project(&project_path) {
     print_info(&format!("No Node.js project detected at: {}", project_path.display()));
     return Ok(());
   }
 
   print_info(&format!("Node.js project detected at: {}", project_path.display()));
-  
+
   // Parse and display package.json information
   match NodeJsTooling::parse_package_json(&project_path) {
     Ok(package_json) => {
@@ -84,17 +85,17 @@ fn handle_detect_command(path: Option<std::path::PathBuf>) -> Result<()> {
       if let Some(description) = &package_json.description {
         print_info(&format!("  Description: {}", description));
       }
-      
+
       // Show package manager
       if let Some(package_manager) = NodeJsTooling::detect_package_manager(&project_path) {
         let pm_name = match package_manager {
           twig_core::nodejs::PackageManager::Npm => "npm",
-          twig_core::nodejs::PackageManager::Yarn => "yarn", 
+          twig_core::nodejs::PackageManager::Yarn => "yarn",
           twig_core::nodejs::PackageManager::Pnpm => "pnpm",
         };
         print_info(&format!("  Package Manager: {}", pm_name));
       }
-      
+
       // Show script count
       if let Some(scripts) = &package_json.scripts {
         print_info(&format!("  Scripts: {} available", scripts.len()));
@@ -104,13 +105,13 @@ fn handle_detect_command(path: Option<std::path::PathBuf>) -> Result<()> {
       print_info(&format!("  Error reading package.json: {}", e));
     }
   }
-  
+
   Ok(())
 }
 
 fn handle_scripts_command(path: Option<std::path::PathBuf>) -> Result<()> {
   let project_path = path.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| ".".into()));
-  
+
   if !NodeJsTooling::detect_project(&project_path) {
     print_info("No Node.js project detected in current directory.");
     return Ok(());
@@ -131,13 +132,13 @@ fn handle_scripts_command(path: Option<std::path::PathBuf>) -> Result<()> {
       print_info(&format!("Error reading scripts: {}", e));
     }
   }
-  
+
   Ok(())
 }
 
 fn handle_gitignore_command(path: Option<std::path::PathBuf>, dry_run: bool) -> Result<()> {
   let project_path = path.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| ".".into()));
-  
+
   if !NodeJsTooling::detect_project(&project_path) {
     print_info("No Node.js project detected in current directory.");
     return Ok(());
@@ -163,6 +164,6 @@ fn handle_gitignore_command(path: Option<std::path::PathBuf>, dry_run: bool) -> 
       }
     }
   }
-  
+
   Ok(())
 }

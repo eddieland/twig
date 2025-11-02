@@ -8,19 +8,12 @@ use twig_test_utils::git::GitRepoTestGuard;
 
 /// Execute a git command in the specified repository
 fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<(bool, String)> {
-  let output = Command::new("git")
-    .args(args)
-    .current_dir(repo_path)
-    .output()?;
+  let output = Command::new("git").args(args).current_dir(repo_path).output()?;
 
   let stdout = String::from_utf8_lossy(&output.stdout).to_string();
   let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
-  let combined_output = if !stdout.is_empty() { 
-    stdout 
-  } else { 
-    stderr 
-  };
+  let combined_output = if !stdout.is_empty() { stdout } else { stderr };
 
   Ok((output.status.success(), combined_output))
 }
@@ -106,7 +99,10 @@ fn test_rebase_continue_basic() -> Result<()> {
     println!("Continue output: {}", output);
 
     // Verify rebase completed
-    assert!(!is_rebase_in_progress(repo_path), "Rebase should complete after continue");
+    assert!(
+      !is_rebase_in_progress(repo_path),
+      "Rebase should complete after continue"
+    );
   } else {
     // If no conflicts, that's also a valid outcome
     println!("Rebase completed without conflicts");
@@ -158,7 +154,7 @@ fn test_rebase_skip_basic() -> Result<()> {
     let mut attempts = 5;
     while is_rebase_in_progress(repo_path) && attempts > 0 {
       let (_, status) = execute_git_command(repo_path, &["status", "--porcelain"])?;
-      
+
       if status.trim().is_empty() {
         // No conflicts, continue
         let (_, cont_output) = execute_git_command(repo_path, &["rebase", "--continue"])?;
@@ -172,7 +168,10 @@ fn test_rebase_skip_basic() -> Result<()> {
     }
 
     // Verify rebase eventually completes
-    assert!(!is_rebase_in_progress(repo_path), "Rebase should complete after skip operations");
+    assert!(
+      !is_rebase_in_progress(repo_path),
+      "Rebase should complete after skip operations"
+    );
   } else {
     println!("Rebase completed without conflicts - skip test not applicable");
   }
@@ -223,7 +222,11 @@ fn test_rebase_abort_basic() -> Result<()> {
     // Verify we're still on feature branch
     let (success, current_branch) = execute_git_command(repo_path, &["branch", "--show-current"])?;
     assert!(success, "Should be able to get current branch");
-    assert_eq!(current_branch.trim(), "feature", "Should be on feature branch after abort");
+    assert_eq!(
+      current_branch.trim(),
+      "feature",
+      "Should be on feature branch after abort"
+    );
   } else {
     println!("Rebase completed without conflicts - abort test not applicable");
   }
@@ -239,7 +242,10 @@ fn test_rebase_detection() -> Result<()> {
   let repo = &guard.repo;
 
   // Initially no rebase should be in progress
-  assert!(!is_rebase_in_progress(repo_path), "No rebase should be in progress initially");
+  assert!(
+    !is_rebase_in_progress(repo_path),
+    "No rebase should be in progress initially"
+  );
 
   // Create setup that might cause conflicts
   create_commit(repo, "test.txt", "initial content", "Initial commit")?;

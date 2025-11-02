@@ -118,7 +118,8 @@ fn run_cascade_command(
   run_cascade_command_with_force_push(repo_path, max_depth, force, show_graph, autostash, false)
 }
 
-/// Helper function to simulate running the cascade command with force-push option
+/// Helper function to simulate running the cascade command with force-push
+/// option
 fn run_cascade_command_with_force_push(
   repo_path: &Path,
   max_depth: Option<u32>,
@@ -440,7 +441,8 @@ fn test_cascade_with_force_push_flag() -> Result<()> {
   // Checkout feature branch and run cascade command with force-push flag
   checkout_branch(repo, "feature")?;
 
-  // Run cascade command with force-push flag (this should succeed even without remote)
+  // Run cascade command with force-push flag (this should succeed even without
+  // remote)
   let output = run_cascade_command_with_force_push(repo_path, None, false, false, false, true)?;
 
   // Verify that the cascade was successful
@@ -451,8 +453,7 @@ fn test_cascade_with_force_push_flag() -> Result<()> {
 
   // Verify force-push handling message appears (should skip since no remote)
   assert!(
-    output.contains("has no remote tracking branch, skipping force push") ||
-    output.contains("Successfully rebased"),
+    output.contains("has no remote tracking branch, skipping force push") || output.contains("Successfully rebased"),
     "Expected force-push handling message, got: {output}"
   );
 
@@ -465,28 +466,31 @@ fn test_cascade_with_force_push_flag() -> Result<()> {
   Ok(())
 }
 
-#[test] 
+#[test]
 fn test_cascade_force_push_flag_parsing() -> Result<()> {
-  // This test verifies that the force-push flag is correctly parsed and accessible
-  // We don't actually test git operations, just the argument parsing
-  
-  use twig_cli::cli::cascade::CascadeArgs;
+  // This test verifies that the force-push flag is correctly parsed and
+  // accessible We don't actually test git operations, just the argument parsing
+
   use clap::Parser;
+  use twig_cli::cli::cascade::CascadeArgs;
 
   // Test parsing with --force-push flag
   let args = vec!["twig", "cascade", "--force-push"];
   let parsed = CascadeArgs::try_parse_from(args);
   assert!(parsed.is_ok(), "Failed to parse --force-push flag");
-  
+
   let cascade_args = parsed.unwrap();
-  assert!(cascade_args.force_push, "force_push should be true when --force-push flag is present");
+  assert!(
+    cascade_args.force_push,
+    "force_push should be true when --force-push flag is present"
+  );
   assert!(!cascade_args.force, "force should be false when not specified");
 
-  // Test parsing without --force-push flag  
+  // Test parsing without --force-push flag
   let args = vec!["twig", "cascade"];
   let parsed = CascadeArgs::try_parse_from(args);
   assert!(parsed.is_ok(), "Failed to parse cascade command without flags");
-  
+
   let cascade_args = parsed.unwrap();
   assert!(!cascade_args.force_push, "force_push should be false by default");
 
@@ -494,9 +498,12 @@ fn test_cascade_force_push_flag_parsing() -> Result<()> {
   let args = vec!["twig", "cascade", "--force", "--force-push"];
   let parsed = CascadeArgs::try_parse_from(args);
   assert!(parsed.is_ok(), "Failed to parse both --force and --force-push flags");
-  
+
   let cascade_args = parsed.unwrap();
-  assert!(cascade_args.force_push, "force_push should be true when --force-push flag is present");
+  assert!(
+    cascade_args.force_push,
+    "force_push should be true when --force-push flag is present"
+  );
   assert!(cascade_args.force, "force should be true when --force flag is present");
 
   Ok(())

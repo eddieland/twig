@@ -1,7 +1,8 @@
 //! # Twig MCP Server
 //!
-//! Model Context Protocol server implementation for twig, enabling LLM integration
-//! for Git branch tree management, worktree operations, and dependency tracking.
+//! Model Context Protocol server implementation for twig, enabling LLM
+//! integration for Git branch tree management, worktree operations, and
+//! dependency tracking.
 //!
 //! This server exposes twig's functionality through the MCP protocol, allowing
 //! AI assistants in VS Code and other tools to interact with Git repositories

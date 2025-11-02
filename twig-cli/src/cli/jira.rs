@@ -119,7 +119,7 @@ pub enum JiraSubcommands {
     show: bool,
   },
 
-  /// Show a Jira ticket's details 
+  /// Show a Jira ticket's details
   #[command(long_about = "Display detailed information about a Jira ticket.\n\n\
                      This command fetches and displays comprehensive details about a Jira issue,\n\
                      including title, description, status, assignee, comments, and activity history.\n\
@@ -334,7 +334,7 @@ fn handle_show_jira_config() -> Result<()> {
 /// Validate and normalize a Jira host URL
 fn validate_and_normalize_host(host: &str) -> Result<String> {
   let host = host.trim();
-  
+
   if host.is_empty() {
     anyhow::bail!("Host URL cannot be empty");
   }
@@ -347,8 +347,7 @@ fn validate_and_normalize_host(host: &str) -> Result<String> {
   };
 
   // Basic URL validation - try to parse as URL
-  let url = url::Url::parse(&normalized)
-    .with_context(|| format!("Invalid URL format: {}", normalized))?;
+  let url = url::Url::parse(&normalized).with_context(|| format!("Invalid URL format: {}", normalized))?;
 
   // Ensure it has a valid host
   if url.host_str().is_none() {
@@ -381,7 +380,7 @@ fn handle_show_issue_command(issue_key: &str) -> Result<()> {
         println!("   {}: {}", "Key".bold(), issue.key.bright_blue());
         println!("   {}: {}", "Summary".bold(), issue.fields.summary);
         println!("   {}: {}", "Status".bold(), issue.fields.status.name.bright_green());
-        
+
         if let Some(assignee) = &issue.fields.assignee {
           println!("   {}: {}", "Assignee".bold(), assignee.display_name);
         } else {
@@ -401,8 +400,13 @@ fn handle_show_issue_command(issue_key: &str) -> Result<()> {
           }
         }
 
-        println!("\n{}: {}/browse/{}", "🔗 URL".bright_cyan().bold(), jira_host, issue.key);
-        
+        println!(
+          "\n{}: {}/browse/{}",
+          "🔗 URL".bright_cyan().bold(),
+          jira_host,
+          issue.key
+        );
+
         Ok(())
       }
       Err(e) => {

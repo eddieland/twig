@@ -81,6 +81,7 @@ fn add_branch_dependency(repo_path: &Path, child: &str, parent: &str) -> Result<
 /// Helper function to simulate a rebase with conflicts
 fn simulate_rebase_with_conflicts(repo_path: &Path, _branch: &str, onto: &str) -> Result<bool> {
   use std::process::Command;
+
   use twig_cli::consts;
 
   // Execute git rebase command that will likely cause conflicts
@@ -99,6 +100,7 @@ fn simulate_rebase_with_conflicts(repo_path: &Path, _branch: &str, onto: &str) -
 /// Helper function to execute git commands
 fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<(bool, String)> {
   use std::process::Command;
+
   use twig_cli::consts;
 
   let output = Command::new(consts::GIT_EXECUTABLE)
@@ -142,7 +144,12 @@ fn test_rebase_continue_functionality() -> Result<()> {
 
   // Go back to parent and create conflicting change
   checkout_branch(repo, "parent")?;
-  create_conflicting_commit(repo, "shared.txt", "conflicting parent content", "Conflicting parent change")?;
+  create_conflicting_commit(
+    repo,
+    "shared.txt",
+    "conflicting parent content",
+    "Conflicting parent change",
+  )?;
 
   // Set up dependency
   add_branch_dependency(repo_path, "feature", "parent")?;
@@ -155,7 +162,10 @@ fn test_rebase_continue_functionality() -> Result<()> {
 
   if has_conflicts {
     // Verify rebase is in progress
-    assert!(is_rebase_in_progress(repo_path), "Rebase should be in progress after conflict");
+    assert!(
+      is_rebase_in_progress(repo_path),
+      "Rebase should be in progress after conflict"
+    );
 
     // Simulate resolving conflicts by editing the conflicting file
     let conflict_file_path = repo_path.join("shared.txt");
@@ -167,12 +177,15 @@ fn test_rebase_continue_functionality() -> Result<()> {
 
     // Test rebase --continue
     let (_success, output) = execute_git_command(repo_path, &["rebase", "--continue"])?;
-    
+
     // The continue should succeed or at least not fail catastrophically
     println!("Rebase continue output: {}", output);
-    
+
     // Verify rebase is no longer in progress
-    assert!(!is_rebase_in_progress(repo_path), "Rebase should complete after continue");
+    assert!(
+      !is_rebase_in_progress(repo_path),
+      "Rebase should complete after continue"
+    );
   }
 
   Ok(())
@@ -196,10 +209,10 @@ fn test_rebase_skip_functionality() -> Result<()> {
   checkout_branch(repo, "main")?;
   create_branch(repo, "feature", None)?;
   checkout_branch(repo, "feature")?;
-  
+
   // Create a commit that will conflict with parent
   create_conflicting_commit(repo, "base.txt", "feature modification", "Feature change")?;
-  
+
   // Add more commits on feature
   create_commit(repo, "feature1.txt", "feature1 content", "Feature commit 1")?;
   create_commit(repo, "feature2.txt", "feature2 content", "Feature commit 2")?;
@@ -219,13 +232,16 @@ fn test_rebase_skip_functionality() -> Result<()> {
 
   if has_conflicts {
     // Verify rebase is in progress
-    assert!(is_rebase_in_progress(repo_path), "Rebase should be in progress after conflict");
+    assert!(
+      is_rebase_in_progress(repo_path),
+      "Rebase should be in progress after conflict"
+    );
 
     // Test rebase --skip (skip the conflicting commit)
     let (_success, output) = execute_git_command(repo_path, &["rebase", "--skip"])?;
-    
+
     println!("Rebase skip output: {}", output);
-    
+
     // After skip, rebase might still be in progress if there are more commits
     // Let's check the status
     let still_in_progress = is_rebase_in_progress(repo_path);
@@ -236,7 +252,7 @@ fn test_rebase_skip_functionality() -> Result<()> {
       let mut max_attempts = 10; // Prevent infinite loops
       while is_rebase_in_progress(repo_path) && max_attempts > 0 {
         let (_, status_output) = execute_git_command(repo_path, &["status", "--porcelain"])?;
-        
+
         if status_output.trim().is_empty() {
           // No conflicts, try to continue
           let (cont_success, cont_output) = execute_git_command(repo_path, &["rebase", "--continue"])?;
@@ -249,14 +265,21 @@ fn test_rebase_skip_functionality() -> Result<()> {
         max_attempts -= 1;
       }
     }
-    
+
     // Eventually, rebase should complete
-    assert!(!is_rebase_in_progress(repo_path), "Rebase should eventually complete after skip operations");
-    
+    assert!(
+      !is_rebase_in_progress(repo_path),
+      "Rebase should eventually complete after skip operations"
+    );
+
     // Verify we're on the feature branch
     let (success, current_branch) = execute_git_command(repo_path, &["branch", "--show-current"])?;
     assert!(success, "Should be able to get current branch");
-    assert_eq!(current_branch.trim(), "feature", "Should be on feature branch after rebase");
+    assert_eq!(
+      current_branch.trim(),
+      "feature",
+      "Should be on feature branch after rebase"
+    );
   }
 
   Ok(())
@@ -280,7 +303,12 @@ fn test_rebase_abort_functionality() -> Result<()> {
   checkout_branch(repo, "main")?;
   create_branch(repo, "feature", None)?;
   checkout_branch(repo, "feature")?;
-  create_conflicting_commit(repo, "shared.txt", "conflicting feature content", "Conflicting feature change")?;
+  create_conflicting_commit(
+    repo,
+    "shared.txt",
+    "conflicting feature content",
+    "Conflicting feature change",
+  )?;
 
   // Set up dependency
   add_branch_dependency(repo_path, "feature", "parent")?;
@@ -290,20 +318,30 @@ fn test_rebase_abort_functionality() -> Result<()> {
 
   if has_conflicts {
     // Verify rebase is in progress
-    assert!(is_rebase_in_progress(repo_path), "Rebase should be in progress after conflict");
+    assert!(
+      is_rebase_in_progress(repo_path),
+      "Rebase should be in progress after conflict"
+    );
 
     // Test rebase --abort
     let (success, output) = execute_git_command(repo_path, &["rebase", "--abort"])?;
-    
+
     println!("Rebase abort output: {}", output);
-    
+
     // Verify rebase is no longer in progress
-    assert!(!is_rebase_in_progress(repo_path), "Rebase should be aborted and no longer in progress");
-    
+    assert!(
+      !is_rebase_in_progress(repo_path),
+      "Rebase should be aborted and no longer in progress"
+    );
+
     // Verify we're back on the feature branch
     let (success, current_branch) = execute_git_command(repo_path, &["branch", "--show-current"])?;
     assert!(success, "Should be able to get current branch");
-    assert_eq!(current_branch.trim(), "feature", "Should be back on feature branch after abort");
+    assert_eq!(
+      current_branch.trim(),
+      "feature",
+      "Should be back on feature branch after abort"
+    );
   }
 
   Ok(())
@@ -338,24 +376,27 @@ fn test_rebase_cleanup_after_skip() -> Result<()> {
   if has_conflicts && is_rebase_in_progress(repo_path) {
     // Skip the conflicting commit
     let (skip_success, _) = execute_git_command(repo_path, &["rebase", "--skip"])?;
-    
+
     // Test that cleanup_index_after_skip functionality works
     // This is tested indirectly by ensuring the repository is in a clean state
     let (status_success, status_output) = execute_git_command(repo_path, &["status", "--porcelain"])?;
     assert!(status_success, "Should be able to get status");
-    
+
     // The status should be clean or show only normal rebase-in-progress state
     println!("Status after skip: {}", status_output);
-    
+
     // Complete any remaining rebase operations
     let mut max_attempts = 5;
     while is_rebase_in_progress(repo_path) && max_attempts > 0 {
       let (_, _) = execute_git_command(repo_path, &["rebase", "--continue"])?;
       max_attempts -= 1;
     }
-    
+
     // Final verification that repository is in a clean state
-    assert!(!is_rebase_in_progress(repo_path), "Repository should be in a clean state after rebase operations");
+    assert!(
+      !is_rebase_in_progress(repo_path),
+      "Repository should be in a clean state after rebase operations"
+    );
   }
 
   Ok(())
@@ -368,7 +409,10 @@ fn test_detect_rebase_in_progress() -> Result<()> {
   let repo = &guard.repo;
 
   // Initially, no rebase should be in progress
-  assert!(!is_rebase_in_progress(repo_path), "No rebase should be in progress initially");
+  assert!(
+    !is_rebase_in_progress(repo_path),
+    "No rebase should be in progress initially"
+  );
 
   // Create setup for conflict
   create_commit(repo, "shared.txt", "shared content", "Initial commit")?;
@@ -387,13 +431,19 @@ fn test_detect_rebase_in_progress() -> Result<()> {
 
   if has_conflicts {
     // Now rebase should be in progress
-    assert!(is_rebase_in_progress(repo_path), "Rebase should be detected as in progress");
+    assert!(
+      is_rebase_in_progress(repo_path),
+      "Rebase should be detected as in progress"
+    );
 
     // Abort to clean up
     execute_git_command(repo_path, &["rebase", "--abort"])?;
 
     // Should no longer be in progress
-    assert!(!is_rebase_in_progress(repo_path), "Rebase should no longer be in progress after abort");
+    assert!(
+      !is_rebase_in_progress(repo_path),
+      "Rebase should no longer be in progress after abort"
+    );
   }
 
   Ok(())

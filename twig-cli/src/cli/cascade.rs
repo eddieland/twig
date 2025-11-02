@@ -17,14 +17,15 @@ use twig_core::{RepoState, detect_repository};
 use crate::consts;
 use crate::user_defined_dependency_resolver::UserDefinedDependencyResolver;
 
-/// Helper function to check waiting branches and enqueue those whose dependencies are satisfied
+/// Helper function to check waiting branches and enqueue those whose
+/// dependencies are satisfied
 fn check_and_enqueue_ready_branches(
   waiting_branches: &mut HashMap<String, HashSet<String>>,
   rebased_branches: &HashSet<String>,
   processing_queue: &mut VecDeque<String>,
 ) {
   let mut branches_to_remove = Vec::new();
-  
+
   for (branch, unmet_deps) in waiting_branches.iter() {
     // Check if all dependencies are now satisfied
     if unmet_deps.iter().all(|dep| rebased_branches.contains(dep)) {
@@ -32,7 +33,7 @@ fn check_and_enqueue_ready_branches(
       branches_to_remove.push(branch.clone());
     }
   }
-  
+
   // Remove branches that are now queued for processing
   for branch in branches_to_remove {
     waiting_branches.remove(&branch);
@@ -50,7 +51,8 @@ pub struct CascadeArgs {
   #[arg(long)]
   pub force: bool,
 
-  /// Force push to remote after successful rebase (WARNING: This can overwrite remote changes)
+  /// Force push to remote after successful rebase (WARNING: This can overwrite
+  /// remote changes)
   #[arg(long = "force-push")]
   pub force_push: bool,
 
@@ -147,14 +149,15 @@ fn rebase_downstream(
   // The current branch is considered rebased as it's the starting point
   rebased_branches.insert(current_branch_name.clone());
 
-  // Use a queue-based approach: process branches as their dependencies are satisfied
+  // Use a queue-based approach: process branches as their dependencies are
+  // satisfied
   let mut processing_queue: VecDeque<String> = VecDeque::new();
   let mut waiting_branches: HashMap<String, HashSet<String>> = HashMap::new();
-  
+
   // Initialize: separate branches into ready-to-process vs waiting
   for branch in rebase_order {
     let parents = repo_state.get_dependency_parents(&branch);
-    
+
     // Find which parents (that are part of this cascade) are not yet rebased
     let unmet_deps: HashSet<String> = parents
       .iter()
@@ -164,7 +167,7 @@ fn rebase_downstream(
       })
       .map(|p| p.to_string())
       .collect();
-    
+
     if unmet_deps.is_empty() {
       // All dependencies met, can process immediately
       processing_queue.push_back(branch);
@@ -189,7 +192,7 @@ fn rebase_downstream(
       print_warning(&format!("No parent branches found for {branch}, skipping",));
       // Even without parents, mark as processed so dependents can proceed
       rebased_branches.insert(branch.clone());
-      
+
       // Check if any waiting branches can now be processed
       check_and_enqueue_ready_branches(&mut waiting_branches, &rebased_branches, &mut processing_queue);
       continue;
@@ -221,18 +224,19 @@ fn rebase_downstream(
       match result {
         RebaseResult::Success => {
           print_success(&format!("Successfully rebased {branch} onto {parent}",));
-          
+
           // Mark this branch as successfully rebased
           rebased_branches.insert(branch.clone());
-          
+
           // Check if any waiting branches can now be processed
           check_and_enqueue_ready_branches(&mut waiting_branches, &rebased_branches, &mut processing_queue);
-          
+
           // Force push if requested
           if force_push {
             if let Err(e) = handle_force_push(repo_path, &branch) {
               print_error(&format!("Failed to force push {branch}: {e}"));
-              // Continue with other branches rather than aborting the whole process
+              // Continue with other branches rather than aborting the whole
+              // process
             }
           }
         }
@@ -244,18 +248,19 @@ fn rebase_downstream(
             match force_result {
               RebaseResult::Success => {
                 print_success(&format!("Successfully force-rebased {branch} onto {parent}",));
-                
+
                 // Mark this branch as successfully rebased
                 rebased_branches.insert(branch.clone());
-                
+
                 // Check if any waiting branches can now be processed
                 check_and_enqueue_ready_branches(&mut waiting_branches, &rebased_branches, &mut processing_queue);
-                
+
                 // Force push if requested
                 if force_push {
                   if let Err(e) = handle_force_push(repo_path, &branch) {
                     print_error(&format!("Failed to force push {branch}: {e}"));
-                    // Continue with other branches rather than aborting the whole process
+                    // Continue with other branches rather than aborting the
+                    // whole process
                   }
                 }
               }
@@ -269,7 +274,7 @@ fn rebase_downstream(
             print_info(&format!("Branch {branch} is already up-to-date with {parent}",));
             // Even if up-to-date, mark as rebased for dependency tracking
             rebased_branches.insert(branch.clone());
-            
+
             // Check if any waiting branches can now be processed
             check_and_enqueue_ready_branches(&mut waiting_branches, &rebased_branches, &mut processing_queue);
           }
@@ -285,7 +290,15 @@ fn rebase_downstream(
               ConflictResolution::Continue => {
                 // First, check if there are still unresolved conflicts
                 let status_output = execute_git_command(repo_path, &["status", "--porcelain"])?;
-                if status_output.lines().any(|line| line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") || line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")) {
+                if status_output.lines().any(|line| {
+                  line.starts_with("UU")
+                    || line.starts_with("AA")
+                    || line.starts_with("DD")
+                    || line.starts_with("DU")
+                    || line.starts_with("UD")
+                    || line.starts_with("AU")
+                    || line.starts_with("UA")
+                }) {
                   print_error("❌ Cannot continue: conflicts are still unresolved!");
                   print_warning("Please resolve all conflicts before continuing.");
                   print_info("Conflicting files are marked with conflict markers (<<<<<<, ======, >>>>>>).");
@@ -300,51 +313,62 @@ fn rebase_downstream(
                   // Loop back to prompt again
                   continue;
                 }
-                
+
                 // Conflicts are resolved, now continue the rebase
                 let continue_result = execute_git_command(repo_path, &["rebase", "--continue"])?;
-                
+
                 // Check if the continue output indicates more conflicts
                 if continue_result.contains("CONFLICT") {
                   print_info("Additional conflicts detected after continue. Need to resolve more conflicts...");
                   // Loop will continue to handle the next conflict
                   continue;
                 }
-                
+
                 // Check if rebase is still in progress
                 if is_rebase_in_progress(repo_path) {
                   // Check for conflicts in the working directory
                   let status_output = execute_git_command(repo_path, &["status", "--porcelain"])?;
-                  if status_output.lines().any(|line| line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") || line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")) {
+                  if status_output.lines().any(|line| {
+                    line.starts_with("UU")
+                      || line.starts_with("AA")
+                      || line.starts_with("DD")
+                      || line.starts_with("DU")
+                      || line.starts_with("UD")
+                      || line.starts_with("AU")
+                      || line.starts_with("UA")
+                  }) {
                     print_warning("More conflicts detected. Continuing conflict resolution...");
                     continue;
                   }
-                  
+
                   // Rebase in progress but no conflicts - something else is going on
                   print_info(&continue_result);
-                  print_warning("Rebase is still in progress but no conflicts detected. You may need to manually continue.");
+                  print_warning(
+                    "Rebase is still in progress but no conflicts detected. You may need to manually continue.",
+                  );
                   print_info("Run: git rebase --continue");
                   conflict_handled = true;
                   continue; // Continue to next parent/branch
                 }
-                
+
                 // Rebase completed successfully
                 print_info(&continue_result);
                 print_success(&format!(
                   "Rebase of {branch} onto {parent} completed after resolving conflicts",
                 ));
-                
+
                 // Mark this branch as successfully rebased
                 rebased_branches.insert(branch.clone());
-                
+
                 // Force push if requested
                 if force_push {
                   if let Err(e) = handle_force_push(repo_path, &branch) {
                     print_error(&format!("Failed to force push {branch}: {e}"));
-                    // Continue with other branches rather than aborting the whole process
+                    // Continue with other branches rather than aborting the
+                    // whole process
                   }
                 }
-                
+
                 conflict_handled = true;
               }
               ConflictResolution::AbortToOriginal => {
@@ -370,23 +394,31 @@ fn rebase_downstream(
               ConflictResolution::Skip => {
                 // Skip the current commit
                 let skip_result = execute_git_command(repo_path, &["rebase", "--skip"])?;
-                
+
                 // Check if the skip output indicates more conflicts
                 if skip_result.contains("CONFLICT") {
                   print_info("Additional conflicts detected after skip. Need to resolve more conflicts...");
                   // Loop will continue to handle the next conflict
                   continue;
                 }
-                
+
                 print_info(&skip_result);
 
                 // Check if the rebase is still in progress after skip
                 if is_rebase_in_progress(repo_path) {
                   // Check the status after skip to see if there are conflicts
                   let status_output = execute_git_command(repo_path, &["status", "--porcelain"])?;
-                  
+
                   // Check for conflict markers in status (UU, AA, DD, DU, UD, AU, UA)
-                  if status_output.lines().any(|line| line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") || line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")) {
+                  if status_output.lines().any(|line| {
+                    line.starts_with("UU")
+                      || line.starts_with("AA")
+                      || line.starts_with("DD")
+                      || line.starts_with("DU")
+                      || line.starts_with("UD")
+                      || line.starts_with("AU")
+                      || line.starts_with("UA")
+                  }) {
                     print_warning("Additional conflicts detected after skip. Continuing conflict resolution...");
                     // Loop will continue to handle the next conflict
                     continue;
@@ -400,7 +432,7 @@ fn rebase_downstream(
                     conflict_handled = true;
                     continue; // Continue to next parent/branch
                   }
-                  
+
                   // Rebase in progress but no conflicts or changes - unusual state
                   print_warning("Rebase state unclear. Please check manually.");
                   conflict_handled = true;
@@ -410,10 +442,10 @@ fn rebase_downstream(
                   print_success(&format!(
                     "Rebase of {branch} onto {parent} completed after skipping commit(s)",
                   ));
-                  
+
                   // Mark this branch as successfully rebased
                   rebased_branches.insert(branch.clone());
-                  
+
                   // Force push if requested
                   if force_push {
                     if let Err(e) = handle_force_push(repo_path, &branch) {
@@ -424,7 +456,7 @@ fn rebase_downstream(
 
                 // Clean up any unmerged entries in the index and working directory after skip
                 cleanup_index_after_skip(repo_path)?;
-                
+
                 conflict_handled = true;
               }
             }
@@ -438,12 +470,19 @@ fn rebase_downstream(
       }
     }
   }
-  
+
   // Report any branches that couldn't be rebased due to unsatisfied dependencies
   if !waiting_branches.is_empty() {
-    print_warning(&format!("{} branches could not be rebased due to unmet dependencies:", waiting_branches.len()));
+    print_warning(&format!(
+      "{} branches could not be rebased due to unmet dependencies:",
+      waiting_branches.len()
+    ));
     for (branch, unmet_deps) in &waiting_branches {
-      print_warning(&format!("  - {} (waiting for: {})", branch, unmet_deps.iter().cloned().collect::<Vec<_>>().join(", ")));
+      print_warning(&format!(
+        "  - {} (waiting for: {})",
+        branch,
+        unmet_deps.iter().cloned().collect::<Vec<_>>().join(", ")
+      ));
     }
   }
 
@@ -750,12 +789,14 @@ fn handle_force_push(repo_path: &Path, branch: &str) -> Result<()> {
   // First, check if the branch has a remote tracking branch
   let remote_ref = format!("origin/{}", branch);
   let check_remote_args = ["rev-parse", "--verify", &remote_ref];
-  
+
   match execute_git_command(repo_path, &check_remote_args) {
     Ok(_) => {
       // Remote tracking branch exists, proceed with force push
-      print_warning(&format!("⚠️  Force pushing {branch} to remote (this may overwrite remote changes)"));
-      
+      print_warning(&format!(
+        "⚠️  Force pushing {branch} to remote (this may overwrite remote changes)"
+      ));
+
       let force_push_args = ["push", "--force-with-lease", "origin", branch];
       match execute_git_command(repo_path, &force_push_args) {
         Ok(output) => {
@@ -769,8 +810,9 @@ fn handle_force_push(repo_path: &Path, branch: &str) -> Result<()> {
           // Try to provide more helpful error message
           if let Some(git_error) = e.downcast_ref::<std::io::Error>() {
             return Err(anyhow::anyhow!(
-              "Force push failed for {}: {}. This might be due to remote branch protection or network issues.", 
-              branch, git_error
+              "Force push failed for {}: {}. This might be due to remote branch protection or network issues.",
+              branch,
+              git_error
             ));
           }
           Err(e.context(format!("Failed to force push {branch}")))
@@ -779,7 +821,9 @@ fn handle_force_push(repo_path: &Path, branch: &str) -> Result<()> {
     }
     Err(_) => {
       // No remote tracking branch, skip force push
-      print_info(&format!("Branch {branch} has no remote tracking branch, skipping force push"));
+      print_info(&format!(
+        "Branch {branch} has no remote tracking branch, skipping force push"
+      ));
       Ok(())
     }
   }
@@ -869,9 +913,10 @@ fn branch_exists(repo_path: &Path, branch_name: &str) -> Result<bool> {
 mod tests {
   use super::*;
 
-  #[test] 
+  #[test]
   fn test_cascade_args_struct_fields() {
-    // Test that the CascadeArgs struct has all expected fields with correct defaults
+    // Test that the CascadeArgs struct has all expected fields with correct
+    // defaults
     let cascade_args = CascadeArgs {
       max_depth: None,
       force: false,
@@ -880,7 +925,7 @@ mod tests {
       autostash: false,
       repo: None,
     };
-    
+
     assert!(!cascade_args.force_push, "force_push should default to false");
     assert!(!cascade_args.force, "force should default to false");
     assert!(!cascade_args.show_graph, "show_graph should default to false");
@@ -900,7 +945,7 @@ mod tests {
       autostash: false,
       repo: None,
     };
-    
+
     assert!(cascade_args.force_push, "force_push should be true when explicitly set");
     assert!(!cascade_args.force, "force should remain false");
   }
@@ -916,7 +961,7 @@ mod tests {
       autostash: true,
       repo: Some("/some/path".to_string()),
     };
-    
+
     assert!(cascade_args.force_push, "force_push should be true");
     assert!(cascade_args.force, "force should be true");
     assert!(cascade_args.show_graph, "show_graph should be true");
@@ -927,39 +972,45 @@ mod tests {
 
   #[test]
   fn test_handle_force_push_no_remote() {
-    // Test that handle_force_push handles the case where there's no remote gracefully
+    // Test that handle_force_push handles the case where there's no remote
+    // gracefully
     use std::path::Path;
-    
+
     // This should handle the no remote case gracefully
     let temp_path = Path::new("/tmp/nonexistent");
     let result = handle_force_push(&temp_path, "test-branch");
-    
+
     // The function should return Ok when there's no remote (graceful handling)
     // but may return an error for non-existent paths
-    // Either outcome is acceptable for this test - we're just ensuring it doesn't panic
-    assert!(result.is_ok() || result.is_err(), "handle_force_push should handle non-existent paths gracefully");
+    // Either outcome is acceptable for this test - we're just ensuring it doesn't
+    // panic
+    assert!(
+      result.is_ok() || result.is_err(),
+      "handle_force_push should handle non-existent paths gracefully"
+    );
   }
 
   #[test]
   fn test_rebased_branches_tracking() {
-    // Test that rebased_branches HashSet correctly tracks which branches have been rebased
+    // Test that rebased_branches HashSet correctly tracks which branches have been
+    // rebased
     use std::collections::HashSet;
-    
+
     let mut rebased_branches: HashSet<String> = HashSet::new();
-    
+
     // Initially empty
     assert!(rebased_branches.is_empty());
-    
+
     // Add current branch as starting point
     rebased_branches.insert("main".to_string());
     assert!(rebased_branches.contains("main"));
     assert!(!rebased_branches.contains("feature"));
-    
+
     // Add a feature branch after rebasing
     rebased_branches.insert("feature".to_string());
     assert!(rebased_branches.contains("main"));
     assert!(rebased_branches.contains("feature"));
-    
+
     // Verify we can check if a parent is in the set
     let parent = "main";
     assert!(rebased_branches.contains(&**&parent));
@@ -969,13 +1020,13 @@ mod tests {
   fn test_parent_dependency_check_logic() {
     // Test the logic for checking if all parents are ready before rebasing
     use std::collections::HashSet;
-    
+
     let mut rebased_branches: HashSet<String> = HashSet::new();
     rebased_branches.insert("main".to_string());
     rebased_branches.insert("feature".to_string());
-    
+
     let children = vec!["feature".to_string(), "sub-feature".to_string()];
-    
+
     // Test case 1: Parent is in children list and has been rebased
     let parents = vec!["feature"];
     let mut all_parents_ready = true;
@@ -985,8 +1036,11 @@ mod tests {
         break;
       }
     }
-    assert!(all_parents_ready, "feature has been rebased, so all_parents_ready should be true");
-    
+    assert!(
+      all_parents_ready,
+      "feature has been rebased, so all_parents_ready should be true"
+    );
+
     // Test case 2: Parent is in children list but has NOT been rebased
     let parents = vec!["sub-feature"];
     let mut all_parents_ready = true;
@@ -996,8 +1050,11 @@ mod tests {
         break;
       }
     }
-    assert!(!all_parents_ready, "sub-feature has not been rebased, so all_parents_ready should be false");
-    
+    assert!(
+      !all_parents_ready,
+      "sub-feature has not been rebased, so all_parents_ready should be false"
+    );
+
     // Test case 3: Parent is NOT in children list (external dependency like main)
     let parents = vec!["main"];
     let mut all_parents_ready = true;
@@ -1007,7 +1064,10 @@ mod tests {
         break;
       }
     }
-    assert!(all_parents_ready, "main is not in children list, so it doesn't need to be checked");
+    assert!(
+      all_parents_ready,
+      "main is not in children list, so it doesn't need to be checked"
+    );
   }
 
   #[test]
@@ -1021,60 +1081,95 @@ mod tests {
     // UD = modified by us, deleted by them
     // AU = added by us, modified by them
     // UA = modified by us, added by them
-    
+
     // Test case 1: No conflicts
     let status_output = "M  file1.txt\nA  file2.txt\n";
     let has_conflicts = status_output.lines().any(|line| {
-      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") ||
-      line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")
+      line.starts_with("UU")
+        || line.starts_with("AA")
+        || line.starts_with("DD")
+        || line.starts_with("DU")
+        || line.starts_with("UD")
+        || line.starts_with("AU")
+        || line.starts_with("UA")
     });
     assert!(!has_conflicts, "Should not detect conflicts in normal status");
-    
+
     // Test case 2: UU conflict (both modified)
     let status_output = "UU file1.txt\nM  file2.txt\n";
     let has_conflicts = status_output.lines().any(|line| {
-      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") ||
-      line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")
+      line.starts_with("UU")
+        || line.starts_with("AA")
+        || line.starts_with("DD")
+        || line.starts_with("DU")
+        || line.starts_with("UD")
+        || line.starts_with("AU")
+        || line.starts_with("UA")
     });
     assert!(has_conflicts, "Should detect UU conflict marker");
-    
+
     // Test case 3: AA conflict (both added)
     let status_output = "AA file1.txt\n";
     let has_conflicts = status_output.lines().any(|line| {
-      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") ||
-      line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")
+      line.starts_with("UU")
+        || line.starts_with("AA")
+        || line.starts_with("DD")
+        || line.starts_with("DU")
+        || line.starts_with("UD")
+        || line.starts_with("AU")
+        || line.starts_with("UA")
     });
     assert!(has_conflicts, "Should detect AA conflict marker");
-    
+
     // Test case 4: DD conflict (both deleted)
     let status_output = "DD file1.txt\nM  file2.txt\n";
     let has_conflicts = status_output.lines().any(|line| {
-      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") ||
-      line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")
+      line.starts_with("UU")
+        || line.starts_with("AA")
+        || line.starts_with("DD")
+        || line.starts_with("DU")
+        || line.starts_with("UD")
+        || line.starts_with("AU")
+        || line.starts_with("UA")
     });
     assert!(has_conflicts, "Should detect DD conflict marker");
-    
+
     // Test case 5: DU conflict (deleted by us)
     let status_output = "DU file1.txt\n";
     let has_conflicts = status_output.lines().any(|line| {
-      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") ||
-      line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")
+      line.starts_with("UU")
+        || line.starts_with("AA")
+        || line.starts_with("DD")
+        || line.starts_with("DU")
+        || line.starts_with("UD")
+        || line.starts_with("AU")
+        || line.starts_with("UA")
     });
     assert!(has_conflicts, "Should detect DU conflict marker");
-    
+
     // Test case 6: UD conflict (modified by us, deleted by them)
     let status_output = "UD file1.txt\n";
     let has_conflicts = status_output.lines().any(|line| {
-      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") ||
-      line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")
+      line.starts_with("UU")
+        || line.starts_with("AA")
+        || line.starts_with("DD")
+        || line.starts_with("DU")
+        || line.starts_with("UD")
+        || line.starts_with("AU")
+        || line.starts_with("UA")
     });
     assert!(has_conflicts, "Should detect UD conflict marker");
-    
+
     // Test case 7: Multiple different conflicts
     let status_output = "UU file1.txt\nAA file2.txt\nDU file3.txt\nM  file4.txt\n";
     let has_conflicts = status_output.lines().any(|line| {
-      line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD") ||
-      line.starts_with("DU") || line.starts_with("UD") || line.starts_with("AU") || line.starts_with("UA")
+      line.starts_with("UU")
+        || line.starts_with("AA")
+        || line.starts_with("DD")
+        || line.starts_with("DU")
+        || line.starts_with("UD")
+        || line.starts_with("AU")
+        || line.starts_with("UA")
     });
     assert!(has_conflicts, "Should detect multiple conflict markers");
   }
@@ -1082,17 +1177,23 @@ mod tests {
   #[test]
   fn test_rebase_output_conflict_detection() {
     // Test the logic for detecting conflicts in git command output
-    
+
     // Test case 1: No conflicts
     let output = "Successfully rebased and updated refs/heads/feature.";
-    assert!(!output.contains("CONFLICT"), "Should not detect conflicts in success message");
-    
+    assert!(
+      !output.contains("CONFLICT"),
+      "Should not detect conflicts in success message"
+    );
+
     // Test case 2: Conflict present
     let output = "CONFLICT (content): Merge conflict in file.txt\nAutomatic merge failed; fix conflicts and then commit the result.";
     assert!(output.contains("CONFLICT"), "Should detect CONFLICT in output");
-    
+
     // Test case 3: Multiple conflicts
     let output = "CONFLICT (content): Merge conflict in file1.txt\nCONFLICT (content): Merge conflict in file2.txt";
-    assert!(output.contains("CONFLICT"), "Should detect CONFLICT in output with multiple conflicts");
+    assert!(
+      output.contains("CONFLICT"),
+      "Should detect CONFLICT in output with multiple conflicts"
+    );
   }
 }
