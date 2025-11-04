@@ -12,8 +12,10 @@ pub use twig_gh::{GitHubClient, create_github_client};
 pub use twig_jira::{JiraClient, create_jira_client};
 use url::Url;
 
-use crate::consts::ENV_JIRA_HOST;
 use crate::creds::{get_github_credentials, get_jira_credentials};
+
+/// Environment variable storing the Jira host configuration.
+pub const ENV_JIRA_HOST: &str = "JIRA_HOST";
 
 /// Get the $JIRA_HOST environment variable value
 /// If the host doesn't include a scheme (http:// or https://), assumes https://

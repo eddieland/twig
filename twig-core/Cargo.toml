@@ -22,6 +22,10 @@ git2.workspace = true
 open.workspace = true
 regex.workspace = true
 thiserror.workspace = true
+tokio.workspace = true
+twig-gh = { path = "../twig-gh" }
+twig-jira = { path = "../twig-jira" }
+url.workspace = true
 uuid.workspace = true
 
 # Serialization
@@ -35,4 +39,8 @@ emojis.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
+twig-test-utils = { path = "../twig-test-utils" }
 tempfile.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true

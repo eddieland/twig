@@ -5,7 +5,9 @@
 //! plugins to access twig's configuration and state in a read-only manner while
 //! maintaining their own separate state.
 
+pub mod clients;
 pub mod config;
+pub mod creds;
 pub mod git;
 pub mod jira_parser;
 pub mod output;
@@ -14,7 +16,15 @@ pub mod tree_renderer;
 pub mod utils;
 
 // Re-export main types for plugin developers
+pub use clients::{
+  ENV_JIRA_HOST, GitHubClient, JiraClient, create_github_client_from_netrc, create_github_runtime_and_client,
+  create_jira_client_from_netrc, create_jira_runtime_and_client, get_jira_host,
+};
 pub use config::{ConfigDirs, get_config_dirs};
+pub use creds::{
+  Credentials, check_github_credentials, check_jira_credentials, get_github_credentials, get_jira_credentials, netrc,
+  platform,
+};
 pub use git::{checkout_branch, current_branch, detect_repository, detect_repository_from_path, in_git_repository};
 pub use jira_parser::{JiraParseError, JiraParsingConfig, JiraParsingMode, JiraTicketParser, create_jira_parser};
 pub use output::{ColorMode, format_repo_path, print_error, print_info, print_success, print_warning};

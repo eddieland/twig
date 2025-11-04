@@ -5,25 +5,11 @@
 
 use anyhow::Result;
 use clap::Parser;
-use cli::handle_cli;
 use no_worries::{Config as NoWorriesConfig, Metadata as NoWorriesMetadata, no_worries};
 use tracing::debug;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
-
-mod auto_dependency_discovery;
-mod cli;
-mod clients;
-mod completion;
-mod consts;
-mod creds;
-mod diagnostics;
-mod fixup;
-mod git;
-mod plugin;
-mod self_update;
-mod user_defined_dependency_resolver;
-mod utils;
+use twig_cli::cli::{self, handle_cli};
 
 fn main() -> Result<()> {
   // Set up the no-worries panic handler with custom configuration
