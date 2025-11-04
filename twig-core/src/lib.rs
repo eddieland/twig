@@ -26,8 +26,10 @@ pub use creds::{
   platform,
 };
 pub use git::{
-  BranchBaseResolution, checkout_branch, create_and_switch_to_branch, current_branch, detect_repository,
-  detect_repository_from_path, in_git_repository, resolve_branch_base, switch_to_branch, try_checkout_remote_branch,
+  BranchBaseResolution, checkout_branch, checkout_branch_with_repo, create_and_switch_to_branch,
+  create_and_switch_to_branch_with_repo, current_branch, detect_repository, detect_repository_from_path,
+  in_git_repository, resolve_branch_base, resolve_branch_base_with_repo, switch_to_branch, switch_to_branch_with_repo,
+  try_checkout_remote_branch, try_checkout_remote_branch_with_repo,
 };
 pub use jira_parser::{JiraParseError, JiraParsingConfig, JiraParsingMode, JiraTicketParser, create_jira_parser};
 pub use output::{ColorMode, format_repo_path, print_error, print_info, print_success, print_warning};

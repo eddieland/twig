@@ -13,7 +13,10 @@ use git2::Repository as Git2Repository;
 use regex::Regex;
 use tokio::runtime::Runtime;
 use twig_core::detect_repository;
-use twig_core::git::{create_and_switch_to_branch, resolve_branch_base, switch_to_branch, try_checkout_remote_branch};
+use twig_core::git::{
+  create_and_switch_to_branch_with_repo, resolve_branch_base_with_repo, switch_to_branch_with_repo,
+  try_checkout_remote_branch_with_repo,
+};
 use twig_core::jira_parser::JiraTicketParser;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::state::{BranchMetadata, RepoState};
@@ -240,6 +243,7 @@ fn handle_jira_switch(
 ) -> Result<()> {
   tracing::info!("Looking for branch associated with Jira issue: {}", issue_key);
 
+  let repo = Git2Repository::open(repo_path)?;
   // Load repository state to find associated branch
   let repo_state = RepoState::load(repo_path)?;
 
@@ -247,7 +251,7 @@ fn handle_jira_switch(
   if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(issue_key) {
     let branch_name = &branch_issue.branch;
     tracing::info!("Found associated branch: {}", branch_name);
-    return switch_to_branch(repo_path, branch_name);
+    return switch_to_branch_with_repo(&repo, branch_name);
   }
 
   // No existing association found
@@ -273,6 +277,7 @@ fn handle_github_pr_switch(
 ) -> Result<()> {
   tracing::info!("Looking for branch associated with GitHub PR: #{}", pr_number);
 
+  let repo = Git2Repository::open(repo_path)?;
   // Load repository state to find associated branch
   let repo_state = RepoState::load(repo_path)?;
 
@@ -283,7 +288,7 @@ fn handle_github_pr_switch(
     {
       let branch_name = &branch_issue.branch;
       tracing::info!("Found associated branch: {}", branch_name);
-      return switch_to_branch(repo_path, branch_name);
+      return switch_to_branch_with_repo(&repo, branch_name);
     }
   }
 
@@ -312,21 +317,22 @@ fn handle_branch_switch(
   // Check if branch exists
   if repo.find_branch(branch_name, git2::BranchType::Local).is_ok() {
     tracing::info!("Switching to existing branch: {}", branch_name);
-    return switch_to_branch(repo_path, branch_name);
+    return switch_to_branch_with_repo(&repo, branch_name);
   }
 
   // Branch doesn't exist
   if create_if_missing {
-    if try_checkout_remote_branch(repo_path, branch_name)? {
+    if try_checkout_remote_branch_with_repo(&repo, branch_name)? {
       return Ok(());
     }
 
     print_info(&format!("Branch '{branch_name}' doesn't exist. Creating it...",));
 
     // Resolve parent branch
-    let branch_base = resolve_branch_base(repo_path, parent_option, jira_parser)?;
+    let mut repo_state = RepoState::load(repo_path)?;
+    let branch_base = resolve_branch_base_with_repo(&repo, parent_option, jira_parser, Some(&repo_state))?;
 
-    create_and_switch_to_branch(repo_path, branch_name, &branch_base)
+    create_and_switch_to_branch_with_repo(&repo, branch_name, &branch_base, Some(&mut repo_state))
   } else {
     print_warning(&format!(
       "Branch '{branch_name}' doesn't exist. Use --create to create it.",
@@ -374,7 +380,7 @@ fn handle_root_switch(repo_path: &std::path::Path) -> Result<()> {
     ));
   }
 
-  switch_to_branch(repo_path, &dependency_root)
+  switch_to_branch_with_repo(&repo, &dependency_root)
 }
 
 /// Create a branch from a Jira issue
@@ -418,10 +424,12 @@ fn create_branch_from_jira_issue(
     print_info(&format!("Creating branch: {branch_name}",));
 
     // Resolve parent branch
-    let branch_base = resolve_branch_base(repo_path, parent_option, jira_parser)?;
+    let repo = Git2Repository::open(repo_path)?;
+    let mut repo_state = RepoState::load(repo_path)?;
+    let branch_base = resolve_branch_base_with_repo(&repo, parent_option, jira_parser, Some(&repo_state))?;
 
     // Create and switch to the branch
-    create_and_switch_to_branch(repo_path, &branch_name, &branch_base)?;
+    create_and_switch_to_branch_with_repo(&repo, &branch_name, &branch_base, Some(&mut repo_state))?;
 
     // Store the association
     store_jira_association(repo_path, &branch_name, issue_key)?;
@@ -468,10 +476,11 @@ fn create_branch_from_github_pr(
     print_info(&format!("Creating branch: {branch_name}",));
 
     // Resolve parent branch
-    let branch_base = resolve_branch_base(repo_path, parent_option, jira_parser)?;
+    let mut repo_state = RepoState::load(repo_path)?;
+    let branch_base = resolve_branch_base_with_repo(&repo, parent_option, jira_parser, Some(&repo_state))?;
 
     // Create and switch to the branch
-    create_and_switch_to_branch(repo_path, &branch_name, &branch_base)?;
+    create_and_switch_to_branch_with_repo(&repo, &branch_name, &branch_base, Some(&mut repo_state))?;
 
     // Store the association
     store_github_pr_association(repo_path, &branch_name, pr_number)?;

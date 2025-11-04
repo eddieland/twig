@@ -119,11 +119,8 @@ pub fn get_upstream_branch(branch_name: &str) -> Result<Option<String>> {
   }
 }
 
-/// Checkout an existing local branch within the provided repository path.
-pub fn checkout_branch<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Result<()> {
-  let repo_path = repo_path.as_ref();
-  let repo = Repository::open(repo_path).context("Failed to open Git repository")?;
-
+/// Checkout an existing local branch using an already-opened repository handle.
+pub fn checkout_branch_with_repo(repo: &Repository, branch_name: &str) -> Result<()> {
   let branch = repo
     .find_branch(branch_name, git2::BranchType::Local)
     .with_context(|| format!("Branch '{branch_name}' not found"))?;
@@ -145,6 +142,12 @@ pub fn checkout_branch<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Resul
     .with_context(|| format!("Failed to checkout branch '{branch_name}'"))?;
 
   Ok(())
+}
+
+/// Checkout an existing local branch within the provided repository path.
+pub fn checkout_branch<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Result<()> {
+  let repo = Repository::open(repo_path.as_ref()).context("Failed to open Git repository")?;
+  checkout_branch_with_repo(&repo, branch_name)
 }
 
 #[derive(Clone, Debug)]
@@ -192,13 +195,13 @@ impl BranchBaseResolution {
   }
 }
 
-pub fn resolve_branch_base(
-  repo_path: &Path,
+pub fn resolve_branch_base_with_repo(
+  repo: &Repository,
   parent_option: Option<&str>,
   jira_parser: Option<&JiraTicketParser>,
+  repo_state: Option<&RepoState>,
 ) -> Result<BranchBaseResolution> {
-  let repo = Repository::open(repo_path)?;
-
+  let mut repo_state_owned: Option<RepoState> = None;
   match parent_option.map(str::trim) {
     None | Some("") | Some("none") => {
       let head_commit = repo
@@ -231,9 +234,18 @@ pub fn resolve_branch_base(
       if let Some(parser) = jira_parser
         && let Ok(normalized_key) = parser.parse(parent)
       {
-        let repo_state = RepoState::load(repo_path)?;
+        let repo_state_ref = match repo_state {
+          Some(state) => state,
+          None => {
+            let repo_path = repo
+              .workdir()
+              .ok_or_else(|| anyhow::anyhow!("Repository has no working directory"))?;
+            repo_state_owned = Some(RepoState::load(repo_path)?);
+            repo_state_owned.as_ref().unwrap()
+          }
+        };
 
-        if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(&normalized_key) {
+        if let Some(branch_issue) = repo_state_ref.get_branch_issue_by_jira(&normalized_key) {
           let commit =
             lookup_branch_tip(&repo, &branch_issue.branch)?.ok_or_else(|| parent_lookup_error(&branch_issue.branch))?;
           return Ok(BranchBaseResolution::parent(branch_issue.branch.clone(), commit));
@@ -246,12 +258,18 @@ pub fn resolve_branch_base(
   }
 }
 
-pub fn try_checkout_remote_branch<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Result<bool> {
-  let repo_path = repo_path.as_ref();
+pub fn resolve_branch_base(
+  repo_path: &Path,
+  parent_option: Option<&str>,
+  jira_parser: Option<&JiraTicketParser>,
+) -> Result<BranchBaseResolution> {
   let repo = Repository::open(repo_path)?;
+  resolve_branch_base_with_repo(&repo, parent_option, jira_parser, None)
+}
 
+pub fn try_checkout_remote_branch_with_repo(repo: &Repository, branch_name: &str) -> Result<bool> {
   let remote_branch_name = format!("origin/{branch_name}");
-  let Some(commit_id) = lookup_branch_tip(&repo, branch_name)? else {
+  let Some(commit_id) = lookup_branch_tip(repo, branch_name)? else {
     return Ok(false);
   };
 
@@ -280,15 +298,25 @@ pub fn try_checkout_remote_branch<P: AsRef<Path>>(repo_path: P, branch_name: &st
 
   drop(local_branch);
 
-  switch_to_branch(repo_path, branch_name)?;
+  switch_to_branch_with_repo(repo, branch_name)?;
 
   Ok(true)
 }
 
-pub fn switch_to_branch<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Result<()> {
-  checkout_branch(repo_path.as_ref(), branch_name)?;
+pub fn try_checkout_remote_branch<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Result<bool> {
+  let repo = Repository::open(repo_path.as_ref())?;
+  try_checkout_remote_branch_with_repo(&repo, branch_name)
+}
+
+pub fn switch_to_branch_with_repo(repo: &Repository, branch_name: &str) -> Result<()> {
+  checkout_branch_with_repo(repo, branch_name)?;
   print_success(&format!("Switched to branch '{branch_name}'"));
   Ok(())
+}
+
+pub fn switch_to_branch<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Result<()> {
+  let repo = Repository::open(repo_path.as_ref())?;
+  switch_to_branch_with_repo(&repo, branch_name)
 }
 
 pub fn create_and_switch_to_branch<P: AsRef<Path>>(
@@ -299,6 +327,15 @@ pub fn create_and_switch_to_branch<P: AsRef<Path>>(
   let repo_path = repo_path.as_ref();
   let repo = Repository::open(repo_path)?;
 
+  create_and_switch_to_branch_with_repo(&repo, branch_name, branch_base, None)
+}
+
+pub fn create_and_switch_to_branch_with_repo(
+  repo: &Repository,
+  branch_name: &str,
+  branch_base: &BranchBaseResolution,
+  mut repo_state: Option<&mut RepoState>,
+) -> Result<()> {
   let base_commit = repo
     .find_commit(branch_base.commit())
     .with_context(|| format!("Failed to locate base commit for '{branch_name}'"))?;
@@ -309,21 +346,39 @@ pub fn create_and_switch_to_branch<P: AsRef<Path>>(
 
   print_success(&format!("Created branch '{branch_name}'"));
 
-  switch_to_branch(repo_path, branch_name)?;
+  switch_to_branch_with_repo(repo, branch_name)?;
 
   if let Some(parent) = branch_base.parent_name() {
-    add_branch_dependency(repo_path, branch_name, parent)?;
+    add_branch_dependency(repo, repo_state.as_deref_mut(), branch_name, parent)?;
   }
 
   Ok(())
 }
 
-fn add_branch_dependency(repo_path: &Path, child: &str, parent: &str) -> Result<()> {
-  let mut repo_state = RepoState::load(repo_path)?;
+fn add_branch_dependency(
+  repo: &Repository,
+  repo_state: Option<&mut RepoState>,
+  child: &str,
+  parent: &str,
+) -> Result<()> {
+  let repo_path = repo
+    .workdir()
+    .ok_or_else(|| anyhow::anyhow!("Repository has no working directory"))?;
 
-  match repo_state.add_dependency(child.to_string(), parent.to_string()) {
+  let mut owned_state: Option<RepoState> = None;
+  let state: &mut RepoState = match repo_state {
+    Some(state) => state,
+    None => {
+      owned_state = Some(RepoState::load(repo_path)?);
+      owned_state
+        .as_mut()
+        .expect("owned_state just initialized with RepoState::load")
+    }
+  };
+
+  match state.add_dependency(child.to_string(), parent.to_string()) {
     Ok(()) => {
-      repo_state.save(repo_path)?;
+      state.save(repo_path)?;
       print_success(&format!("Added dependency: {child} -> {parent}"));
       Ok(())
     }
