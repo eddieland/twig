@@ -43,7 +43,7 @@ YYYY-MM-DD_descriptive-name.md
 
 ## Specification Template
 
-To bootstrap new documents quickly, copy [`_spec_template.md`](_spec_template.md) into a dated filename that matches the naming
+To bootstrap new documents quickly, copy [`_TEMPLATE.md`](_TEMPLATE.md) into a dated filename that matches the naming
 scheme above, then replace the placeholders with project-specific details. The template mirrors the structure of our existing
 plans, including purpose, constraints, backlog, risk tracking, and a space for lessons learned.
 
