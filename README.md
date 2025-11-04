@@ -20,7 +20,7 @@ Twig coordinates branch management, issue tracking, and review work across one o
 
 ## Platform notes
 
-Twig is written in Rust (Edition 2024). The minimum supported Rust version is 1.88.0. We develop primarily on Ubuntu 24.04, with macOS and Windows builds available as well.
+Twig is written in Rust (Edition 2024). The minimum supported Rust version is 1.91.0. We develop primarily on Ubuntu 24.04, with macOS and Windows builds available as well.
 
 ## Installation
 
@@ -75,7 +75,7 @@ cargo install --path twig-cli
 
 **Requirements:**
 
-- Rust 1.88.0 or later
+- Rust 1.91.0 or later
 - Git
 
 ### Verify Installation
