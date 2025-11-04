@@ -113,12 +113,84 @@ The following backlog is prioritized for a single subagent (or small group) to i
 - How do we reconcile provider-specific metadata (e.g., Jira issue types vs. GitHub labels) in shared commands?
 - What is the minimum viable subset of GitHub Issue operations required for parity with Jira-powered automations?
 
+## Audit of Current Issue-Related Flows
+
+### Command and Module Inventory
+
+- `twig-cli/src/cli/jira.rs`: Clap command definitions for Jira-specific subcommands (`issue`, `transition`, `assign`, `comment`, `browse`). Each handler delegates into `crate::jira` helpers.
+- `twig-cli/src/jira/mod.rs`: Entry point for Jira workflows; orchestrates runtime/client creation and wraps helper modules.
+- `twig-cli/src/jira/commands/issue.rs`: Implements `issue` subcommand logic (fetch by key, print summary). Depends on `twig_jira::client::JiraClient` models for request/response handling.
+- `twig-cli/src/jira/commands/assign.rs`: Handles assignment transitions using Jira-specific request payloads and status enums.
+- `twig-cli/src/jira/commands/comment.rs`: Posts comments via Jira REST client, formatting output through `twig_core::output` utilities.
+- `twig-cli/src/jira/commands/transition.rs`: Performs state transitions by querying available transitions then executing selected transition IDs.
+- `twig-cli/src/jira/commands/sync.rs`: Synchronizes Jira issues into local branch metadata, pulling sprint/backlog data from Jira boards.
+- `twig-cli/src/jira/board.rs`: Fetches Jira boards/sprints, used by sync automation and backlog commands.
+- `twig-cli/src/jira/link.rs`: Manages association between local branches and Jira issues (linking/unlinking keys in repo state).
+- `twig-cli/src/jira/worklog.rs`: Records and fetches Jira worklogs, including time tracking conversions.
+- `twig-cli/src/jira/state.rs`: Serializes Jira-linked branch state into `.twig/state.json`, storing issue keys and transition metadata.
+- `twig-cli/src/git/branch_tracking.rs`: Integrates with Jira link state to derive branch naming suggestions (embedding issue keys).
+- `twig-core/src/state/branch.rs`: Persists Jira issue metadata (key, summary, status) alongside branch records.
+- `twig-core/src/state/registry.rs`: Maintains Jira board and sprint cache entries reused by CLI sync commands.
+- `twig-core/src/config.rs`: Loads Jira-specific configuration (`jira.toml`) and exposes helper structs consumed by CLI.
+- `twig-jira/src/client/mod.rs`: Provides `JiraClient` with authentication, REST endpoints, and domain models used throughout CLI commands.
+- `twig-jira/src/client/models.rs`: Defines strongly typed representations of Jira issues, transitions, comments, and metadata referenced across CLI modules.
+- `twig-test-utils/src/jira.rs`: Supplies fixtures and helpers to simulate Jira interactions during integration tests.
+
+### Dependency Mapping
+
+```mermaid
+flowchart TD
+    subgraph CLI
+        jira_cli[cli/jira.rs]
+        jira_mod[ jira/mod.rs ]
+        commands[ jira/commands/* ]
+        link[ jira/link.rs ]
+        board[ jira/board.rs ]
+        worklog[ jira/worklog.rs ]
+    end
+    subgraph Core
+        core_state[state/{branch,registry}.rs]
+        core_config[config.rs]
+        core_output[output.rs]
+    end
+    subgraph JiraCrate
+        jira_client[twig-jira::client]
+        jira_models[twig-jira::client::models]
+    end
+    subgraph Tests
+        jira_tests[twig-test-utils::jira]
+    end
+
+    jira_cli --> jira_mod
+    jira_mod --> commands
+    commands --> jira_client
+    commands --> jira_models
+    commands --> core_output
+    commands --> core_state
+    commands --> core_config
+    link --> core_state
+    link --> jira_models
+    board --> jira_client
+    board --> core_state
+    worklog --> jira_client
+    worklog --> core_state
+    core_state --> jira_tests
+    jira_client --> jira_tests
+```
+
+### Observations
+
+1. **Tight coupling to Jira models:** CLI command modules import `twig_jira::client::models::*` types directly, making it difficult to substitute alternative issue representations.
+2. **State schema baked into Jira concepts:** `.twig/state.json` encodes Jira issue keys and transition IDs without abstraction, requiring migrations before supporting new providers.
+3. **Shared utilities are Jira-aware:** Helper modules such as branch tracking and worklog rely on Jira-specific status enums and time accounting, indicating places where provider-agnostic traits must offer equivalent data.
+4. **Test infrastructure mirrors production dependencies:** `twig-test-utils` builds Jira fixtures against concrete client structs, highlighting the need for trait-driven mocks.
+
 ## Status Tracking (to be updated by subagent)
 
-- **Current focus:** _Not yet started (awaiting implementation kickoff)._ 
-- **Latest completed task:** _None._
-- **Next up:** _Audit current issue-related flows and document touchpoints needing abstraction._
+- **Current focus:** _Design and codify provider trait(s) and domain models in `twig-core`._
+- **Latest completed task:** _Audit current issue-related flows and document touchpoints needing abstraction._
+- **Next up:** _Design and codify provider trait(s) and domain models in `twig-core`._
 
 ## Lessons Learned (ongoing)
 
-- _To be populated during execution._
+- Mapping dependencies surfaced several CLI helpers (`branch_tracking`, `worklog`) that will require dedicated abstraction layers, helping scope the trait design work ahead.
