@@ -7,7 +7,11 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use git2::{self, Repository};
+use git2::{self, BranchType, ErrorClass, ErrorCode, FetchOptions, Oid, Repository};
+
+use crate::jira_parser::JiraTicketParser;
+use crate::output::{print_info, print_success, print_warning};
+use crate::state::RepoState;
 
 /// Detect if the current directory or any parent directory is a Git repository
 pub fn detect_repository() -> Option<PathBuf> {
@@ -143,9 +147,246 @@ pub fn checkout_branch<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Resul
   Ok(())
 }
 
+#[derive(Clone, Debug)]
+enum BranchBase {
+  Head,
+  Parent { name: String },
+}
+
+impl BranchBase {
+  fn parent_name(&self) -> Option<&str> {
+    match self {
+      BranchBase::Head => None,
+      BranchBase::Parent { name } => Some(name.as_str()),
+    }
+  }
+}
+
+#[derive(Clone, Debug)]
+pub struct BranchBaseResolution {
+  base: BranchBase,
+  commit: Oid,
+}
+
+impl BranchBaseResolution {
+  fn head(commit: Oid) -> Self {
+    Self {
+      base: BranchBase::Head,
+      commit,
+    }
+  }
+
+  fn parent(name: String, commit: Oid) -> Self {
+    Self {
+      base: BranchBase::Parent { name },
+      commit,
+    }
+  }
+
+  pub fn parent_name(&self) -> Option<&str> {
+    self.base.parent_name()
+  }
+
+  pub fn commit(&self) -> Oid {
+    self.commit
+  }
+}
+
+pub fn resolve_branch_base(
+  repo_path: &Path,
+  parent_option: Option<&str>,
+  jira_parser: Option<&JiraTicketParser>,
+) -> Result<BranchBaseResolution> {
+  let repo = Repository::open(repo_path)?;
+
+  match parent_option.map(str::trim) {
+    None | Some("") | Some("none") => {
+      let head_commit = repo
+        .head()
+        .context("Failed to resolve HEAD for branch creation")?
+        .peel_to_commit()
+        .context("Failed to resolve HEAD commit for branch creation")?;
+      Ok(BranchBaseResolution::head(head_commit.id()))
+    }
+    Some("current") => {
+      let head = repo
+        .head()
+        .context("Failed to resolve current branch for --parent=current")?;
+
+      if !head.is_branch() {
+        return Err(anyhow::anyhow!(
+          "HEAD is not on a branch. Create a branch first or use `--parent none`."
+        ));
+      }
+
+      let branch_name = head.shorthand().unwrap_or_default().to_string();
+      let commit = head
+        .peel_to_commit()
+        .context("Failed to resolve commit for the current branch")?
+        .id();
+
+      Ok(BranchBaseResolution::parent(branch_name, commit))
+    }
+    Some(parent) => {
+      if let Some(parser) = jira_parser
+        && let Ok(normalized_key) = parser.parse(parent)
+      {
+        let repo_state = RepoState::load(repo_path)?;
+
+        if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(&normalized_key) {
+          let commit =
+            lookup_branch_tip(&repo, &branch_issue.branch)?.ok_or_else(|| parent_lookup_error(&branch_issue.branch))?;
+          return Ok(BranchBaseResolution::parent(branch_issue.branch.clone(), commit));
+        }
+      }
+
+      let commit = lookup_branch_tip(&repo, parent)?.ok_or_else(|| parent_lookup_error(parent))?;
+      Ok(BranchBaseResolution::parent(parent.to_string(), commit))
+    }
+  }
+}
+
+pub fn try_checkout_remote_branch<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Result<bool> {
+  let repo_path = repo_path.as_ref();
+  let repo = Repository::open(repo_path)?;
+
+  let remote_branch_name = format!("origin/{branch_name}");
+  let Some(commit_id) = lookup_branch_tip(&repo, branch_name)? else {
+    return Ok(false);
+  };
+
+  if repo.find_branch(&remote_branch_name, BranchType::Remote).is_err() {
+    return Ok(false);
+  }
+
+  let commit = repo
+    .find_commit(commit_id)
+    .with_context(|| format!("Failed to locate remote commit for '{remote_branch_name}'"))?;
+
+  print_info(&format!(
+    "Branch '{branch_name}' found on origin. Creating local tracking branch..."
+  ));
+
+  repo
+    .branch(branch_name, &commit, false)
+    .with_context(|| format!("Failed to create local branch '{branch_name}' from origin"))?;
+
+  let mut local_branch = repo
+    .find_branch(branch_name, BranchType::Local)
+    .with_context(|| format!("Failed to reopen branch '{branch_name}'"))?;
+  local_branch
+    .set_upstream(Some(&remote_branch_name))
+    .with_context(|| format!("Failed to set upstream for '{branch_name}'"))?;
+
+  drop(local_branch);
+
+  switch_to_branch(repo_path, branch_name)?;
+
+  Ok(true)
+}
+
+pub fn switch_to_branch<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Result<()> {
+  checkout_branch(repo_path.as_ref(), branch_name)?;
+  print_success(&format!("Switched to branch '{branch_name}'"));
+  Ok(())
+}
+
+pub fn create_and_switch_to_branch<P: AsRef<Path>>(
+  repo_path: P,
+  branch_name: &str,
+  branch_base: &BranchBaseResolution,
+) -> Result<()> {
+  let repo_path = repo_path.as_ref();
+  let repo = Repository::open(repo_path)?;
+
+  let base_commit = repo
+    .find_commit(branch_base.commit())
+    .with_context(|| format!("Failed to locate base commit for '{branch_name}'"))?;
+
+  repo
+    .branch(branch_name, &base_commit, false)
+    .with_context(|| format!("Failed to create branch '{branch_name}'"))?;
+
+  print_success(&format!("Created branch '{branch_name}'"));
+
+  switch_to_branch(repo_path, branch_name)?;
+
+  if let Some(parent) = branch_base.parent_name() {
+    add_branch_dependency(repo_path, branch_name, parent)?;
+  }
+
+  Ok(())
+}
+
+fn add_branch_dependency(repo_path: &Path, child: &str, parent: &str) -> Result<()> {
+  let mut repo_state = RepoState::load(repo_path)?;
+
+  match repo_state.add_dependency(child.to_string(), parent.to_string()) {
+    Ok(()) => {
+      repo_state.save(repo_path)?;
+      print_success(&format!("Added dependency: {child} -> {parent}"));
+      Ok(())
+    }
+    Err(e) => {
+      print_warning(&format!("Failed to add dependency: {e}"));
+      Ok(())
+    }
+  }
+}
+
+fn lookup_branch_tip(repo: &Repository, branch_name: &str) -> Result<Option<Oid>> {
+  if let Ok(branch) = repo.find_branch(branch_name, BranchType::Local) {
+    let commit = branch
+      .into_reference()
+      .peel_to_commit()
+      .context("Failed to resolve local branch commit")?;
+    return Ok(Some(commit.id()));
+  }
+
+  let remote_branch_name = format!("origin/{branch_name}");
+  if let Ok(branch) = repo.find_branch(&remote_branch_name, BranchType::Remote) {
+    let commit = branch
+      .into_reference()
+      .peel_to_commit()
+      .context("Failed to resolve remote branch commit")?;
+    return Ok(Some(commit.id()));
+  }
+
+  if let Ok(mut remote) = repo.find_remote("origin") {
+    let mut fetch_options = FetchOptions::new();
+    if let Err(err) = remote.fetch(&[branch_name], Some(&mut fetch_options), None) {
+      if err.code() == ErrorCode::NotFound || err.class() == ErrorClass::Reference {
+        return Ok(None);
+      }
+
+      Err(err).with_context(|| format!("Failed to fetch '{branch_name}' from origin"))?;
+    }
+
+    if let Ok(branch) = repo.find_branch(&remote_branch_name, BranchType::Remote) {
+      let commit = branch
+        .into_reference()
+        .peel_to_commit()
+        .context("Failed to resolve fetched branch commit")?;
+      return Ok(Some(commit.id()));
+    }
+  }
+
+  Ok(None)
+}
+
+fn parent_lookup_error(parent: &str) -> anyhow::Error {
+  anyhow::anyhow!(
+    "Parent branch '{parent}' was not found. Create it first and record dependencies with `twig branch depend` or `twig branch root add`."
+  )
+}
+
 #[cfg(test)]
 mod tests {
+  use anyhow::Result;
   use tempfile::TempDir;
+  use twig_test_utils::{
+    GitRepoTestGuard, checkout_branch as utils_checkout_branch, create_commit, setup_test_env_with_init,
+  };
 
   use super::*;
 
@@ -248,5 +489,61 @@ mod tests {
     let repo = Repository::open(repo_path).unwrap();
     let head = repo.head().unwrap();
     assert_eq!(head.shorthand(), Some("feature/test"));
+  }
+
+  #[test]
+  fn test_resolve_branch_base_with_parent_branch() -> Result<()> {
+    let (_env_guard, _config_dirs) = setup_test_env_with_init()?;
+    let repo_guard = GitRepoTestGuard::new();
+    let repo = &repo_guard.repo;
+
+    create_commit(repo, "base.txt", "base", "initial commit")?;
+    let head_commit = repo.head()?.peel_to_commit()?;
+    repo.branch("parent", &head_commit, true)?;
+    utils_checkout_branch(repo, "parent")?;
+    create_commit(repo, "parent.txt", "parent", "parent commit")?;
+
+    let branch_base = resolve_branch_base(repo_guard.path(), Some("parent"), None)?;
+    assert_eq!(branch_base.parent_name(), Some("parent"));
+
+    let repo_state = RepoState::load(repo_guard.path())?;
+    assert!(repo_state.dependencies.is_empty());
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_try_checkout_remote_branch_creates_local_tracking_branch() -> Result<()> {
+    let (_env_guard, _config_dirs) = setup_test_env_with_init()?;
+    let repo_guard = GitRepoTestGuard::new();
+    let repo = &repo_guard.repo;
+
+    create_commit(repo, "base.txt", "base", "initial commit")?;
+    repo.remote("origin", "https://github.com/example/repo.git")?;
+
+    let head_commit = repo.head()?.peel_to_commit()?.id();
+    repo.reference(
+      "refs/remotes/origin/feature/existing",
+      head_commit,
+      true,
+      "test remote branch",
+    )?;
+
+    assert!(try_checkout_remote_branch(repo_guard.path(), "feature/existing")?);
+
+    let repo = Repository::open(repo_guard.path())?;
+    let local_branch = repo.find_branch("feature/existing", BranchType::Local)?;
+    assert_eq!(repo.head()?.shorthand(), Some("feature/existing"));
+
+    let tip = local_branch
+      .get()
+      .target()
+      .expect("local branch should have a target commit");
+    assert_eq!(tip, head_commit);
+
+    let upstream = local_branch.upstream()?;
+    assert_eq!(upstream.name()?, Some("origin/feature/existing"));
+
+    Ok(())
   }
 }

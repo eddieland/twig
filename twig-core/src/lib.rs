@@ -25,7 +25,10 @@ pub use creds::{
   Credentials, check_github_credentials, check_jira_credentials, get_github_credentials, get_jira_credentials, netrc,
   platform,
 };
-pub use git::{checkout_branch, current_branch, detect_repository, detect_repository_from_path, in_git_repository};
+pub use git::{
+  BranchBaseResolution, checkout_branch, create_and_switch_to_branch, current_branch, detect_repository,
+  detect_repository_from_path, in_git_repository, resolve_branch_base, switch_to_branch, try_checkout_remote_branch,
+};
 pub use jira_parser::{JiraParseError, JiraParsingConfig, JiraParsingMode, JiraTicketParser, create_jira_parser};
 pub use output::{ColorMode, format_repo_path, print_error, print_info, print_success, print_warning};
 pub use state::{BranchDependency, BranchMetadata, Registry, RepoState, Repository, RootBranch, create_worktree};
