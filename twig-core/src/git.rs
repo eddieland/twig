@@ -7,7 +7,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use git2::Repository;
+use git2::{self, Repository};
 
 /// Detect if the current directory or any parent directory is a Git repository
 pub fn detect_repository() -> Option<PathBuf> {
@@ -115,6 +115,34 @@ pub fn get_upstream_branch(branch_name: &str) -> Result<Option<String>> {
   }
 }
 
+/// Checkout an existing local branch within the provided repository path.
+pub fn checkout_branch<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Result<()> {
+  let repo_path = repo_path.as_ref();
+  let repo = Repository::open(repo_path).context("Failed to open Git repository")?;
+
+  let branch = repo
+    .find_branch(branch_name, git2::BranchType::Local)
+    .with_context(|| format!("Branch '{branch_name}' not found"))?;
+
+  let target = branch
+    .get()
+    .target()
+    .ok_or_else(|| anyhow::anyhow!("Branch '{branch_name}' has no target commit"))?;
+
+  repo
+    .set_head(&format!("refs/heads/{branch_name}"))
+    .with_context(|| format!("Failed to set HEAD to branch '{branch_name}'"))?;
+
+  let object = repo.find_object(target, None)?;
+  let mut builder = git2::build::CheckoutBuilder::new();
+
+  repo
+    .checkout_tree(&object, Some(&mut builder))
+    .with_context(|| format!("Failed to checkout branch '{branch_name}'"))?;
+
+  Ok(())
+}
+
 #[cfg(test)]
 mod tests {
   use tempfile::TempDir;
@@ -192,5 +220,33 @@ mod tests {
 
     // Restore original directory
     env::set_current_dir(original_dir).unwrap();
+  }
+
+  #[test]
+  fn test_checkout_branch() {
+    let temp_dir = TempDir::new().unwrap();
+    let repo_path = temp_dir.path();
+
+    let repo = Repository::init(repo_path).unwrap();
+
+    let signature = git2::Signature::now("Test User", "test@example.com").unwrap();
+    let tree_id = {
+      let mut index = repo.index().unwrap();
+      index.write_tree().unwrap()
+    };
+    let tree = repo.find_tree(tree_id).unwrap();
+
+    repo
+      .commit(Some("HEAD"), &signature, &signature, "Initial commit", &tree, &[])
+      .unwrap();
+
+    let head_commit = repo.head().unwrap().peel_to_commit().unwrap();
+    repo.branch("feature/test", &head_commit, false).unwrap();
+
+    checkout_branch(repo_path, "feature/test").unwrap();
+
+    let repo = Repository::open(repo_path).unwrap();
+    let head = repo.head().unwrap();
+    assert_eq!(head.shorthand(), Some("feature/test"));
   }
 }

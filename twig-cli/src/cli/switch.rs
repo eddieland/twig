@@ -12,10 +12,10 @@ use directories::BaseDirs;
 use git2::{ErrorClass, ErrorCode, Repository as Git2Repository};
 use regex::Regex;
 use tokio::runtime::Runtime;
-use twig_core::detect_repository;
 use twig_core::jira_parser::JiraTicketParser;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::state::{BranchMetadata, RepoState};
+use twig_core::{checkout_branch, detect_repository};
 use twig_gh::GitHubClient;
 use twig_jira::JiraClient;
 
@@ -558,32 +558,7 @@ fn handle_root_switch(repo_path: &std::path::Path) -> Result<()> {
 
 /// Switch to an existing branch
 fn switch_to_branch(repo_path: &std::path::Path, branch_name: &str) -> Result<()> {
-  let repo = Git2Repository::open(repo_path)?;
-
-  // Find the branch
-  let branch = repo
-    .find_branch(branch_name, git2::BranchType::Local)
-    .with_context(|| format!("Branch '{branch_name}' not found",))?;
-
-  // Get the target commit
-  let target = branch
-    .get()
-    .target()
-    .ok_or_else(|| anyhow::anyhow!("Branch '{branch_name}' has no target commit",))?;
-
-  // Set HEAD to the branch
-  repo
-    .set_head(&format!("refs/heads/{branch_name}",))
-    .with_context(|| format!("Failed to set HEAD to branch '{branch_name}'",))?;
-
-  let object = repo.find_object(target, None)?;
-
-  // Checkout the branch
-  let mut builder = git2::build::CheckoutBuilder::new();
-  repo
-    .checkout_tree(&object, Some(&mut builder))
-    .with_context(|| format!("Failed to checkout branch '{branch_name}'",))?;
-
+  checkout_branch(repo_path, branch_name)?;
   print_success(&format!("Switched to branch '{branch_name}'",));
   Ok(())
 }
