@@ -6,6 +6,10 @@
 - `twig` binary crate re-exports `twig-cli`; most logic lives under `twig-cli/src` with clap-driven command modules mapped one-to-one to subcommands (e.g. `cli/git.rs`, `cli/jira.rs`). 【F:twig-cli/src/main.rs†L5-L46】【F:twig-cli/src/cli/mod.rs†L1-L108】
 - Shared persistent state lives in JSON/TOML under XDG dirs managed by `twig-core::config`; command handlers manipulate registries/worktrees via `twig-core::state`. 【F:twig-core/src/config.rs†L1-L96】【F:twig-core/src/state.rs†L1-L93】
 
+## Documentation Workflow
+
+- Long-form specifications and agent-readable plans live under `docs/specs/`. Review the [directory README](docs/specs/README.md) for naming conventions (`YYYY-MM-DD_descriptive-name.md`), the `_TEMPLATE.md` starter, and guidance on incremental checkpointing/lessons-learned when collaborating via docs. Ensure new specs follow this workflow to keep AI/human collaboration in sync. 【F:docs/specs/README.md†L1-L104】
+
 ## Build & Test Workflow
 
 - Prefer Make targets: `make fmt` (runs `cargo fmt`, `cargo clippy --fix`, Ruff for plugin examples), `make lint`, `make test` (`cargo nextest run --workspace`). 【F:Makefile†L1-L58】
