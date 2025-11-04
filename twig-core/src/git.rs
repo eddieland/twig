@@ -115,11 +115,8 @@ pub fn get_upstream_branch(branch_name: &str) -> Result<Option<String>> {
   }
 }
 
-/// Checkout an existing local branch within the provided repository path.
-pub fn checkout_branch<P: AsRef<Path>>(repo_path: P, branch_name: &str) -> Result<()> {
-  let repo_path = repo_path.as_ref();
-  let repo = Repository::open(repo_path).context("Failed to open Git repository")?;
-
+/// Checkout an existing local branch using the provided repository.
+pub fn checkout_branch(repo: &Repository, branch_name: &str) -> Result<()> {
   let branch = repo
     .find_branch(branch_name, git2::BranchType::Local)
     .with_context(|| format!("Branch '{branch_name}' not found"))?;
@@ -243,9 +240,8 @@ mod tests {
     let head_commit = repo.head().unwrap().peel_to_commit().unwrap();
     repo.branch("feature/test", &head_commit, false).unwrap();
 
-    checkout_branch(repo_path, "feature/test").unwrap();
+    checkout_branch(&repo, "feature/test").unwrap();
 
-    let repo = Repository::open(repo_path).unwrap();
     let head = repo.head().unwrap();
     assert_eq!(head.shorthand(), Some("feature/test"));
   }
