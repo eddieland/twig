@@ -84,7 +84,7 @@ mod tests {
   use twig_test_utils::NetrcGuard;
 
   use super::*;
-  use crate::consts::ENV_JIRA_HOST;
+  use crate::clients::ENV_JIRA_HOST;
 
   #[test]
   fn test_get_jira_credentials() {
