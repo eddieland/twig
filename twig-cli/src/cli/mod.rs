@@ -87,7 +87,7 @@ pub struct Cli {
 /// Subcommands for the twig tool
 #[derive(Subcommand)]
 pub enum Commands {
-  /// Branch dependency and root management
+  /// Curate a custom branch dependency map
   #[command(long_about = "Manage custom branch dependencies and root branches.\n\n\
             This command group allows you to define custom parent-child relationships\n\
             between branches beyond Git's automatic detection. You can also manage\n\
@@ -95,7 +95,7 @@ pub enum Commands {
   #[command(alias = "br")]
   Branch(branch::BranchArgs),
 
-  /// Perform a cascading rebase from the current branch to its children
+  /// Rebase a branch and all of its descendants
   #[command(
     long_about = "Perform a cascading rebase from the current branch to its children.\n\n\
             This command rebases all child branches on their parent(s) in a cascading manner,\n\
@@ -104,7 +104,7 @@ pub enum Commands {
   #[command(alias = "casc")]
   Cascade(cascade::CascadeArgs),
 
-  /// Create a commit using Jira issue information
+  /// Craft commits prefilled from Jira issues
   #[command(
     long_about = "Create a commit using Jira issue information for the current branch.\n\n\
             This command uses the Jira issue associated with the current branch to generate\n\
@@ -115,7 +115,7 @@ pub enum Commands {
   )]
   Commit(commit::CommitArgs),
 
-  /// Create fixup commits interactively
+  /// Speed through interactive fixup commits
   #[command(long_about = "Interactively select and create fixup commits for recent work.\n\n\
             This command helps you quickly find and create fixup commits by presenting\n\
             an interactive fuzzy finder with recent commits from your current branch.\n\
@@ -143,7 +143,7 @@ pub enum Commands {
   #[command(arg_required_else_help = true)]
   SelfCmd(self_cmd::SelfArgs),
 
-  /// Show a comprehensive dashboard of local branches, PRs, and issues
+  /// Review branches, PRs, and issues together
   #[command(
     long_about = "Show a comprehensive dashboard of local branches, PRs, and issues.\n\n\
             This command displays a unified view of your development context,\n\
@@ -157,7 +157,7 @@ pub enum Commands {
   #[command(alias = "v")]
   Dashboard(dashboard::DashboardArgs),
 
-  /// Git repository management
+  /// Track and manage your registered repositories
   #[command(long_about = "Manage multiple Git repositories through twig.\n\n\
             This command group allows you to register, track, and perform operations\n\
             across multiple repositories. Repositories added to twig can be referenced\n\
@@ -165,7 +165,7 @@ pub enum Commands {
   #[command(alias = "g")]
   Git(git::GitArgs),
 
-  /// GitHub integration
+  /// Sync with GitHub pull requests
   #[command(name = "github")]
   #[command(long_about = "Interact with GitHub repositories and pull requests.\n\n\
             This command group provides functionality for working with GitHub,\n\
@@ -174,14 +174,14 @@ pub enum Commands {
   #[command(alias = "gh")]
   GitHub(github::GitHubArgs),
 
-  /// Initialize twig configuration
+  /// Set up twig's local configuration files
   #[command(long_about = "Initializes the twig configuration for your environment.\n\n\
             This creates necessary configuration files in your home directory to track\n\
             repositories and store settings. Run this command once before using other\n\
             twig features. No credentials are required for this operation.")]
   Init,
 
-  /// Jira integration
+  /// Work with Jira issues from your terminal
   #[command(long_about = "Interact with Jira issues and create branches from them.\n\n\
             This command group provides functionality for working with Jira,\n\
             including viewing issues, transitioning issues through workflows,\n\
@@ -192,14 +192,14 @@ pub enum Commands {
   #[command(hide = true)]
   Panic,
 
-  /// Rebase the current branch on its parent(s)
+  /// Rebase the current branch onto its parent chain
   #[command(long_about = "Rebase the current branch on its parent(s).\n\n\
             This command rebases the current branch on its parent(s) based on\n\
             the dependency tree. It can optionally start from the root branch.")]
   #[command(alias = "rb")]
   Rebase(rebase::RebaseArgs),
 
-  /// Switch to branches by Jira issue, GitHub PR, or branch name
+  /// Jump to branches by issue, PR, or name
   #[command(long_about = "Intelligently switch to branches based on various inputs.\n\n\
             This command can switch branches based on:\n\
             • Jira issue key (e.g., PROJ-123)\n\
@@ -213,7 +213,7 @@ pub enum Commands {
   #[command(alias = "sw")]
   Switch(switch::SwitchArgs),
 
-  /// Automatically link branches to Jira issues and GitHub PRs
+  /// Auto-link branches to Jira issues and PRs
   #[command(
     long_about = "Scan local branches and automatically detect and link them to their corresponding\n\
             Jira issues and GitHub PRs.\n\n\
@@ -229,7 +229,7 @@ pub enum Commands {
   )]
   Sync(sync::SyncArgs),
 
-  /// Show your branch tree with user-defined dependencies
+  /// Visualize your custom branch dependency tree
   #[command(
     long_about = "Display local branches in a tree-like view based on user-defined dependencies.\n\n\
             This command shows branch relationships that you have explicitly defined using\n\
@@ -241,7 +241,7 @@ pub enum Commands {
   #[command(alias = "t")]
   Tree(tree::TreeArgs),
 
-  /// Worktree management
+  /// Manage Git worktrees for parallel development
   #[command(long_about = "Manage Git worktrees for efficient multi-branch development.\n\n\
             Worktrees allow you to check out multiple branches simultaneously in separate\n\
             directories, all connected to the same repository. This enables working on\n\
