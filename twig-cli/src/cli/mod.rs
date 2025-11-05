@@ -291,6 +291,12 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
   }
 }
 
+/// Handle plugin fallback when no built-in command matches
+///
+/// If no command text was provided at all, show the standard --help message.
+/// If there is a plugin available with the given name, execute it.
+/// If there is no plugin available, show the standard --help message and an
+/// error.
 fn handle_plugin_fallback(cli: Cli) -> Result<()> {
   // No built-in command matched, try plugin discovery
   if let Some(plugin_name) = cli.plugin_args.first() {
@@ -301,9 +307,11 @@ fn handle_plugin_fallback(cli: Cli) -> Result<()> {
       use clap::CommandFactory;
       use clap::error::ErrorKind;
 
-      Cli::command()
-        .error(ErrorKind::InvalidSubcommand, plugin_name.as_str())
-        .exit();
+      let mut cmd = Cli::command();
+      cmd.print_help()?;
+      println!();
+      let error = cmd.error(ErrorKind::InvalidSubcommand, plugin_name.as_str());
+      error.exit()
     }
   } else {
     // No command provided at all, show help
