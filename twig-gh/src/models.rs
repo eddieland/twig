@@ -43,8 +43,19 @@ pub struct GitHubPullRequest {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PullRequestRef {
   pub label: String,
+  #[serde(rename = "ref")]
   pub ref_name: Option<String>,
   pub sha: String,
+  pub repo: Option<RepositoryInfo>,
+}
+
+/// Represents repository metadata returned as part of a pull request reference
+#[derive(Debug, Deserialize, Serialize)]
+pub struct RepositoryInfo {
+  pub full_name: Option<String>,
+  pub clone_url: Option<String>,
+  pub ssh_url: Option<String>,
+  pub owner: Option<GitHubUser>,
 }
 
 /// Represents a GitHub pull request review
@@ -133,13 +144,24 @@ mod tests {
         "updated_at": "2011-01-26T19:01:12Z",
         "head": {
             "label": "octocat:new-feature",
-            "ref_name": "new-feature",
-            "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
+            "ref": "new-feature",
+            "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e",
+            "repo": {
+                "full_name": "octocat/Hello-World",
+                "clone_url": "https://github.com/octocat/Hello-World.git",
+                "ssh_url": "git@github.com:octocat/Hello-World.git",
+                "owner": {
+                    "login": "octocat",
+                    "id": 1,
+                    "name": "The Octocat"
+                }
+            }
         },
         "base": {
             "label": "octocat:master",
-            "ref_name": "master",
-            "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
+            "ref": "master",
+            "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e",
+            "repo": null
         },
         "mergeable": true,
         "mergeable_state": "clean",

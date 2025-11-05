@@ -293,12 +293,12 @@ mod tests {
           "merged_at": null,
           "head": {
             "label": "octocat:new-feature",
-            "ref_name": "new-feature",
+            "ref": "new-feature",
             "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
           },
           "base": {
             "label": "octocat:master",
-            "ref_name": "master",
+            "ref": "master",
             "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
           }
         }
@@ -356,12 +356,12 @@ mod tests {
           "merged_at": "2011-01-27T19:01:12Z",
           "head": {
             "label": "octocat:another-feature",
-            "ref_name": "another-feature",
+            "ref": "another-feature",
             "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
           },
           "base": {
             "label": "octocat:master",
-            "ref_name": "master",
+            "ref": "master",
             "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
           }
         }
@@ -413,12 +413,12 @@ mod tests {
         "updated_at": "2011-01-26T19:01:12Z",
         "head": {
           "label": "octocat:new-feature",
-          "ref_name": "new-feature",
+          "ref": "new-feature",
           "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
         },
         "base": {
           "label": "octocat:master",
-          "ref_name": "master",
+          "ref": "master",
           "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
         },
         "mergeable": true,
@@ -477,12 +477,12 @@ mod tests {
           "updated_at": "2011-01-26T19:01:12Z",
           "head": {
             "label": "octocat:target-branch",
-            "ref_name": "target-branch",
+            "ref": "target-branch",
             "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
           },
           "base": {
             "label": "octocat:master",
-            "ref_name": "master",
+            "ref": "master",
             "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
           }
         },
@@ -501,12 +501,12 @@ mod tests {
           "updated_at": "2011-01-26T19:01:12Z",
           "head": {
             "label": "octocat:different-branch",
-            "ref_name": "different-branch",
+            "ref": "different-branch",
             "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
           },
           "base": {
             "label": "octocat:master",
-            "ref_name": "master",
+            "ref": "master",
             "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
           }
         }
@@ -562,12 +562,12 @@ mod tests {
         "updated_at": "2011-01-26T19:01:12Z",
         "head": {
           "label": "octocat:new-feature",
-          "ref_name": "new-feature",
+          "ref": "new-feature",
           "sha": commit_sha
         },
         "base": {
           "label": "octocat:master",
-          "ref_name": "master",
+          "ref": "master",
           "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
         },
         "mergeable": true,
