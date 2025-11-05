@@ -78,7 +78,6 @@ fn plugin_exists(plugin_name: &str) -> Result<bool> {
 }
 
 /// List available plugins in PATH
-#[allow(dead_code)]
 pub fn list_available_plugins() -> Result<Vec<String>> {
   let mut plugins = Vec::new();
 
