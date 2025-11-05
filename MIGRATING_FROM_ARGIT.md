@@ -232,15 +232,15 @@ Enable shell completion for twig, similar to argit's approach but with a differe
 
 ```bash
 # Generate completion script for your shell
-twig completion bash > ~/.twig-completion.bash
+twig self completion bash > ~/.twig-completion.bash
 echo 'source ~/.twig-completion.bash' >> ~/.bashrc
 
 # Or for zsh
-twig completion zsh > ~/.twig-completion.zsh
+twig self completion zsh > ~/.twig-completion.zsh
 echo 'source ~/.twig-completion.zsh' >> ~/.zshrc
 
 # Or for fish
-twig completion fish > ~/.config/fish/completions/twig.fish
+twig self completion fish > ~/.config/fish/completions/twig.fish
 ```
 
 Unlike argit's `eval` approach, twig generates a static completion script that you can inspect before sourcing.

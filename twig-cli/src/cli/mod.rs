@@ -28,7 +28,7 @@ use clap::builder::styling::AnsiColor;
 use clap::{ArgAction, Parser, Subcommand};
 use twig_core::output::ColorMode;
 
-use crate::{diagnostics, plugin};
+use crate::plugin;
 
 /// Top-level CLI command for the twig tool
 #[derive(Parser)]
@@ -127,12 +127,6 @@ pub enum Commands {
   #[command(alias = "fix")]
   Fixup(fixup::FixupArgs),
 
-  /// Generate shell completions
-  #[command(long_about = "Generates shell completion scripts for twig commands.\n\n\
-            This command generates completion scripts that provide tab completion for twig\n\
-            commands and options in your shell. Supported shells include bash, zsh, and fish.")]
-  Completion(completion::CompletionArgs),
-
   /// Credential management
   #[command(long_about = "Manage credentials for external services like Jira and GitHub.\n\n\
             This command group helps you check and set up credentials for the\n\
@@ -143,7 +137,9 @@ pub enum Commands {
 
   /// Twig maintenance commands
   #[command(name = "self")]
-  #[command(long_about = "Twig maintenance utilities, including self-updating capabilities.")]
+  #[command(
+    long_about = "Twig maintenance utilities, including diagnostics, completions, and self-updating capabilities."
+  )]
   #[command(arg_required_else_help = true)]
   SelfCmd(self_cmd::SelfArgs),
 
@@ -160,17 +156,6 @@ pub enum Commands {
   #[command(alias = "dash")]
   #[command(alias = "v")]
   Dashboard(dashboard::DashboardArgs),
-
-  /// Run system diagnostics
-  #[command(name = "diagnose")]
-  #[command(
-    long_about = "Runs comprehensive system diagnostics to check twig's configuration and dependencies.\n\n\
-            This command checks system information, configuration directories, credentials,\n\
-            git configuration, tracked repositories, and network connectivity. Use this\n\
-            command to troubleshoot issues or verify that twig is properly configured."
-  )]
-  #[command(alias = "diag")]
-  Diagnostics,
 
   /// Git repository management
   #[command(long_about = "Manage multiple Git repositories through twig.\n\n\
@@ -281,10 +266,8 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
     Some(command) => match command {
       Commands::Branch(branch) => branch::handle_branch_command(branch),
       Commands::Cascade(cascade) => cascade::handle_cascade_command(cascade),
-      Commands::Completion(completion) => completion::handle_completion_command(completion),
       Commands::Creds(creds) => creds::handle_creds_command(creds),
       Commands::Dashboard(dashboard) => dashboard::handle_dashboard_command(dashboard),
-      Commands::Diagnostics => diagnostics::run_diagnostics(),
       Commands::Git(git) => git::handle_git_command(git),
       Commands::GitHub(github) => github::handle_github_command(github),
       Commands::Init => config::handle_init_command(),

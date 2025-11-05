@@ -6,10 +6,12 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
 
+use super::completion;
+use crate::diagnostics;
 use crate::self_update::{SelfUpdateOptions, run as run_self_update};
 
 /// Arguments for the top-level `twig self` command.
-#[derive(Args, Debug)]
+#[derive(Args)]
 pub struct SelfArgs {
   /// Subcommands under `twig self`
   #[command(subcommand)]
@@ -17,7 +19,7 @@ pub struct SelfArgs {
 }
 
 /// Subcommands available under `twig self`.
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand)]
 pub enum SelfSubcommand {
   /// Update the Twig binary to the latest release
   #[command(
@@ -28,6 +30,22 @@ out safely once the update completes."
   )]
   #[command(alias = "upgrade")]
   Update(SelfUpdateCommand),
+
+  /// Run system diagnostics
+  #[command(
+    long_about = "Runs comprehensive system diagnostics to check twig's configuration and dependencies.\n\n\
+            This command checks system information, configuration directories, credentials,\n\
+            git configuration, tracked repositories, and network connectivity. Use this\n\
+            command to troubleshoot issues or verify that twig is properly configured."
+  )]
+  #[command(alias = "diag")]
+  Diagnose,
+
+  /// Generate shell completions
+  #[command(long_about = "Generates shell completion scripts for twig commands.\n\n\
+            This command generates completion scripts that provide tab completion for twig\n\
+            commands and options in your shell. Supported shells include bash, zsh, and fish.")]
+  Completion(completion::CompletionArgs),
 }
 
 /// Options for `twig self update`.
@@ -48,5 +66,7 @@ impl From<SelfUpdateCommand> for SelfUpdateOptions {
 pub fn handle_self_command(args: SelfArgs) -> Result<()> {
   match args.command {
     SelfSubcommand::Update(cmd) => run_self_update(cmd.into()),
+    SelfSubcommand::Diagnose => diagnostics::run_diagnostics(),
+    SelfSubcommand::Completion(cmd) => completion::handle_completion_command(cmd),
   }
 }
