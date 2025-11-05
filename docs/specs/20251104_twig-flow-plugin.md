@@ -21,7 +21,7 @@
 
 1. **Branch Tree Visualization (`twig flow`)**
    - Render the current repository's branch graph (local branches) similar to argit's tree view, highlighting current branch and parent-child relationships.
-   - Provide flags for choosing the root of the visualization (`--root`) and limiting depth or subtree focus via `--parent` semantics, automatically checking out the resolved branch before rendering the tree.
+  - Provide flags for choosing the root of the visualization (`--root`) and limiting depth or subtree focus via `--parent` semantics, automatically checking out the resolved branch before rendering the tree. These tree-selection flags are mutually exclusive and the CLI should surface a clear error when multiple are supplied.
    - Integrate with Twig output styling, optionally using ASCII/Unicode connectors consistent with CLI guidelines.
 
 2. **Branch Switching (`twig flow <target>`)
@@ -92,7 +92,7 @@
   - Should support building from Git references; consider caching in Twig repo state for performance.
 - **Tree Rendering Options**
   - `root`: branch name or commit hash to anchor tree.
-  - `parent`: immediate ancestor filter; combine with `--root` for subtree selection.
+  - `parent`: immediate ancestor filter; mutually exclusive with `root`; providing both (or multiple tree-selection flags) is an error that Clap must detect and report before any checkout occurs.
   - `max_depth` (potential future option) for limiting traversal.
 - **Switch Request**
   - Input variants: explicit branch name, Jira ticket key, create-new flag.
@@ -106,6 +106,7 @@
 - Flags:
   - `--root <branch>`: switch to the target branch, then show the tree rooted at that branch.
   - `--parent <branch>`: switch to the selected parent branch before rendering its subtree (e.g., to view siblings or direct descendants).
+  - Tree-selection flags (`--root`, `--parent`, future variants) belong to a Clap `ArgGroup` so that specifying more than one surfaces an immediate error and prevents any checkout side effects.
   - `--show-remotes`: future extension; note in backlog.
   - `--format json`: optional future; not in initial scope unless easy to provide.
 - Output should highlight current branch (e.g., `* main`).
@@ -145,7 +146,6 @@
 ### Open Questions
 
 - Should branch tree visualization include remote branches or only local by default?
-- How should `--parent` interact with `--root` when both are supplied, given they each trigger a branch checkout before rendering? Need precise UX definition.
 - Do we need additional flags for sorting (e.g., last commit date) or filtering (e.g., only feature branches)?
 - Should plugin support interactive mode (e.g., select branch via fuzzy finder) or remain non-interactive initially?
 - How will plugin be packaged/released relative to main Twig binaries (Cargo feature, separate crate)?
