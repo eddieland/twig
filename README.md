@@ -168,9 +168,10 @@ twig
 ├── creds                  # Credential management
 │   ├── check
 │   └── setup
-├── diagnose (diag)        # System diagnostics
-├── self update            # Self-update
-├── completion             # Shell completions
+├── self                   # Twig maintenance utilities
+│   ├── update (upgrade)   # Self-update
+│   ├── diagnose (diag)    # System diagnostics
+│   └── completion         # Shell completions
 └── version                # Version information
 ```
 
