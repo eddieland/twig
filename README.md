@@ -137,42 +137,56 @@ Twig will walk the dependency chain, rebasing `feature/new-ui` on top of the ref
 
 ```
 twig
-├── init                    # Initialize configuration
-├── config (cfg)            # Configuration management
-│   ├── show
-│   ├── set
-│   └── validate
-├── git (g)                # Git repository management
-│   ├── list (ls)
-│   ├── add
-│   ├── remove (rm)
-│   ├── fetch
-│   ├── exec
-│   └── stale-branches (stale)
-├── worktree (wt)          # Worktree management
-│   ├── create (new)
-│   ├── list (ls)
-│   └── clean
-├── jira (j)               # Jira integration
-│   ├── issue (i)
-│   │   ├── view (show)
-│   │   └── transition
-│   └── branch (br)
-│       ├── create (new)
-│       └── link
-├── github (gh)            # GitHub integration
-│   ├── pr
-│   │   ├── status (st)
-│   │   └── link
-│   └── check
-├── creds                  # Credential management
+├── branch (br)             # Manage custom branch dependencies
+│   ├── depend
+│   ├── remove-dep
+│   └── root
+│       ├── add
+│       ├── list (ls)
+│       └── remove (rm)
+├── cascade (casc)          # Rebase the current branch stack
+├── commit                  # Create Jira-backed commits
+├── creds                   # Credential management
 │   ├── check
 │   └── setup
-├── self                   # Twig maintenance utilities
-│   ├── update (upgrade)   # Self-update
-│   ├── diagnose (diag)    # System diagnostics
-│   └── completion         # Shell completions
-└── version                # Version information
+├── dashboard (dash, v)     # Unified view of branches, PRs, and issues
+├── fixup (fix)             # Interactive fixup commit selector
+├── git (g)                 # Git repository registry
+│   ├── add
+│   ├── exec
+│   ├── fetch
+│   ├── list (ls)
+│   ├── remove (rm)
+│   └── stale-branches (stale)
+├── github (gh)             # GitHub integration
+│   ├── check
+│   ├── checks (ci)
+│   ├── open
+│   └── pr
+│       ├── link
+│       ├── list (ls)
+│       └── status (st)
+├── init                    # Initialize Twig configuration
+├── jira (j)                # Jira integration
+│   ├── open
+│   ├── create-branch
+│   ├── link-branch
+│   ├── transition
+│   ├── view
+│   └── config
+├── rebase (rb)             # Rebase current branch onto its parents
+├── self                    # Twig maintenance utilities
+│   ├── update (upgrade)
+│   ├── diagnose (diag)
+│   ├── completion
+│   └── plugins (list-plugins)
+├── switch (sw)             # Intelligent branch switching
+├── sync                    # Auto-link branches to Jira issues and PRs
+├── tree (t)                # Visualize the dependency tree
+└── worktree (wt)           # Git worktree management
+    ├── clean
+    ├── create (new)
+    └── list (ls)
 ```
 
 ## Environment Variables
@@ -191,10 +205,10 @@ Specifies the URL of your Jira instance.
 
 **API Requests**: All Jira API requests will be sent to this host, allowing you to:
 
-- View issues: `twig jira issue view PROJ-123`
-- Create branches from issues: `twig jira branch create PROJ-123`
-- Transition issues: `twig jira issue transition PROJ-123 "In Progress"`
-- List issues: `twig jira issue list --project PROJ`
+- View issues: `twig jira view PROJ-123`
+- Create branches from issues: `twig jira create-branch PROJ-123`
+- Transition issues: `twig jira transition PROJ-123 "In Progress"`
+- Link branches: `twig jira link-branch PROJ-123 feature/some-work`
 
 We recommend setting this in your shell profile to ensure it's always available:
 
