@@ -21,7 +21,7 @@
 
 1. **Branch Tree Visualization (`twig flow`)**
    - Render the current repository's branch graph (local branches) similar to argit's tree view, highlighting current branch and parent-child relationships.
-   - Provide flags for choosing the root of the visualization (`--root`) and limiting depth or subtree focus via `--parent` semantics.
+   - Provide flags for choosing the root of the visualization (`--root`) and limiting depth or subtree focus via `--parent` semantics, automatically checking out the resolved branch before rendering the tree.
    - Integrate with Twig output styling, optionally using ASCII/Unicode connectors consistent with CLI guidelines.
 
 2. **Branch Switching (`twig flow <target>`)
@@ -104,8 +104,8 @@
 
 - Default mode lists branch tree.
 - Flags:
-  - `--root <branch>`: show tree rooted at branch.
-  - `--parent <branch>`: reposition view around parent branch; might show siblings or direct descendants.
+  - `--root <branch>`: switch to the target branch, then show the tree rooted at that branch.
+  - `--parent <branch>`: switch to the selected parent branch before rendering its subtree (e.g., to view siblings or direct descendants).
   - `--show-remotes`: future extension; note in backlog.
   - `--format json`: optional future; not in initial scope unless easy to provide.
 - Output should highlight current branch (e.g., `* main`).
@@ -145,7 +145,7 @@
 ### Open Questions
 
 - Should branch tree visualization include remote branches or only local by default?
-- How should `--parent` interact with `--root` when both are supplied? Need precise UX definition.
+- How should `--parent` interact with `--root` when both are supplied, given they each trigger a branch checkout before rendering? Need precise UX definition.
 - Do we need additional flags for sorting (e.g., last commit date) or filtering (e.g., only feature branches)?
 - Should plugin support interactive mode (e.g., select branch via fuzzy finder) or remain non-interactive initially?
 - How will plugin be packaged/released relative to main Twig binaries (Cargo feature, separate crate)?
