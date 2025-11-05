@@ -9,6 +9,7 @@
 ## Documentation Workflow
 
 - Long-form specifications and agent-readable plans live under `docs/specs/`. Review the [directory README](docs/specs/README.md) for naming conventions (`YYYY-MM-DD_descriptive-name.md`), the `_TEMPLATE.md` starter, and guidance on incremental checkpointing/lessons-learned when collaborating via docs. Ensure new specs follow this workflow to keep AI/human collaboration in sync. 【F:docs/specs/README.md†L1-L104】
+- Add Rustdoc comments for any non-trivial public function, method, or module. Keep the first sentence a concise summary, then expand with paragraphs or bullet lists. Use standard section headers (`# Arguments`, `# Returns`, `# Errors`, `# Panics`, `# Examples`) when the extra context is helpful, but skip them for trivial cases to avoid noise. Document important invariants, side effects, and expected usage so contributors can rely on the API without reading the implementation.
 
 ## Build & Test Workflow
 
