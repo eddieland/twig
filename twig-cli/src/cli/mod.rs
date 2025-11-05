@@ -118,18 +118,6 @@ pub enum Commands {
   )]
   Commit(commit::CommitArgs),
 
-  /// Speed through interactive fixup commits
-  #[command(long_about = "Interactively select and create fixup commits for recent work.\n\n\
-            This command helps you quickly find and create fixup commits by presenting\n\
-            an interactive fuzzy finder with recent commits from your current branch.\n\
-            Commits are intelligently scored based on recency, authorship, and Jira\n\
-            issue association to surface the most relevant candidates first.\n\n\
-            The interactive selector allows you to search and filter commits using\n\
-            fuzzy matching. Once you select a target commit, a fixup commit will be\n\
-            created automatically using 'git commit --fixup'.")]
-  #[command(alias = "fix")]
-  Fixup(fixup::FixupArgs),
-
   /// Credential management
   #[command(long_about = "Manage credentials for external services like Jira and GitHub.\n\n\
             This command group helps you check and set up credentials for the\n\
@@ -137,14 +125,6 @@ pub enum Commands {
             in your .netrc file for security and compatibility with other tools.")]
   #[command(arg_required_else_help = true)]
   Creds(creds::CredsArgs),
-
-  /// Twig maintenance commands
-  #[command(name = "self")]
-  #[command(
-    long_about = "Twig maintenance utilities, including diagnostics, completions, and self-updating capabilities."
-  )]
-  #[command(arg_required_else_help = true)]
-  SelfCmd(self_cmd::SelfArgs),
 
   /// Review branches, PRs, and issues together
   #[command(
@@ -159,6 +139,18 @@ pub enum Commands {
   #[command(alias = "dash")]
   #[command(alias = "v")]
   Dashboard(dashboard::DashboardArgs),
+
+  /// Speed through interactive fixup commits
+  #[command(long_about = "Interactively select and create fixup commits for recent work.\n\n\
+            This command helps you quickly find and create fixup commits by presenting\n\
+            an interactive fuzzy finder with recent commits from your current branch.\n\
+            Commits are intelligently scored based on recency, authorship, and Jira\n\
+            issue association to surface the most relevant candidates first.\n\n\
+            The interactive selector allows you to search and filter commits using\n\
+            fuzzy matching. Once you select a target commit, a fixup commit will be\n\
+            created automatically using 'git commit --fixup'.")]
+  #[command(alias = "fix")]
+  Fixup(fixup::FixupArgs),
 
   /// Track and manage your registered repositories
   #[command(long_about = "Manage multiple Git repositories through twig.\n\n\
@@ -201,6 +193,14 @@ pub enum Commands {
             the dependency tree. It can optionally start from the root branch.")]
   #[command(alias = "rb")]
   Rebase(rebase::RebaseArgs),
+
+  /// Twig maintenance commands
+  #[command(name = "self")]
+  #[command(
+    long_about = "Twig maintenance utilities, including diagnostics, completions, and self-updating capabilities."
+  )]
+  #[command(arg_required_else_help = true)]
+  SelfCmd(self_cmd::SelfArgs),
 
   /// Jump to branches by issue, PR, or name
   #[command(long_about = "Intelligently switch to branches based on various inputs.\n\n\
@@ -269,23 +269,23 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
     Some(command) => match command {
       Commands::Branch(branch) => branch::handle_branch_command(branch),
       Commands::Cascade(cascade) => cascade::handle_cascade_command(cascade),
+      Commands::Commit(args) => commit::handle_commit_command(args),
       Commands::Creds(creds) => creds::handle_creds_command(creds),
       Commands::Dashboard(dashboard) => dashboard::handle_dashboard_command(dashboard),
+      Commands::Fixup(fixup) => fixup::handle_fixup_command(fixup),
       Commands::Git(git) => git::handle_git_command(git),
       Commands::GitHub(github) => github::handle_github_command(github),
       Commands::Init => config::handle_init_command(),
       Commands::Jira(jira) => jira::handle_jira_command(jira),
-      Commands::SelfCmd(self_args) => self_cmd::handle_self_command(self_args),
       Commands::Panic => {
         panic!("This is an intentional test panic to verify no-worries integration");
       }
       Commands::Rebase(rebase) => rebase::handle_rebase_command(rebase),
+      Commands::SelfCmd(self_args) => self_cmd::handle_self_command(self_args),
       Commands::Switch(switch) => switch::handle_switch_command(switch),
       Commands::Sync(sync) => sync::handle_sync_command(sync),
       Commands::Tree(tree) => tree::handle_tree_command(tree),
       Commands::Worktree(worktree) => worktree::handle_worktree_command(worktree),
-      Commands::Commit(args) => commit::handle_commit_command(args),
-      Commands::Fixup(fixup) => fixup::handle_fixup_command(fixup),
     },
     None => handle_plugin_fallback(cli),
   }
