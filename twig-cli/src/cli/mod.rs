@@ -35,11 +35,16 @@ use crate::plugin;
 #[command(name = "twig")]
 #[command(display_name = "🌿 Twig")]
 #[command(author = env!("CARGO_PKG_AUTHORS"))]
-#[command(about = "A Git-based developer productivity tool")]
+#[command(
+  about = "Git-based developer productivity tool. Try `twig dashboard`, `twig sync`, and `twig switch`. Haven't yet? Check the repository README on GitHub."
+)]
 #[command(
   long_about = "Twig helps developers manage multiple Git repositories and worktrees efficiently.\n\n\
-        It provides commands for repository tracking, batch operations, and worktree\n\
-        management to streamline your development workflow."
+        Quick pointers:\n\
+          • `twig dashboard` to review branches, pull requests, and issues together.\n\
+          • `twig sync` to update branch stacks and keep them in order.\n\
+          • `twig switch` to jump between your tracked worktrees.\n\
+        If you haven't yet, check out the repository README on GitHub for a deeper tour."
 )]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(propagate_version = true)]
