@@ -36,7 +36,7 @@ use crate::plugin;
 #[command(display_name = "🌿 Twig")]
 #[command(author = env!("CARGO_PKG_AUTHORS"))]
 #[command(
-  about = "Git-based developer productivity tool. Try `twig dashboard`, `twig sync`, and `twig switch`. Haven't yet? Check the repository README on GitHub."
+  about = "Git-based developer productivity tool. Check the repository README on GitHub."
 )]
 #[command(
   long_about = "Twig helps developers manage multiple Git repositories and worktrees efficiently.\n\n\
