@@ -17,6 +17,7 @@ use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::state::{BranchMetadata, RepoState};
 use twig_core::{checkout_branch, detect_repository};
 use twig_gh::GitHubClient;
+use twig_gh::models::{GitHubPullRequest, RepositoryInfo};
 use twig_jira::JiraClient;
 
 use crate::clients::{self, get_jira_host};
@@ -462,14 +463,7 @@ fn handle_github_pr_switch(gh: &GitHubClient, ctx: &SwitchContext, pr_number: u3
   // No existing association found
   if ctx.create_if_missing {
     print_info("No associated branch found. Creating new branch from GitHub PR...");
-    create_branch_from_github_pr(
-      gh,
-      ctx.repo,
-      ctx.repo_path,
-      pr_number,
-      ctx.parent_option,
-      ctx.jira_parser,
-    )
+    create_branch_from_github_pr(gh, ctx.repo, ctx.repo_path, pr_number, ctx.parent_option)
   } else {
     print_warning(&format!(
       "No branch found for GitHub PR #{pr_number}. Use --create to create a new branch.",
@@ -665,7 +659,6 @@ fn create_branch_from_github_pr(
   repo_path: &Path,
   pr_number: u32,
   parent_option: Option<&str>,
-  jira_parser: Option<&JiraTicketParser>,
 ) -> Result<()> {
   let rt = Runtime::new().context("Failed to create async runtime")?;
   rt.block_on(async {
@@ -687,16 +680,53 @@ fn create_branch_from_github_pr(
       }
     };
 
-    // Use the PR's head branch name, but make it safe
-    let branch_name = format!("pr-{pr_number}-{}", &pr.head.sha[..8]);
+    let branch_name = pr
+      .head
+      .ref_name
+      .clone()
+      .or_else(|| pr.head.label.split(':').nth(1).map(|s| s.to_string()))
+      .ok_or_else(|| anyhow::anyhow!("Pull request is missing a head branch name"))?;
 
-    print_info(&format!("Creating branch: {branch_name}",));
+    print_info(&format!("Creating branch from PR head: {branch_name}"));
 
-    // Resolve parent branch
-    let branch_base = resolve_branch_base(repo, repo_path, parent_option, jira_parser)?;
+    let target_remote = resolve_pr_remote(repo, &pr, remote_url, &owner, &repo_name, pr_number)?;
 
-    // Create and switch to the branch
-    create_and_switch_to_branch(repo, repo_path, &branch_name, &branch_base)?;
+    fetch_remote_branch(repo, &target_remote, &branch_name)?;
+
+    let remote_branch_ref = format!("{target_remote}/{branch_name}");
+    let remote_branch = repo
+      .find_branch(&remote_branch_ref, git2::BranchType::Remote)
+      .with_context(|| format!("Failed to locate remote branch '{remote_branch_ref}' after fetch"))?;
+
+    let commit = remote_branch
+      .into_reference()
+      .peel_to_commit()
+      .context("Failed to resolve PR head commit")?;
+
+    if repo.find_branch(&branch_name, git2::BranchType::Local).is_ok() {
+      print_warning(&format!(
+        "Branch '{branch_name}' already exists locally. Resetting it to match the PR head commit."
+      ));
+    }
+
+    repo
+      .branch(&branch_name, &commit, true)
+      .with_context(|| format!("Failed to create local branch '{branch_name}'"))?;
+
+    let mut local_branch = repo
+      .find_branch(&branch_name, git2::BranchType::Local)
+      .with_context(|| format!("Failed to reopen branch '{branch_name}'"))?;
+    local_branch
+      .set_upstream(Some(&remote_branch_ref))
+      .with_context(|| format!("Failed to set upstream for '{branch_name}'"))?;
+
+    drop(local_branch);
+
+    switch_to_branch(repo, repo_path, &branch_name)?;
+
+    if let Some(parent) = parent_option {
+      add_branch_dependency(repo_path, &branch_name, parent)?;
+    }
 
     // Store the association
     store_github_pr_association(repo_path, &branch_name, pr_number)?;
@@ -708,6 +738,108 @@ fn create_branch_from_github_pr(
     print_info(&format!("PR URL: {}", pr.html_url));
     Ok(())
   })
+}
+
+fn fetch_remote_branch(repo: &Git2Repository, remote_name: &str, branch_name: &str) -> Result<()> {
+  let mut remote = repo
+    .find_remote(remote_name)
+    .with_context(|| format!("Failed to find remote '{remote_name}'"))?;
+  let mut fetch_options = git2::FetchOptions::new();
+  remote
+    .fetch(&[branch_name], Some(&mut fetch_options), None)
+    .with_context(|| format!("Failed to fetch '{branch_name}' from remote '{remote_name}'"))?;
+  Ok(())
+}
+
+fn resolve_pr_remote(
+  repo: &Git2Repository,
+  pr: &GitHubPullRequest,
+  origin_url: &str,
+  origin_owner: &str,
+  origin_repo: &str,
+  pr_number: u32,
+) -> Result<String> {
+  if let Some(repo_info) = pr.head.repo.as_ref() {
+    if let Some(full_name) = repo_info.full_name.as_deref() {
+      let normalized_origin = format!("{origin_owner}/{origin_repo}");
+      if full_name.eq_ignore_ascii_case(&normalized_origin) {
+        return Ok("origin".to_string());
+      }
+    }
+
+    let remote_url = select_repo_url(repo_info, origin_url)
+      .ok_or_else(|| anyhow::anyhow!("Pull request head repository does not expose a usable clone URL"))?;
+
+    let base_name = repo_info
+      .owner
+      .as_ref()
+      .map(|owner| owner.login.clone())
+      .or_else(|| {
+        repo_info
+          .full_name
+          .as_deref()
+          .map(|full| full.split('/').next().unwrap().to_string())
+      })
+      .unwrap_or_else(|| format!("pr-{pr_number}"));
+
+    let mut remote_name = format!("fork-{}", sanitize_remote_name(&base_name));
+    if remote_name == "origin" {
+      remote_name = format!("fork-pr-{pr_number}");
+    }
+
+    let mut candidate = remote_name.clone();
+    let mut suffix = 1;
+    loop {
+      match repo.find_remote(&candidate) {
+        Ok(existing_remote) => {
+          if existing_remote.url() == Some(remote_url.as_str()) {
+            return Ok(candidate);
+          }
+          suffix += 1;
+          candidate = format!("{remote_name}-{suffix}");
+        }
+        Err(_) => {
+          repo
+            .remote(&candidate, &remote_url)
+            .with_context(|| format!("Failed to create remote '{candidate}'"))?;
+          print_info(&format!(
+            "Added remote '{candidate}' for PR head repository: {remote_url}"
+          ));
+          return Ok(candidate);
+        }
+      }
+    }
+  }
+
+  Ok("origin".to_string())
+}
+
+fn select_repo_url(repo_info: &RepositoryInfo, origin_url: &str) -> Option<String> {
+  let prefer_ssh = origin_url.starts_with("git@") || origin_url.starts_with("ssh://");
+  if prefer_ssh {
+    repo_info.ssh_url.clone().or_else(|| repo_info.clone_url.clone())
+  } else {
+    repo_info.clone_url.clone().or_else(|| repo_info.ssh_url.clone())
+  }
+}
+
+fn sanitize_remote_name(name: &str) -> String {
+  let sanitized: String = name
+    .chars()
+    .map(|ch| {
+      if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+        ch
+      } else {
+        '-'
+      }
+    })
+    .collect();
+  let trimmed = sanitized.trim_matches(|c| c == '-' || c == '_');
+  if trimmed.is_empty() {
+    "remote".to_string()
+  } else {
+    trimmed.to_string()
+  }
 }
 
 /// Store Jira issue association in repository state
@@ -752,6 +884,8 @@ fn store_github_pr_association(repo_path: &Path, branch_name: &str, pr_number: u
 
 #[cfg(test)]
 mod tests {
+  use std::env;
+
   use anyhow::Result;
   use git2::BranchType;
   use serde_json::json;
@@ -761,6 +895,23 @@ mod tests {
   use wiremock::{Mock, MockServer, ResponseTemplate};
 
   use super::*;
+
+  struct DirGuard {
+    original: std::path::PathBuf,
+  }
+
+  impl DirGuard {
+    fn new() -> Self {
+      let original = env::current_dir().expect("Failed to read current directory");
+      Self { original }
+    }
+  }
+
+  impl Drop for DirGuard {
+    fn drop(&mut self) {
+      let _ = env::set_current_dir(&self.original);
+    }
+  }
 
   #[test]
   fn test_parse_jira_issue_key() {
@@ -939,6 +1090,7 @@ mod tests {
 
   #[test]
   fn test_create_branch_from_jira_issue_uses_parent_tip() -> Result<()> {
+    let _dir_guard = DirGuard::new();
     let (_env_guard, _config_dirs) = setup_test_env_with_init()?;
     let repo_guard = GitRepoTestGuard::new();
     let repo = &repo_guard.repo;
@@ -1000,19 +1152,37 @@ mod tests {
   }
 
   #[test]
-  fn test_create_branch_from_github_pr_respects_parent_tip() -> Result<()> {
+  fn test_create_branch_from_github_pr_checks_out_head_commit() -> Result<()> {
+    let _dir_guard = DirGuard::new();
+    use std::fs;
+
+    use tempfile::TempDir;
+
     let (_env_guard, _config_dirs) = setup_test_env_with_init()?;
+
+    let remote_root = TempDir::new()?;
+    let remote_repo_path = remote_root.path().join("github.com/example/repo");
+    fs::create_dir_all(&remote_repo_path)?;
+    let remote_repo = git2::Repository::init(&remote_repo_path)?;
+    let mut remote_config = remote_repo.config()?;
+    remote_config.set_str("user.name", "Twig Test User")?;
+    remote_config.set_str("user.email", "twig-test@example.com")?;
+
+    create_commit(&remote_repo, "base.txt", "base", "base commit")?;
+    let initial = remote_repo.head()?.peel_to_commit()?;
+    remote_repo.branch("parent", &initial, true)?;
+    remote_repo.branch("feature/cool", &initial, true)?;
+
+    checkout_branch(&remote_repo, "feature/cool")?;
+    create_commit(&remote_repo, "feature.txt", "feature", "feature commit")?;
+    let pr_head_oid = remote_repo.head()?.peel_to_commit()?.id();
+
+    checkout_branch(&remote_repo, "parent")?;
+    create_commit(&remote_repo, "parent.txt", "parent", "parent commit")?;
+
     let repo_guard = GitRepoTestGuard::new();
     let repo = &repo_guard.repo;
-
-    create_commit(repo, "base.txt", "base", "initial commit")?;
-    let head_commit = repo.head()?.peel_to_commit()?;
-    repo.branch("parent", &head_commit, true)?;
-    checkout_branch(repo, "parent")?;
-    create_commit(repo, "parent.txt", "parent", "parent commit")?;
-    let parent_tip = repo.head()?.peel_to_commit()?.id();
-
-    repo.remote("origin", "https://github.com/example/repo.git")?;
+    repo.remote("origin", remote_repo_path.to_str().unwrap())?;
 
     let runtime = Runtime::new()?;
     let mock_server = runtime.block_on(MockServer::start());
@@ -1029,14 +1199,26 @@ mod tests {
           "created_at": "2021-01-01T00:00:00Z",
           "updated_at": "2021-01-01T00:00:00Z",
           "head": {
-            "label": "octocat:feature",
-            "ref_name": "feature",
-            "sha": "abcdef1234567890abcdef1234567890abcdef12"
+            "label": "octocat:feature/cool",
+            "ref": "feature/cool",
+            "sha": pr_head_oid.to_string(),
+            "repo": {
+              "full_name": "example/repo",
+              "clone_url": "https://github.com/example/repo.git",
+              "ssh_url": "git@github.com:example/repo.git",
+              "owner": { "login": "octocat", "id": 1, "name": "Octocat" }
+            }
           },
           "base": {
-            "label": "octocat:main",
-            "ref_name": "main",
-            "sha": "1234567890abcdef1234567890abcdef12345678"
+            "label": "octocat:parent",
+            "ref": "parent",
+            "sha": remote_repo.refname_to_id("refs/heads/parent").unwrap().to_string(),
+            "repo": {
+              "full_name": "example/repo",
+              "clone_url": "https://github.com/example/repo.git",
+              "ssh_url": "git@github.com:example/repo.git",
+              "owner": { "login": "octocat", "id": 1, "name": "Octocat" }
+            }
           },
           "mergeable": true,
           "mergeable_state": "clean",
@@ -1052,24 +1234,141 @@ mod tests {
     });
     github_client.set_base_url(mock_server.uri());
 
-    create_branch_from_github_pr(&github_client, repo, repo_guard.path(), 42, Some("parent"), None)?;
+    create_branch_from_github_pr(&github_client, repo, repo_guard.path(), 42, Some("parent"))?;
 
-    let created_branch = repo.find_branch("pr-42-abcdef12", BranchType::Local)?;
+    let created_branch = repo.find_branch("feature/cool", BranchType::Local)?;
     let created_tip = created_branch.into_reference().peel_to_commit()?.id();
-    assert_eq!(created_tip, parent_tip);
+    assert_eq!(created_tip, pr_head_oid);
+
+    let upstream = repo.find_branch("feature/cool", BranchType::Local)?.upstream()?;
+    assert_eq!(upstream.name().unwrap(), Some("origin/feature/cool"));
 
     let repo_state = RepoState::load(repo_guard.path())?;
     let dependency = repo_state
       .dependencies
       .iter()
-      .find(|dep| dep.child == "pr-42-abcdef12")
+      .find(|dep| dep.child == "feature/cool")
       .expect("dependency recorded");
     assert_eq!(dependency.parent, "parent");
 
     let metadata = repo_state
-      .get_branch_metadata("pr-42-abcdef12")
+      .get_branch_metadata("feature/cool")
       .expect("metadata recorded");
     assert_eq!(metadata.github_pr, Some(42));
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_create_branch_from_github_pr_handles_fork_head() -> Result<()> {
+    let _dir_guard = DirGuard::new();
+    use std::fs;
+
+    use tempfile::TempDir;
+
+    let (_env_guard, _config_dirs) = setup_test_env_with_init()?;
+
+    let origin_root = TempDir::new()?;
+    let origin_repo_path = origin_root.path().join("github.com/example/repo");
+    fs::create_dir_all(&origin_repo_path)?;
+    let origin_repo = git2::Repository::init(&origin_repo_path)?;
+    let mut origin_config = origin_repo.config()?;
+    origin_config.set_str("user.name", "Twig Test User")?;
+    origin_config.set_str("user.email", "twig-test@example.com")?;
+
+    create_commit(&origin_repo, "base.txt", "base", "base commit")?;
+    let base_commit = origin_repo.head()?.peel_to_commit()?;
+    origin_repo.branch("parent", &base_commit, true)?;
+
+    checkout_branch(&origin_repo, "parent")?;
+    create_commit(&origin_repo, "parent.txt", "parent", "parent commit")?;
+
+    let fork_root = TempDir::new()?;
+    let fork_repo_path = fork_root.path().join("github.com/forker/repo");
+    fs::create_dir_all(&fork_repo_path)?;
+    let fork_repo = git2::Repository::init(&fork_repo_path)?;
+    let mut fork_config = fork_repo.config()?;
+    fork_config.set_str("user.name", "Twig Test User")?;
+    fork_config.set_str("user.email", "twig-test@example.com")?;
+
+    create_commit(&fork_repo, "base.txt", "base", "base commit")?;
+    let fork_base = fork_repo.head()?.peel_to_commit()?;
+    fork_repo.branch("feature/cool", &fork_base, true)?;
+    checkout_branch(&fork_repo, "feature/cool")?;
+    create_commit(&fork_repo, "feature.txt", "feature", "feature commit")?;
+    let fork_head_oid = fork_repo.head()?.peel_to_commit()?.id();
+
+    let repo_guard = GitRepoTestGuard::new();
+    let repo = &repo_guard.repo;
+    repo.remote("origin", origin_repo_path.to_str().unwrap())?;
+
+    let runtime = Runtime::new()?;
+    let mock_server = runtime.block_on(MockServer::start());
+
+    runtime.block_on(async {
+      Mock::given(method("GET"))
+        .and(path("/repos/example/repo/pulls/99"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+          "number": 99,
+          "title": "Forked PR",
+          "html_url": "https://github.com/example/repo/pull/99",
+          "state": "open",
+          "user": { "login": "octocat", "id": 1, "name": "Octocat" },
+          "created_at": "2021-01-01T00:00:00Z",
+          "updated_at": "2021-01-01T00:00:00Z",
+          "head": {
+            "label": "forker:feature/cool",
+            "ref": "feature/cool",
+            "sha": fork_head_oid.to_string(),
+            "repo": {
+              "full_name": "forker/repo",
+              "clone_url": fork_repo_path.to_str().unwrap(),
+              "ssh_url": fork_repo_path.to_str().unwrap(),
+              "owner": { "login": "forker", "id": 2, "name": "Forker" }
+            }
+          },
+          "base": {
+            "label": "octocat:parent",
+            "ref": "parent",
+            "sha": origin_repo.refname_to_id("refs/heads/parent").unwrap().to_string(),
+            "repo": {
+              "full_name": "example/repo",
+              "clone_url": "https://github.com/example/repo.git",
+              "ssh_url": "git@github.com:example/repo.git",
+              "owner": { "login": "octocat", "id": 1, "name": "Octocat" }
+            }
+          },
+          "mergeable": true,
+          "mergeable_state": "clean",
+          "draft": false
+        })))
+        .mount(&mock_server)
+        .await;
+    });
+
+    let mut github_client = twig_gh::GitHubClient::new(twig_gh::models::GitHubAuth {
+      username: "user".to_string(),
+      token: "token".to_string(),
+    });
+    github_client.set_base_url(mock_server.uri());
+
+    create_branch_from_github_pr(&github_client, repo, repo_guard.path(), 99, Some("parent"))?;
+
+    let created_branch = repo.find_branch("feature/cool", BranchType::Local)?;
+    let created_tip = created_branch.into_reference().peel_to_commit()?.id();
+    assert_eq!(created_tip, fork_head_oid);
+
+    let upstream = repo.find_branch("feature/cool", BranchType::Local)?.upstream()?;
+    assert_eq!(upstream.name().unwrap(), Some("fork-forker/feature/cool"));
+
+    let fork_remote = repo.find_remote("fork-forker")?;
+    assert_eq!(fork_remote.url(), Some(fork_repo_path.to_str().unwrap()));
+
+    let repo_state = RepoState::load(repo_guard.path())?;
+    let metadata = repo_state
+      .get_branch_metadata("feature/cool")
+      .expect("metadata recorded");
+    assert_eq!(metadata.github_pr, Some(99));
 
     Ok(())
   }
