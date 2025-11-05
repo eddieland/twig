@@ -123,7 +123,7 @@
 
 | Priority | Task | Definition of Done | Notes | Status |
 | -------- | ---- | ------------------ | ----- | ------ |
-| P0 | Audit existing Twig Git/branch utilities and document reusable components. | Summary document listing candidate functions/types and proposed extraction path. | Focus on `twig-cli/src/git.rs`, `twig-cli/src/cli/git.rs`, `twig-core` modules. | |
+| P0 | Audit existing Twig Git/branch utilities and document reusable components. | Summary document listing candidate functions/types and proposed extraction path. | Focus on `twig-cli/src/git.rs`, `twig-cli/src/cli/git.rs`, `twig-core` modules. | ✅ Completed – see "Git Utility Audit" section |
 | P0 | Define plugin crate scaffolding & build integration. | Plugin compiles as optional crate with minimal main function & Clap wiring. | Determine placement under `plugins/` or `twig-flow/`. Update workspace manifests. | |
 | P0 | Design branch graph data structures in `twig-core`. | Spec and initial interfaces ready for implementation. | Consider performance implications for large repos. | |
 | P0 | Specify branch switching shared service API. | Interface defined so CLI + plugin share same code path. | Identify behavior parity with `twig switch`. | |
@@ -151,12 +151,39 @@
 - How will plugin be packaged/released relative to main Twig binaries (Cargo feature, separate crate)?
 - Are there security considerations for executing plugin commands that mutate branches (prompt confirmations)?
 
+## Git Utility Audit
+
+### Scope & Method
+
+- Reviewed existing Git- and branch-centric modules under `twig-cli/src/git.rs`, `twig-cli/src/cli/switch.rs`, `twig-cli/src/cli/tree.rs`,
+  `twig-cli/src/user_defined_dependency_resolver.rs`, and relevant helpers in `twig-core` (`git.rs`, `state.rs`, `tree_renderer.rs`).
+- Focused on code paths that the forthcoming `twig flow` plugin must reuse or refactor: branch enumeration, graph construction, switching,
+  and metadata persistence.
+
+### Candidate Extractions & Reuse Targets
+
+| Capability | Current Location | Extraction/Reuse Proposal | Notes for Implementation |
+| --- | --- | --- | --- |
+| Repository detection & branch lookup helpers | `twig-core/src/git.rs` (`detect_repository`, `get_local_branches`, `checkout_branch`) | Reuse as-is within plugin crate to avoid duplicate discovery logic. | Already plugin-friendly; expose via new helper module in plugin crate. |
+| Registry interactions & stale-branch analytics | `twig-cli/src/git.rs` (`find_stale_branches_internal`, `StaleBranchInfo`) | Extract pure data-gathering pieces into `twig-core::git::stale` module for reuse when annotating branch graphs. | Separate user prompts/printing before moving logic. 【F:twig-cli/src/git.rs†L216-L391】【F:twig-cli/src/git.rs†L400-L579】 |
+| Branch dependency visualization | `twig-cli/src/cli/tree.rs`, `twig-cli/src/user_defined_dependency_resolver.rs`, `twig-core/src/tree_renderer.rs` | Promote resolver into shared module that can coexist with commit-graph builder; keep renderer in `twig-core` but allow plugin to provide alternative data source. | Tree renderer already in core; resolver currently CLI-bound and should move alongside new graph utilities. 【F:twig-cli/src/cli/tree.rs†L1-L118】【F:twig-cli/src/user_defined_dependency_resolver.rs†L1-L200】 |
+| Branch switching engine | `twig-cli/src/cli/switch.rs` (`handle_branch_switch`, `resolve_branch_base`, `try_checkout_remote_branch`, `create_and_switch_to_branch`, Jira/GitHub association helpers) | Extract branch resolution + mutation logic into `twig-core::git::switch` with IO-free API returning structured results. CLI and plugin add UX messaging on top. | Requires splitting out network client wiring from pure branch logic; RepoState interactions already in core crate. 【F:twig-cli/src/cli/switch.rs†L84-L720】 |
+| Branch metadata persistence | `twig-core/src/state.rs` (`RepoState`, `BranchMetadata`, dependency helpers) | Reuse directly; ensure new graph module queries indices rather than reimplementing. | Provide lightweight facade for plugin consumption. 【F:twig-core/src/state.rs†L173-L276】 |
+| Jira/GitHub association storage | `twig-cli/src/cli/switch.rs` (`store_jira_association`, `store_github_pr_association`) | Move into `twig-core::state` extension helpers returning `Result<()>` without printing. CLI/plugin can wrap for messaging. | Harmonize timestamp handling and deduplicate metadata writes. 【F:twig-cli/src/cli/switch.rs†L700-L764】 |
+
+### Gaps Identified
+
+- No shared commit-graph builder exists; need new `twig-core::git::graph` module that enumerates local branches (likely via `git2::Repository::branches`) and derives parent/child edges from merge bases or branch configuration.
+- Switch workflow intermixes user messaging with side effects; refactor into a service struct returning an enum (`Switched`, `Created`, `RemoteTracked`, etc.) so plugin can render custom output.
+- Stale branch analytics currently operate inline with user prompts; isolating data collection will enable tree overlays (e.g., highlight stale branches in visualization).
+- User-defined dependency resolver is CLI-scoped; to support plugin overlays, migrate logic beside new graph module and expose a trait (`BranchTopologyProvider`) for pluggable sources (user-defined vs. git-derived).
+
 ## Status Tracking (to be updated by subagent)
 
-- **Current focus:** _Not yet started_
-- **Latest completed task:** _None_
-- **Next up:** _Review existing Git utilities and plan extraction_
+- **Current focus:** _Define plugin crate scaffolding & build integration_
+- **Latest completed task:** _Audit existing Twig Git/branch utilities and document reusable components_
+- **Next up:** _Design branch graph data structures in `twig-core`_
 
 ## Lessons Learned (ongoing)
 
-- _Pending once implementation work begins._
+- Existing switch workflow tightly couples side effects with messaging; future extractions must return structured outcomes so multiple callers (CLI, plugins) can share logic without duplicating UX code.
