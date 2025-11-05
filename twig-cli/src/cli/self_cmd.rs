@@ -5,10 +5,11 @@
 
 use anyhow::Result;
 use clap::{Args, Subcommand};
+use twig_core::output::{format_command, print_header, print_info, print_warning};
 
 use super::completion;
-use crate::diagnostics;
 use crate::self_update::{SelfUpdateOptions, run as run_self_update};
+use crate::{diagnostics, plugin};
 
 /// Arguments for the top-level `twig self` command.
 #[derive(Args)]
@@ -46,6 +47,15 @@ out safely once the update completes."
             This command generates completion scripts that provide tab completion for twig\n\
             commands and options in your shell. Supported shells include bash, zsh, and fish.")]
   Completion(completion::CompletionArgs),
+
+  /// Discover available Twig plugins on your PATH
+  #[command(
+    long_about = "Searches your PATH for executables following the twig-<command> naming\n\
+convention and prints the plugins that can be invoked. Use this command to verify that\n\
+Twig can locate your installed plugins."
+  )]
+  #[command(alias = "list-plugins")]
+  Plugins,
 }
 
 /// Options for `twig self update`.
@@ -68,5 +78,27 @@ pub fn handle_self_command(args: SelfArgs) -> Result<()> {
     SelfSubcommand::Update(cmd) => run_self_update(cmd.into()),
     SelfSubcommand::Diagnose => diagnostics::run_diagnostics(),
     SelfSubcommand::Completion(cmd) => completion::handle_completion_command(cmd),
+    SelfSubcommand::Plugins => list_plugins(),
   }
+}
+
+fn list_plugins() -> Result<()> {
+  let plugins = plugin::list_available_plugins()?;
+
+  if plugins.is_empty() {
+    print_warning("No Twig plugins were found in your PATH.");
+    print_info(&format!(
+      "Add executables named {} to a directory on your PATH to enable plugins.",
+      format_command("twig-<command>")
+    ));
+    return Ok(());
+  }
+
+  print_header("Available Twig plugins");
+
+  for plugin in plugins {
+    println!("  {}", format_command(&format!("twig-{plugin}")));
+  }
+
+  Ok(())
 }
