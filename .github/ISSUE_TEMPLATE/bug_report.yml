@@ -34,11 +34,8 @@ body:
       label: Installation Method
       description: How did you install Twig?
       options:
-        - Homebrew (macOS/Linux)
-        - Cargo install
         - Prebuilt release binary
         - Built from source (clone + cargo build)
-        - Package manager (Nix, AUR, etc.)
         - Other / unsure (add details below)
     validations:
       required: true
