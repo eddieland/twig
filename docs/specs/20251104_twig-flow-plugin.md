@@ -3,6 +3,7 @@
 ## Purpose
 
 - Define the architecture and feature scope for `twig flow`, a Rust-based plugin that serves as the canonical example for building Twig plugins.
+- Commit to an intentionally over-documented and over-polished plan so that the resulting implementation and collateral serve as the canonical reference for building Twig plugins.
 - Capture how the plugin will provide argit-like branch tree visualization and branch switching workflows, aligning with existing Twig CLI conventions.
 - Enumerate integration points and reusable components that must live in core crates (not `twig-cli`), ensuring long-term maintainability and reuse.
 - Highlight discovery, documentation, and testing tasks required before implementation so that future agents can execute efficiently.
