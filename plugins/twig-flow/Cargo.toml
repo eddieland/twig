@@ -1,0 +1,17 @@
+[package]
+name = "twig-flow"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Twig flow plugin providing branch visualization and switching workflows"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+twig-core = { path = "../../twig-core" }
+
+[dev-dependencies]
+twig-test-utils = { path = "../../twig-test-utils" }

@@ -6,6 +6,7 @@ members = [
     "twig-gh",
     "twig-jira",
     "twig-test-utils",
+    "plugins/twig-flow",
 ]
 exclude = [
     "/.github",
