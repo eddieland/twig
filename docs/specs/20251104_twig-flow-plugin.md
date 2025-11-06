@@ -119,6 +119,45 @@
 - Reuses `twig switch` fallback rules (prompt to create branch if missing, apply naming templates for Jira keys).
 - Accept plugin-specific options if needed (e.g., `--no-track`).
 
+## CLI UX Mockups
+
+- Tree visualization uses ASCII connectors (`├─`, `└─`, `│`) and prefixes the currently checked-out branch with `*`.
+- Branch annotations appear in square brackets, e.g., `[stale 14d]` or `[jira PROJ-123]`, with color applied via `twig_core::output` in the real implementation.
+- `--root` and `--parent` trigger an explicit checkout before rendering; conflicting selections short-circuit with a Clap error prior to Git mutations.
+- Empty or detached-head scenarios surface friendly diagnostics using `print_warning` followed by a zero-branch tree stub.
+
+```text
+$ twig flow
+* main
+├─ feature/auth-refresh
+│  └─ feature/auth-refresh-ui [jira PROJ-451]
+├─ feature/payment-refactor [stale 21d]
+│  ├─ feature/payment-refactor-api
+│  └─ feature/payment-refactor-ui
+└─ chore/cicd-cleanup
+   └─ fix/gha-cache [stale 45d]
+```
+
+```text
+$ twig flow --root feature/payment-refactor
+Switched to branch "feature/payment-refactor"
+* feature/payment-refactor
+├─ feature/payment-refactor-api
+└─ feature/payment-refactor-ui
+```
+
+```text
+$ twig flow --parent feature/auth-refresh-ui
+Switched to parent branch "feature/auth-refresh"
+* feature/auth-refresh
+└─ feature/auth-refresh-ui [jira PROJ-451]
+```
+
+```text
+$ twig flow --root main --parent develop
+error: the argument '--root <branch>' cannot be used with '--parent <branch>'
+```
+
 ## Subagent Execution Plan
 
 ### Task Backlog
@@ -129,7 +168,7 @@
 | P0 | Define plugin crate scaffolding & build integration. | Plugin compiles as optional crate with minimal main function & Clap wiring. | Determine placement under `plugins/` or `twig-flow/`. Update workspace manifests. | ✅ Completed – plugin crate scaffolded under `plugins/twig-flow` |
 | P0 | Design branch graph data structures in `twig-core`. | Spec and initial interfaces ready for implementation. | Consider performance implications for large repos. | ✅ Completed – branch graph domain models and builder scaffolding added under `twig-core/src/git/graph.rs` |
 | P0 | Specify branch switching shared service API. | Interface defined so CLI + plugin share same code path. | Identify behavior parity with `twig switch`. | ✅ Completed – shared service API skeleton added under `twig-core/src/git/switch.rs` |
-| P1 | Draft CLI UX for tree visualization (mock outputs). | Example outputs stored in spec or doc, capturing formatting rules. | Use ascii art similar to argit; gather from MIGRATING doc. | |
+| P1 | Draft CLI UX for tree visualization (mock outputs). | Example outputs stored in spec or doc, capturing formatting rules. | Use ascii art similar to argit; gather from MIGRATING doc. | ✅ Completed – see "CLI UX Mockups" section |
 | P1 | Plan integration tests & fixtures. | List of test scenarios with coverage goals. | Include tree rendering snapshots, switching success/error cases. | |
 | P1 | Outline documentation deliverables. | ToC for plugin README/tutorial. | Ensure canonical example requirement met. | |
 | P2 | Investigate caching strategies for large repos. | Determine if caching needed; propose approach. | Could use `.twig` state file. | |
@@ -181,9 +220,9 @@
 
 ## Status Tracking (to be updated by subagent)
 
-- **Current focus:** _Draft CLI UX for tree visualization (mock outputs)_
-- **Latest completed task:** _Specify branch switching shared service API_
-- **Next up:** _Plan integration tests & fixtures_
+- **Current focus:** _Plan integration tests & fixtures_
+- **Latest completed task:** _Draft CLI UX for tree visualization (mock outputs)_
+- **Next up:** _Outline documentation deliverables_
 
 ## Lessons Learned (ongoing)
 
@@ -193,3 +232,4 @@
 - Introducing an explicit `BranchKind` (local/remote/virtual) enum in the graph models keeps downstream consumers from guessing at node semantics.
 - Collapsing edge variants into a single `BranchEdge` simplifies the model and leaves room for higher-level layers to interpret relationships as needed.
 - Defining the shared switch service API up front exposed configuration toggles (creation policy, tracking policy, dry-run) that both the CLI and plugin need to surface consistently.
+- Capturing ASCII tree conventions before implementation ensures `twig flow` aligns with existing `twig tree` output and clarifies where metadata annotations should appear.
