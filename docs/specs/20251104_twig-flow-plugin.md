@@ -127,7 +127,7 @@
 | -------- | ---- | ------------------ | ----- | ------ |
 | P0 | Audit existing Twig Git/branch utilities and document reusable components. | Summary document listing candidate functions/types and proposed extraction path. | Focus on `twig-cli/src/git.rs`, `twig-cli/src/cli/git.rs`, `twig-core` modules. | ✅ Completed – see "Git Utility Audit" section |
 | P0 | Define plugin crate scaffolding & build integration. | Plugin compiles as optional crate with minimal main function & Clap wiring. | Determine placement under `plugins/` or `twig-flow/`. Update workspace manifests. | ✅ Completed – plugin crate scaffolded under `plugins/twig-flow` |
-| P0 | Design branch graph data structures in `twig-core`. | Spec and initial interfaces ready for implementation. | Consider performance implications for large repos. | |
+| P0 | Design branch graph data structures in `twig-core`. | Spec and initial interfaces ready for implementation. | Consider performance implications for large repos. | ✅ Completed – `twig-core::git::graph` module defines domain model |
 | P0 | Specify branch switching shared service API. | Interface defined so CLI + plugin share same code path. | Identify behavior parity with `twig switch`. | |
 | P1 | Draft CLI UX for tree visualization (mock outputs). | Example outputs stored in spec or doc, capturing formatting rules. | Use ascii art similar to argit; gather from MIGRATING doc. | |
 | P1 | Plan integration tests & fixtures. | List of test scenarios with coverage goals. | Include tree rendering snapshots, switching success/error cases. | |
@@ -181,11 +181,12 @@
 
 ## Status Tracking (to be updated by subagent)
 
-- **Current focus:** _Design branch graph data structures in `twig-core`_
-- **Latest completed task:** _Define plugin crate scaffolding & build integration_
-- **Next up:** _Specify branch switching shared service API_
+- **Current focus:** _Specify branch switching shared service API_
+- **Latest completed task:** _Design branch graph data structures in `twig-core`_
+- **Next up:** _Draft CLI UX for tree visualization (mock outputs)_
 
 ## Lessons Learned (ongoing)
 
 - Existing switch workflow tightly couples side effects with messaging; future extractions must return structured outcomes so multiple callers (CLI, plugins) can share logic without duplicating UX code.
 - Establishing the plugin as its own workspace member clarifies dependency wiring early and keeps cargo metadata accurate for future integration tests.
+- Defining the branch graph types up front highlighted optional metadata (issue keys, labels, commit timestamps) that should flow from Twig's registry to visualization features without coupling rendering to Git queries.
