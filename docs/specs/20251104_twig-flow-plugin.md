@@ -128,7 +128,7 @@
 | P0 | Audit existing Twig Git/branch utilities and document reusable components. | Summary document listing candidate functions/types and proposed extraction path. | Focus on `twig-cli/src/git.rs`, `twig-cli/src/cli/git.rs`, `twig-core` modules. | ✅ Completed – see "Git Utility Audit" section |
 | P0 | Define plugin crate scaffolding & build integration. | Plugin compiles as optional crate with minimal main function & Clap wiring. | Determine placement under `plugins/` or `twig-flow/`. Update workspace manifests. | ✅ Completed – plugin crate scaffolded under `plugins/twig-flow` |
 | P0 | Design branch graph data structures in `twig-core`. | Spec and initial interfaces ready for implementation. | Consider performance implications for large repos. | ✅ Completed – branch graph domain models and builder scaffolding added under `twig-core/src/git/graph.rs` |
-| P0 | Specify branch switching shared service API. | Interface defined so CLI + plugin share same code path. | Identify behavior parity with `twig switch`. | |
+| P0 | Specify branch switching shared service API. | Interface defined so CLI + plugin share same code path. | Identify behavior parity with `twig switch`. | ✅ Completed – shared service API skeleton added under `twig-core/src/git/switch.rs` |
 | P1 | Draft CLI UX for tree visualization (mock outputs). | Example outputs stored in spec or doc, capturing formatting rules. | Use ascii art similar to argit; gather from MIGRATING doc. | |
 | P1 | Plan integration tests & fixtures. | List of test scenarios with coverage goals. | Include tree rendering snapshots, switching success/error cases. | |
 | P1 | Outline documentation deliverables. | ToC for plugin README/tutorial. | Ensure canonical example requirement met. | |
@@ -181,9 +181,9 @@
 
 ## Status Tracking (to be updated by subagent)
 
-- **Current focus:** _Specify branch switching shared service API_
-- **Latest completed task:** _Design branch graph data structures in `twig-core`_
-- **Next up:** _Draft CLI UX for tree visualization (mock outputs)_
+- **Current focus:** _Draft CLI UX for tree visualization (mock outputs)_
+- **Latest completed task:** _Specify branch switching shared service API_
+- **Next up:** _Plan integration tests & fixtures_
 
 ## Lessons Learned (ongoing)
 
@@ -192,3 +192,4 @@
 - Separating branch topology from annotations in the core graph types will let the CLI and plugin compose their own overlays without re-traversing Git data.
 - Introducing an explicit `BranchKind` (local/remote/virtual) enum in the graph models keeps downstream consumers from guessing at node semantics.
 - Collapsing edge variants into a single `BranchEdge` simplifies the model and leaves room for higher-level layers to interpret relationships as needed.
+- Defining the shared switch service API up front exposed configuration toggles (creation policy, tracking policy, dry-run) that both the CLI and plugin need to surface consistently.
