@@ -121,6 +121,9 @@ run: ## Run the application
 install: ## Install twig locally
 	cargo install --path twig-cli
 
+.PHONY: install-flow-plugin
+install-flow-plugin: ## Install twig flow plugin
+	cargo install --path plugins/twig-flow
 
 .PHONY: install-dev-tools
 install-dev-tools: ## Install development tools
