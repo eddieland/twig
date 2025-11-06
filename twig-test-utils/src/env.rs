@@ -4,6 +4,7 @@
 //! during testing to ensure tests don't interfere with each other.
 
 use std::env;
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 use tempfile::TempDir;
@@ -19,6 +20,40 @@ pub struct EnvTestGuard {
   original_data_home: Option<String>,
   /// The original XDG_CACHE_HOME value, if any
   original_cache_home: Option<String>,
+}
+
+/// RAII guard that records the original value of an environment variable and
+/// restores it when dropped.
+pub struct EnvVarGuard {
+  key: String,
+  original_value: Option<OsString>,
+}
+
+impl EnvVarGuard {
+  /// Create a new guard for the provided key.
+  ///
+  /// The guard records the current value of the variable but does not mutate
+  /// it.
+  pub fn new(key: impl Into<String>) -> Self {
+    let key = key.into();
+    let original_value = env::var_os(&key);
+    Self { key, original_value }
+  }
+
+  /// Set the environment variable to the provided value for the lifetime of
+  /// the guard.
+  pub fn set(&self, value: impl AsRef<std::ffi::OsStr>) {
+    unsafe {
+      env::set_var(&self.key, value);
+    }
+  }
+
+  /// Remove the environment variable while keeping the guard alive.
+  pub fn remove(&self) {
+    unsafe {
+      env::remove_var(&self.key);
+    }
+  }
 }
 
 impl Default for EnvTestGuard {
@@ -106,6 +141,19 @@ impl Drop for EnvTestGuard {
       },
       None => unsafe {
         env::remove_var(EnvTestGuard::XDG_CACHE_HOME);
+      },
+    }
+  }
+}
+
+impl Drop for EnvVarGuard {
+  fn drop(&mut self) {
+    match &self.original_value {
+      Some(value) => unsafe {
+        env::set_var(&self.key, value);
+      },
+      None => unsafe {
+        env::remove_var(&self.key);
       },
     }
   }

@@ -11,7 +11,7 @@ use tokio::runtime::Runtime;
 use twig_core::creds::Credentials;
 use twig_core::creds::netrc::normalize_host;
 use twig_core::creds::platform::{CredentialProvider, get_credential_provider};
-use url::Url;
+use url::{Position, Url};
 
 use crate::{JiraClient, create_jira_client};
 
@@ -77,15 +77,44 @@ pub fn create_jira_runtime_and_client(home: &Path, jira_host: &str) -> Result<(R
 }
 
 fn normalize_url(url: &Url) -> String {
-  let mut result = url.to_string();
-  if result.ends_with('/') && url.path() == "/" {
-    result.pop();
+  let mut result = String::new();
+  result.push_str(&url[..Position::BeforePath]);
+
+  let path = url.path();
+  if path != "/" {
+    result.push_str(path);
   }
+
+  if let Some(query) = url.query() {
+    result.push('?');
+    result.push_str(query);
+  }
+
+  if let Some(fragment) = url.fragment() {
+    result.push('#');
+    result.push_str(fragment);
+  }
+
   result
 }
 
 fn parse_with_https_prefix(input: &str) -> Result<Url> {
-  let with_scheme = format!("https://{input}");
+  let mut candidate = input;
+
+  if let Some(colon_index) = input.find(':') {
+    let potential_scheme = &input[..colon_index];
+    if ["http", "https"]
+      .iter()
+      .any(|scheme| potential_scheme.eq_ignore_ascii_case(scheme))
+    {
+      let remainder = input[colon_index + 1..].trim_start_matches('/');
+      if !remainder.is_empty() {
+        candidate = remainder;
+      }
+    }
+  }
+
+  let with_scheme = format!("https://{candidate}");
   Url::parse(&with_scheme).map_err(|_| anyhow::anyhow!("Failed to parse URL: '{input}'. Ensure it has a valid scheme."))
 }
 
@@ -93,6 +122,17 @@ fn ensure_scheme(input: &str) -> Result<String> {
   let trimmed = input.trim();
   if trimmed.is_empty() {
     return Err(anyhow::anyhow!("Host cannot be empty"));
+  }
+
+  let lowered = trimmed.to_ascii_lowercase();
+  if lowered.starts_with("http:") && !lowered.starts_with("http://") {
+    let remainder = trimmed.split_once(':').map(|(_, rest)| rest).unwrap_or("");
+    return parse_with_https_prefix(remainder.trim_start_matches('/')).map(|url| normalize_url(&url));
+  }
+
+  if lowered.starts_with("https:") && !lowered.starts_with("https://") {
+    let remainder = trimmed.split_once(':').map(|(_, rest)| rest).unwrap_or("");
+    return parse_with_https_prefix(remainder.trim_start_matches('/')).map(|url| normalize_url(&url));
   }
 
   let url = if let Ok(url) = Url::parse(trimmed) {
@@ -110,7 +150,7 @@ fn ensure_scheme(input: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-  use twig_test_utils::NetrcGuard;
+  use twig_test_utils::{EnvVarGuard, NetrcGuard};
 
   use super::*;
 
@@ -169,10 +209,11 @@ machine atlassian.net
 "#;
     let guard = NetrcGuard::new(content);
 
-    std::env::set_var(ENV_JIRA_HOST, "custom-jira-host.com");
+    let jira_host_guard = EnvVarGuard::new(ENV_JIRA_HOST);
+    jira_host_guard.set("custom-jira-host.com");
     assert!(check_jira_credentials(guard.home_dir(), "custom-jira-host.com").unwrap());
 
-    std::env::set_var(ENV_JIRA_HOST, "nonexistent-host.com");
+    jira_host_guard.set("nonexistent-host.com");
     assert!(check_jira_credentials(guard.home_dir(), "nonexistent-host.com").unwrap());
   }
 
