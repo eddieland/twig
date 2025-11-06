@@ -16,6 +16,7 @@
 - Command should be resilient when no Git repository or Twig registry exists, providing actionable error messaging.
 - Support for Jira ticket-based branch lookup must reuse existing Twig core helpers for parsing ticket keys and metadata.
 - Keep IO dependencies minimal; avoid introducing heavy crates unless necessary (prefer existing Git abstraction within project or lightweight wrappers).
+- Treat the implementation as a flagship example: intentionally over-document and over-polish the plugin so future authors can follow it as the canonical pattern.
 
 ## Target Capabilities
 
