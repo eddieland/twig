@@ -14,8 +14,7 @@ use regex::Regex;
 use tokio::runtime::Runtime;
 use twig_core::output::{print_info, print_success, print_warning};
 use twig_core::state::{BranchMetadata, RepoState};
-
-use crate::clients;
+use twig_gh::{GitHubClient, create_github_client_from_netrc};
 
 static JIRA_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
   vec![
@@ -116,7 +115,7 @@ fn sync_branches(
   let rt = Runtime::new().context("Failed to create async runtime")?;
   let github_client = if !no_github {
     let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
-    Some(clients::create_github_client_from_netrc(base_dirs.home_dir())?)
+    Some(create_github_client_from_netrc(base_dirs.home_dir())?)
   } else {
     None
   };
@@ -237,7 +236,7 @@ fn detect_jira_issue_from_branch(branch_name: &str) -> Option<String> {
 
 /// Detect GitHub PR number from branch using GitHub API
 async fn detect_github_pr_from_branch(
-  github_client: &clients::GitHubClient,
+  github_client: &GitHubClient,
   branch_name: &str,
   repo_path: &std::path::Path,
 ) -> Option<u32> {

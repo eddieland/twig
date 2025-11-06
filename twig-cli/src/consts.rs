@@ -5,7 +5,7 @@
 //! static strings.
 
 /// Environment variable for the JIRA host URL
-pub use twig_core::clients::ENV_JIRA_HOST;
+pub use twig_jira::ENV_JIRA_HOST;
 
 /// Platform-specific Git executable name
 #[cfg(windows)]

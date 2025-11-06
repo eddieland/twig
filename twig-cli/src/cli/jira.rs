@@ -14,9 +14,7 @@ use twig_core::{
   BranchMetadata, RepoState, create_jira_parser, create_worktree, detect_repository, get_config_dirs,
   get_current_branch_jira_issue,
 };
-
-use crate::clients;
-use crate::clients::get_jira_host;
+use twig_jira::{create_jira_runtime_and_client, get_jira_host};
 
 /// Command for Jira integration
 #[derive(Args)]
@@ -297,7 +295,7 @@ fn handle_view_issue_command(issue_key: &str) -> Result<()> {
   let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
   let jira_host = get_jira_host()?;
 
-  let (rt, jira_client) = clients::create_jira_runtime_and_client(base_dirs.home_dir(), &jira_host)?;
+  let (rt, jira_client) = create_jira_runtime_and_client(base_dirs.home_dir(), &jira_host)?;
 
   rt.block_on(async {
     // Fetch the issue
@@ -369,7 +367,7 @@ fn handle_transition_issue_command(issue_key: &str, transition: Option<&str>) ->
   let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
   let jira_host = get_jira_host()?;
 
-  let (rt, jira_client) = clients::create_jira_runtime_and_client(base_dirs.home_dir(), &jira_host)?;
+  let (rt, jira_client) = create_jira_runtime_and_client(base_dirs.home_dir(), &jira_host)?;
 
   rt.block_on(async {
     // If no transition is specified, list available transitions
@@ -446,7 +444,7 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
   let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
   let jira_host = get_jira_host()?;
 
-  let (rt, jira_client) = clients::create_jira_runtime_and_client(base_dirs.home_dir(), &jira_host)?;
+  let (rt, jira_client) = create_jira_runtime_and_client(base_dirs.home_dir(), &jira_host)?;
 
   rt.block_on(async {
     // Fetch the issue to get its summary
@@ -559,7 +557,7 @@ fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Res
   let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
   let jira_host = get_jira_host()?;
 
-  let (rt, jira_client) = clients::create_jira_runtime_and_client(base_dirs.home_dir(), &jira_host)?;
+  let (rt, jira_client) = create_jira_runtime_and_client(base_dirs.home_dir(), &jira_host)?;
   rt.block_on(async {
     // Verify the issue exists
     match jira_client.get_issue(issue_key).await {
