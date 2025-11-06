@@ -6,7 +6,18 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to fill out this bug report! Please provide as much detail as possible to help us understand and reproduce the issue.
+        Thanks for taking the time to fill out this bug report! Detailed reports help us triage faster and ship fixes sooner.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before submitting
+      description: Please confirm the following to help us avoid duplicates.
+      options:
+        - label: I searched open and closed issues/discussions for similar reports.
+          required: true
+        - label: I am using the latest Twig release (or built from the current `main` branch).
+          required: true
 
   - type: input
     id: version
@@ -18,7 +29,19 @@ body:
       required: true
 
   - type: dropdown
-    id: os
+    id: install-method
+    attributes:
+      label: Installation Method
+      description: How did you install Twig?
+      options:
+        - Prebuilt release binary
+        - Built from source (clone + cargo build)
+        - Other / unsure (add details below)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: operating-system
     attributes:
       label: Operating System
       description: What operating system are you using?
@@ -26,7 +49,42 @@ body:
         - Linux
         - macOS
         - Windows
-        - Other (please specify in description)
+        - Other (please specify in Additional context)
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS Version
+      description: Include version details (e.g., "macOS 14.3" or "Ubuntu 22.04").
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected Area(s)
+      description: Which parts of Twig are impacted?
+      multiple: true
+      options:
+        - Core CLI (command parsing, workspace management)
+        - Git integration
+        - GitHub integration
+        - Jira integration
+        - Plugins / plugin API
+        - Documentation or guides
+        - Build / packaging
+        - Other (please describe below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: cli-command
+    attributes:
+      label: CLI Command(s) Run
+      description: Provide the exact Twig command(s) you executed.
+      placeholder: |
+        twig <subcommand> ...
+      render: shell
     validations:
       required: true
 
@@ -34,7 +92,7 @@ body:
     id: description
     attributes:
       label: Bug Description
-      description: A clear and concise description of what the bug is.
+      description: A clear and concise description of what went wrong.
       placeholder: Describe what happened and what you expected to happen.
     validations:
       required: true
@@ -43,10 +101,11 @@ body:
     id: reproduction
     attributes:
       label: Steps to Reproduce
-      description: Steps to reproduce the behavior
+      description: Share a minimal sequence so we can reproduce the issue.
       placeholder: |
         1. Run command '...'
-        2. See error
+        2. Observe output '...'
+        3. ...
       value: |
         1.
         2.
@@ -58,36 +117,48 @@ body:
     id: expected
     attributes:
       label: Expected Behavior
-      description: A clear and concise description of what you expected to happen.
+      description: What did you expect Twig to do?
     validations:
       required: true
 
   - type: textarea
     id: actual
     attributes:
-      label: Actual Behavior
-      description: A clear and concise description of what actually happened.
+      label: Actual Behavior / Output
+      description: What actually happened? Include error messages or screenshots if possible.
     validations:
       required: true
 
   - type: textarea
     id: logs
     attributes:
-      label: Error Output/Logs
-      description: If applicable, add error messages or log output.
+      label: Relevant Logs or Trace Output
+      description: Paste any relevant logs with `--verbose` / `-vv` output if available.
       render: shell
+
+  - type: textarea
+    id: regression
+    attributes:
+      label: Regression?
+      description: If this worked in a previous Twig version, let us know which version and any differences in your setup.
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workarounds Tried
+      description: Share any mitigations or temporary fixes you've found.
 
   - type: textarea
     id: context
     attributes:
       label: Additional Context
-      description: Add any other context about the problem here (repository setup, configuration, etc.).
+      description: Repo URLs, plugin manifests, environment details, or anything else that helps us investigate.
 
   - type: checkboxes
     id: terms
     attributes:
       label: Code of Conduct
-      description: By submitting this issue, you agree to follow our Code of Conduct
+      description: By submitting this issue, you agree to follow our Code of Conduct.
       options:
-        - label: I agree to follow this project's Code of Conduct
+        - label: I agree to follow this project's Code of Conduct.
           required: true
