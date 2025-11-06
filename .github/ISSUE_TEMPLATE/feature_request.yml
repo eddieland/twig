@@ -1,19 +1,68 @@
 name: Feature Request
-description: Suggest an idea for Twig
+description: Suggest an idea that would make Twig better
 title: "[Feature]: "
 labels: ["enhancement", "triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to suggest a new feature! Please provide as much detail as possible to help us understand your request.
+        Thanks for suggesting an improvement! Thoughtful proposals help us understand the problem, the desired outcome, and how it fits the roadmap.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before submitting
+      description: Help us focus by confirming the following.
+      options:
+        - label: I searched existing issues/discussions to avoid duplicates.
+          required: true
+        - label: I reviewed the docs and CONTRIBUTING guide to confirm this feature does not already exist.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area of the project
+      description: Where does this feature belong?
+      multiple: true
+      options:
+        - Core CLI (commands, UX)
+        - Git integration
+        - GitHub integration
+        - Jira integration
+        - Plugins / plugin API
+        - Documentation or tutorials
+        - Build / packaging / release
+        - Other (explain below)
+    validations:
+      required: true
 
   - type: textarea
     id: problem
     attributes:
       label: Problem Statement
-      description: Is your feature request related to a problem? Please describe the problem you're trying to solve.
-      placeholder: "I'm always frustrated when..."
+      description: What problem or pain point are you trying to solve? Focus on the user experience.
+      placeholder: "When I try to ..., I run into ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: audience
+    attributes:
+      label: Who benefits?
+      description: Describe who would use this feature (you, your team, plugin authors, etc.).
+      placeholder: "This helps ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: goals
+    attributes:
+      label: Desired Outcomes / Success Criteria
+      description: What does success look like? List concrete goals, acceptance criteria, or user stories.
+      placeholder: |
+        - Users can ...
+        - CLI shows ...
     validations:
       required: true
 
@@ -21,71 +70,40 @@ body:
     id: solution
     attributes:
       label: Proposed Solution
-      description: Describe the solution you'd like to see implemented.
-      placeholder: "I would like Twig to..."
+      description: Describe the approach you'd like to see. Include command syntax, config changes, or API sketches if relevant.
+      placeholder: |
+        Possible CLI syntax:
+        ```
+        twig <subcommand> --flag
+        ```
     validations:
       required: true
 
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives Considered
-      description: Describe any alternative solutions or features you've considered.
-      placeholder: "I've also considered..."
-
-  - type: dropdown
-    id: complexity
-    attributes:
-      label: Implementation Complexity
-      description: How complex do you think this feature would be to implement?
-      options:
-        - "Simple (small change or addition)"
-        - "Moderate (new functionality, some complexity)"
-        - "Complex (major feature, significant changes)"
-        - "I'm not sure"
-    validations:
-      required: true
-
-  - type: dropdown
-    id: priority
-    attributes:
-      label: Priority
-      description: How important is this feature to you?
-      options:
-        - "Nice to have"
-        - "Would be helpful"
-        - "Important for my workflow"
-        - "Critical/blocking"
-    validations:
-      required: true
+      label: Alternatives or Workarounds
+      description: Have you tried other approaches? Why are they insufficient?
+      placeholder: "I've also considered ..."
 
   - type: textarea
-    id: use-case
+    id: considerations
     attributes:
-      label: Use Case
-      description: Describe your specific use case and how this feature would help you.
-      placeholder: "In my workflow, I..."
-    validations:
-      required: true
+      label: Risks, Dependencies, or Open Questions
+      description: Call out potential challenges, interactions with other features, or unknowns.
+      placeholder: "We should be careful about ..."
 
   - type: textarea
-    id: examples
-    attributes:
-      label: Examples
-      description: If applicable, provide examples of how this feature might work or look.
-      placeholder: "For example: `twig new-command --option value`"
-
-  - type: textarea
-    id: context
+    id: additional-context
     attributes:
       label: Additional Context
-      description: Add any other context, screenshots, or references about the feature request here.
+      description: Include references, related issues, screenshots, or anything else we should review.
 
   - type: checkboxes
     id: terms
     attributes:
       label: Code of Conduct
-      description: By submitting this issue, you agree to follow our Code of Conduct
+      description: By submitting this issue, you agree to follow our Code of Conduct.
       options:
-        - label: I agree to follow this project's Code of Conduct
+        - label: I agree to follow this project's Code of Conduct.
           required: true

@@ -1,0 +1,76 @@
+name: Documentation Update
+description: Improve or request new documentation for Twig
+title: "[Docs]: "
+labels: ["documentation", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us keep our docs accurate and approachable! Use this template for documentation bugs, clarification requests, or new guide/tutorial ideas.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing docs issues/discussions to avoid duplicates.
+          required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: Documentation location
+      description: Provide the URL or path to the doc, guide, or comment that needs updating.
+      placeholder: docs/specs/..., README section, tutorial URL, etc.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: doc-type
+    attributes:
+      label: Type of update
+      options:
+        - Fix incorrect or outdated information
+        - Improve wording or clarity
+        - Add new example or tutorial
+        - Improve onboarding / quickstart
+        - Plugin author documentation
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is confusing or missing?
+      description: Describe the issue you're seeing in the current documentation.
+      placeholder: "The quickstart skips ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Suggested changes
+      description: Share what you'd like to see instead. Include wording, outline, or examples if possible.
+      placeholder: |
+        Suggested update:
+        - Step 1 ...
+        - Step 2 ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Link to related issues, tutorials, or external references. Attach screenshots if relevant.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our Code of Conduct.
+      options:
+        - label: I agree to follow this project's Code of Conduct.
+          required: true
