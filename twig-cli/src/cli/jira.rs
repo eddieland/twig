@@ -11,7 +11,7 @@ use owo_colors::OwoColorize;
 use twig_core::jira_parser::JiraTicketParser;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::{
-  BranchMetadata, RepoState, create_jira_parser, create_worktree, detect_repository, get_config_dirs,
+  RepoState, StateBranchMetadata, create_jira_parser, create_worktree, detect_repository, get_config_dirs,
   get_current_branch_jira_issue,
 };
 use twig_jira::{create_jira_runtime_and_client, get_jira_host};
@@ -534,7 +534,7 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
     let mut state = RepoState::load(&repo_path)?;
 
     // Add the branch-issue association
-    state.add_branch_issue(BranchMetadata {
+    state.add_branch_issue(StateBranchMetadata {
       branch: branch_name.clone(),
       jira_issue: Some(issue_key.to_string()),
       github_pr: None,
@@ -629,7 +629,7 @@ fn handle_link_branch_command(issue_key: &str, branch_name: Option<&str>) -> Res
     }
 
     // Add the branch-issue association
-    state.add_branch_issue(BranchMetadata {
+    state.add_branch_issue(StateBranchMetadata {
       branch: branch.clone(),
       jira_issue: Some(issue_key.to_string()),
       github_pr: None,
