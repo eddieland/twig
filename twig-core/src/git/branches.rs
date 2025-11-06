@@ -112,6 +112,8 @@ mod tests {
       .commit(Some("HEAD"), &signature, &signature, "Initial commit", &tree, &[])
       .unwrap();
 
+    drop(tree);
+
     repo
   }
 
