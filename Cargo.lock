@@ -2561,6 +2561,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "twig-flow"
+version = "0.3.1"
+dependencies = [
+ "anyhow",
+ "clap",
+ "twig-core",
+ "twig-test-utils",
+]
+
+[[package]]
 name = "twig-gh"
 version = "0.3.1"
 dependencies = [
