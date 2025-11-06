@@ -21,14 +21,15 @@
 ## Target Capabilities
 
 1. **Branch Tree Visualization (`twig flow`)**
+
    - Render the current repository's branch graph (local branches) using a hybrid tree-and-table layout: the first line prints column headers (e.g., `Branch`, `Story`, `PR`, `Notes`) while each branch row retains tree connectors inside the `Branch` column and keeps the additional metadata columns horizontally aligned.
    - The renderer must live in `twig-core` so it can be reused by the CLI, plugins, and future tooling; `twig flow` consumes this shared component rather than owning bespoke formatting code.
 
-- Provide flags for choosing the root of the visualization (`--root`) and limiting depth or subtree focus via `--parent` semantics, automatically checking out the resolved branch before rendering the tree. These tree-selection flags are mutually exclusive and the CLI should surface a clear error when multiple are supplied.
-- Integrate with Twig output styling, optionally using ASCII/Unicode connectors consistent with CLI guidelines, and ensure spacing remains column-aligned even when connectors are present.
-- Support an internally-configurable column schema so future UX iterations can add or remove columns (story, PR, lifecycle notes, etc.) without rewriting the renderer. The configuration remains hidden from end users for now but should be easy to expose later.
+   - Provide boolean flags (`--root`, `--parent`) that perform an automatic checkout before rendering: `--root` moves the user to the configured root branch for the graph, while `--parent` switches to the current branch's primary parent. The visualization still renders the full tree, simply highlighting the new current branch. These tree-selection flags are mutually exclusive and the CLI should surface a clear error when multiple are supplied.
+   - Integrate with Twig output styling, optionally using ASCII/Unicode connectors consistent with CLI guidelines, and ensure spacing remains column-aligned even when connectors are present.
+   - Support an internally-configurable column schema so future UX iterations can add or remove columns (story, PR, lifecycle notes, etc.) without rewriting the renderer. The configuration remains hidden from end users for now but should be easy to expose later.
 
-2. \*\*Branch Switching (`twig flow <target>`)
+2. **Branch Switching (`twig flow <target>`)**
 
    - Accept a positional argument that mirrors `twig switch` semantics: switch to existing branch, create new branch, or resolve via Jira ticket.
    - Reuse shared branch resolution logic extracted into core modules so `twig switch` and `twig flow` share behavior.
@@ -113,8 +114,8 @@
 
 - Default mode lists branch tree.
 - Flags:
-  - `--root <branch>`: switch to the target branch, then show the tree rooted at that branch.
-  - `--parent <branch>`: switch to the selected parent branch before rendering its subtree (e.g., to view siblings or direct descendants).
+  - `--root`: switch to the repository's configured root branch (e.g., `main`) and then render the full tree with that branch highlighted.
+  - `--parent`: switch to the current branch's primary parent (if known) before rendering; acts as a shortcut for `twig switch` to the parent while still displaying the entire tree. If multiple parents are detected, emit an error listing the options and skip rendering (future enhancement: interactive selection/dialog).
   - Tree-selection flags (`--root`, `--parent`, future variants) belong to a Clap `ArgGroup` so that specifying more than one surfaces an immediate error and prevents any checkout side effects.
 - `--show-remotes`: future extension; note in backlog.
 - `--format json`: optional future; not in initial scope unless easy to provide.
@@ -169,8 +170,8 @@ Branch                         Story        PR       Notes
 ```
 
 ```text
-$ twig flow --root feature/payment-refactor
-Switched to branch "feature/payment-refactor"
+$ twig flow --root
+Switched to branch "feature/payment-refactor" (root)
 Branch                         Story        PR       Notes
 * feature/payment-refactor     —            draft    —
 ├─ feature/payment-api         —            —        —
@@ -178,7 +179,7 @@ Branch                         Story        PR       Notes
 ```
 
 ```text
-$ twig flow --parent feature/auth-refresh-ui
+$ twig flow --parent
 Switched to parent branch "feature/auth-refresh"
 Branch                         Story        PR       Notes
 * feature/auth-refresh         PROJ-451     —        —
@@ -186,8 +187,8 @@ Branch                         Story        PR       Notes
 ```
 
 ```text
-$ twig flow --root main --parent develop
-error: the argument '--root <branch>' cannot be used with '--parent <branch>'
+$ twig flow --root --parent
+error: the argument '--root' cannot be used with '--parent'
 ```
 
 ## Subagent Execution Plan
@@ -203,9 +204,11 @@ error: the argument '--root <branch>' cannot be used with '--parent <branch>'
 | P0       | Finalize renderer API & column schema.                                     | Document concrete structs/enums + default schema in spec and prepare module skeleton in `twig-core`. | Captures `BranchTableRenderer`, schema types, and metadata mapping rules.         |                                                                                                            |
 | P0       | Implement renderer core in `twig-core`.                                    | Produce tree+table formatter operating on `BranchGraph` with alignment + placeholders.               | No CLI integration yet; include internal feature gate for hidden customization.   |                                                                                                            |
 | P0       | Add unit & snapshot tests for renderer.                                    | Cover width calculations, connectors, and schema overrides using `insta` fixtures.                   | Lives under `twig-core` tests; uses synthetic graphs.                             |                                                                                                            |
+| P0       | Handle multi-parent `--parent` edge case.                                  | Error messaging and parent listings defined; renderer call short-circuits when multiple parents.     | Future interactive selection tracked separately.                                  |                                                                                                            |
 | P1       | Draft CLI UX for tree visualization (mock outputs).                        | Example outputs stored in spec or doc, capturing formatting rules.                                   | Hybrid tree/table layout with default `Branch/Story/PR/Notes` columns.            | ✅ Completed – see "CLI UX Mockups" section                                                                |
 | P1       | Define internal column schema configuration.                               | Document data model + default columns for renderer with hidden config override.                      | Enables future customization without public CLI surface.                          | 🚧 Blocked – moved under renderer API task                                                                 |
 | P1       | Plan integration tests & fixtures.                                         | List of test scenarios with coverage goals.                                                          | Include tree rendering snapshots, switching success/error cases.                  |                                                                                                            |
+| P1       | Explore interactive parent selection UX.                                   | Outline potential dialogs/prompts for selecting among multiple parents.                              | Depends on multi-parent error groundwork.                                         |                                                                                                            |
 | P1       | Outline documentation deliverables.                                        | ToC for plugin README/tutorial.                                                                      | Ensure canonical example requirement met.                                         |                                                                                                            |
 | P2       | Investigate caching strategies for large repos.                            | Determine if caching needed; propose approach.                                                       | Could use `.twig` state file.                                                     |                                                                                                            |
 | P2       | Explore remote branch visualization options.                               | Document feasibility and requirements.                                                               | Possibly post-v1 scope.                                                           |                                                                                                            |

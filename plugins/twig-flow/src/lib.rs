@@ -22,8 +22,8 @@ pub fn run() -> Result<()> {
 
   if cli.target.is_some() {
     print_info("Branch switching is not yet implemented for twig flow.");
-  } else if cli.root.is_some() || cli.parent.is_some() {
-    print_info("Branch tree visualization is not yet implemented for twig flow.");
+  } else if cli.root || cli.parent {
+    print_info("Branch tree visualization is not yet implemented for twig flow (root/parent aliases pending).");
   } else {
     print_warning("twig flow plugin scaffolding is in place, but no operations are implemented yet.");
   }
