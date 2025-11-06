@@ -9,7 +9,8 @@ use clap::{ArgGroup, Parser};
     .multiple(false)
 ))]
 pub struct Cli {
-  /// Render the branch tree rooted at the specified branch after switching to it.
+  /// Render the branch tree rooted at the specified branch after switching to
+  /// it.
   #[arg(long, value_name = "BRANCH")]
   pub root: Option<String>,
 

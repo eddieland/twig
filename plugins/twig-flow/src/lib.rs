@@ -9,9 +9,8 @@ mod cli;
 
 use anyhow::Result;
 use clap::Parser;
-use twig_core::output::{print_info, print_warning};
-
 pub use cli::Cli;
+use twig_core::output::{print_info, print_warning};
 
 /// Execute the plugin with the provided command-line arguments.
 ///
