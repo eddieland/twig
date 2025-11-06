@@ -21,16 +21,22 @@
 ## Target Capabilities
 
 1. **Branch Tree Visualization (`twig flow`)**
-   - Render the current repository's branch graph (local branches) similar to argit's tree view, highlighting current branch and parent-child relationships.
-  - Provide flags for choosing the root of the visualization (`--root`) and limiting depth or subtree focus via `--parent` semantics, automatically checking out the resolved branch before rendering the tree. These tree-selection flags are mutually exclusive and the CLI should surface a clear error when multiple are supplied.
-   - Integrate with Twig output styling, optionally using ASCII/Unicode connectors consistent with CLI guidelines.
 
-2. **Branch Switching (`twig flow <target>`)
+   - Render the current repository's branch graph (local branches) using a hybrid tree-and-table layout: the first line prints column headers (e.g., `Branch`, `Story`, `PR`, `Notes`) while each branch row retains tree connectors inside the `Branch` column and keeps the additional metadata columns horizontally aligned.
+   - The renderer must live in `twig-core` so it can be reused by the CLI, plugins, and future tooling; `twig flow` consumes this shared component rather than owning bespoke formatting code.
+
+   - Provide boolean flags (`--root`, `--parent`) that perform an automatic checkout before rendering: `--root` moves the user to the configured root branch for the graph, while `--parent` switches to the current branch's primary parent. The visualization still renders the full tree, simply highlighting the new current branch. These tree-selection flags are mutually exclusive and the CLI should surface a clear error when multiple are supplied.
+   - Integrate with Twig output styling, optionally using ASCII/Unicode connectors consistent with CLI guidelines, and ensure spacing remains column-aligned even when connectors are present.
+   - Support an internally-configurable column schema so future UX iterations can add or remove columns (story, PR, lifecycle notes, etc.) without rewriting the renderer. The configuration remains hidden from end users for now but should be easy to expose later.
+
+2. **Branch Switching (`twig flow <target>`)**
+
    - Accept a positional argument that mirrors `twig switch` semantics: switch to existing branch, create new branch, or resolve via Jira ticket.
    - Reuse shared branch resolution logic extracted into core modules so `twig switch` and `twig flow` share behavior.
    - Support dry-run/confirmation flows if required by existing `twig switch` UX.
 
 3. **Plugin Example & Documentation**
+
    - Provide comprehensive inline documentation and accompanying README snippet describing plugin structure, intended as canonical reference for plugin authors.
    - Include integration tests demonstrating plugin invocation, branch tree output snapshot(s), and branch switching behavior.
 
@@ -59,14 +65,17 @@
 ### High-Level Flow
 
 1. **Command Dispatch**
+
    - When user runs `twig flow`, plugin entrypoint is invoked.
    - CLI arguments parsed using plugin-specific Clap definitions (likely via `twig-core` plugin support macros or manual Clap integration).
 
 2. **Mode Selection**
+
    - No positional argument → branch tree visualization mode.
    - Positional argument provided → branch switching mode, deferring to shared switch engine.
 
 3. **Core Services**
+
    - Git repository inspection using shared Git service (to be extracted from existing CLI or added to `twig-core`).
    - Branch metadata model representing parent-child relationships, derived from commits or stored Twig state.
    - Config & state retrieval via `twig_core::config::ConfigDirs` and `twig_core::state::Registry` if needed.
@@ -77,14 +86,14 @@
 
 ### Modules & Responsibilities
 
-| Module | Responsibility | Notes |
-| --- | --- | --- |
-| `plugins/twig-flow/src/lib.rs` | Plugin registration, Clap integration, high-level routing | Should mirror other plugin examples. |
-| `plugins/twig-flow/src/tree.rs` | Branch graph construction, formatting, rendering | Contains logic for `--root` and `--parent` filters. |
-| `plugins/twig-flow/src/switch.rs` | Branch resolution & switching interface | Delegates to shared core functions extracted from `twig switch`. |
-| `twig-core/src/git/graph.rs` (new) | Core branch graph utilities (commit traversal, ancestry) | Reusable for other commands needing branch topology. |
-| `twig-core/src/git/switch.rs` (refactor) | Common branch switch engine | Used by both CLI and plugin. |
-| `docs/plugins/twig-flow.md` (proposed) | Human-readable plugin guide | Ensures canonical example status. |
+| Module                                   | Responsibility                                            | Notes                                                            |
+| ---------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------- |
+| `plugins/twig-flow/src/lib.rs`           | Plugin registration, Clap integration, high-level routing | Should mirror other plugin examples.                             |
+| `plugins/twig-flow/src/tree.rs`          | Branch graph construction, formatting, rendering          | Contains logic for `--root` and `--parent` filters.              |
+| `plugins/twig-flow/src/switch.rs`        | Branch resolution & switching interface                   | Delegates to shared core functions extracted from `twig switch`. |
+| `twig-core/src/git/graph.rs` (new)       | Core branch graph utilities (commit traversal, ancestry)  | Reusable for other commands needing branch topology.             |
+| `twig-core/src/git/switch.rs` (refactor) | Common branch switch engine                               | Used by both CLI and plugin.                                     |
+| `docs/plugins/twig-flow.md` (proposed)   | Human-readable plugin guide                               | Ensures canonical example status.                                |
 
 ## Data & Domain Modeling
 
@@ -105,12 +114,13 @@
 
 - Default mode lists branch tree.
 - Flags:
-  - `--root <branch>`: switch to the target branch, then show the tree rooted at that branch.
-  - `--parent <branch>`: switch to the selected parent branch before rendering its subtree (e.g., to view siblings or direct descendants).
+  - `--root`: switch to the repository's configured root branch (e.g., `main`) and then render the full tree with that branch highlighted.
+  - `--parent`: switch to the current branch's primary parent (if known) before rendering; acts as a shortcut for `twig switch` to the parent while still displaying the entire tree. If multiple parents are detected, emit an error listing the options and skip rendering (future enhancement: interactive selection/dialog).
   - Tree-selection flags (`--root`, `--parent`, future variants) belong to a Clap `ArgGroup` so that specifying more than one surfaces an immediate error and prevents any checkout side effects.
-  - `--show-remotes`: future extension; note in backlog.
-  - `--format json`: optional future; not in initial scope unless easy to provide.
-- Output should highlight current branch (e.g., `* main`).
+- `--show-remotes`: future extension; note in backlog.
+- `--format json`: optional future; not in initial scope unless easy to provide.
+- Output should highlight current branch (e.g., `* main`) while preserving column alignment under a shared header row.
+- Header row defaults to `Branch`, `Story`, `PR`, `Notes`; renderer reads from a configurable (internal) schema so layout changes do not require code rewrites.
 - Should handle no branches scenario (empty repo) gracefully.
 
 ### `twig flow <target>`
@@ -119,22 +129,90 @@
 - Reuses `twig switch` fallback rules (prompt to create branch if missing, apply naming templates for Jira keys).
 - Accept plugin-specific options if needed (e.g., `--no-track`).
 
+## Renderer Component Scope
+
+- Location: `twig-core/src/git/renderer.rs` (new module re-exported via `twig_core::git`), exposing a `BranchTableRenderer` struct that accepts a `BranchGraph`, column schema, and style configuration.
+- API surface:
+  - `BranchTableColumn` enum describing built-in columns (`Branch`, `Story`, `PR`, `Notes`) plus extensibility via custom metadata keys.
+  - `BranchTableSchema` to configure column order, width behavior, and fallback placeholders.
+  - `BranchTableRenderer::render(&self, graph: &BranchGraph, root: &BranchName, writer: impl Write)` returning `Result<()>`.
+  - Optional helpers for width measurement, column alignment (leveraging `console::strip_ansi_codes` / internal width utilities).
+- Responsibilities:
+  - Compose tree connectors within the `Branch` column using `BranchGraph` topology (children, parents, current branch).
+  - Populate additional columns from `BranchNodeMetadata` annotations/labels (e.g., Jira ticket, PR number, stale state).
+  - Provide deterministic spacing suitable for snapshot testing; avoid terminal-dependent width detection.
+  - Support internal configuration toggles (e.g., hidden feature flag to swap columns) without exposing user-facing CLI flags yet.
+- Testing strategy (lives under `twig-core/src/git/renderer/tests` or `tests/renderer.rs`):
+  - Unit tests covering width calculations, connector generation, and column placeholder logic.
+  - Snapshot tests (via `insta`) for representative branch graphs: simple tree, deep nesting, multiple metadata combinations, detached HEAD / empty graphs.
+  - Fixtures built with `twig-test-utils` to synthesise `BranchGraph` instances; avoid hitting real git repositories for renderer tests.
+- Integration path:
+  - `twig flow` plugin depends on the renderer after it is stabilized; plugin-specific formatting replaces only the high-level messaging.
+
+## CLI UX Mockups
+
+- Tree visualization uses ASCII connectors (`├─`, `└─`, `│`) within the `Branch` column and prefixes the currently checked-out branch with `*`.
+- A header row introduces the default columns (`Branch`, `Story`, `PR`, `Notes`) and each branch row keeps metadata horizontally aligned under the header. Missing metadata renders as `—` to preserve alignment.
+- Branch annotations migrate out of inline square brackets and into the dedicated columns; colorization still leverages `twig_core::output`.
+- `--root` and `--parent` trigger an explicit checkout before rendering; conflicting selections short-circuit with a Clap error prior to Git mutations. Detached-head or empty repository scenarios surface a warning followed by only the header row.
+
+```text
+$ twig flow
+Branch                         Story        PR       Notes
+* main                         —            —        —
+├─ feature/auth-refresh        PROJ-451     —        active
+│  └─ feature/auth-refresh-ui  PROJ-451     #982     in-review
+├─ feature/payment-refactor    —            draft    stale 21d
+│  ├─ feature/payment-api      —            —        —
+│  └─ feature/payment-ui       —            —        —
+└─ chore/cicd-cleanup          —            —        —
+   └─ fix/gha-cache            —            —        stale 45d
+```
+
+```text
+$ twig flow --root
+Switched to branch "feature/payment-refactor" (root)
+Branch                         Story        PR       Notes
+* feature/payment-refactor     —            draft    —
+├─ feature/payment-api         —            —        —
+└─ feature/payment-ui          —            —        —
+```
+
+```text
+$ twig flow --parent
+Switched to parent branch "feature/auth-refresh"
+Branch                         Story        PR       Notes
+* feature/auth-refresh         PROJ-451     —        —
+└─ feature/auth-refresh-ui     PROJ-451     #982     in-review
+```
+
+```text
+$ twig flow --root --parent
+error: the argument '--root' cannot be used with '--parent'
+```
+
 ## Subagent Execution Plan
 
 ### Task Backlog
 
-| Priority | Task | Definition of Done | Notes | Status |
-| -------- | ---- | ------------------ | ----- | ------ |
-| P0 | Audit existing Twig Git/branch utilities and document reusable components. | Summary document listing candidate functions/types and proposed extraction path. | Focus on `twig-cli/src/git.rs`, `twig-cli/src/cli/git.rs`, `twig-core` modules. | ✅ Completed – see "Git Utility Audit" section |
-| P0 | Define plugin crate scaffolding & build integration. | Plugin compiles as optional crate with minimal main function & Clap wiring. | Determine placement under `plugins/` or `twig-flow/`. Update workspace manifests. | ✅ Completed – plugin crate scaffolded under `plugins/twig-flow` |
-| P0 | Design branch graph data structures in `twig-core`. | Spec and initial interfaces ready for implementation. | Consider performance implications for large repos. | ✅ Completed – branch graph domain models and builder scaffolding added under `twig-core/src/git/graph.rs` |
-| P0 | Specify branch switching shared service API. | Interface defined so CLI + plugin share same code path. | Identify behavior parity with `twig switch`. | ✅ Completed – shared service API skeleton added under `twig-core/src/git/switch.rs` |
-| P1 | Draft CLI UX for tree visualization (mock outputs). | Example outputs stored in spec or doc, capturing formatting rules. | Use ascii art similar to argit; gather from MIGRATING doc. | |
-| P1 | Plan integration tests & fixtures. | List of test scenarios with coverage goals. | Include tree rendering snapshots, switching success/error cases. | |
-| P1 | Outline documentation deliverables. | ToC for plugin README/tutorial. | Ensure canonical example requirement met. | |
-| P2 | Investigate caching strategies for large repos. | Determine if caching needed; propose approach. | Could use `.twig` state file. | |
-| P2 | Explore remote branch visualization options. | Document feasibility and requirements. | Possibly post-v1 scope. | |
-| P3 | Consider GUI/TUI enhancements for future roadmap. | High-level ideas only. | Not in initial release. | |
+| Priority | Task                                                                       | Definition of Done                                                                                   | Notes                                                                             | Status                                                                                                     |
+| -------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| P0       | Audit existing Twig Git/branch utilities and document reusable components. | Summary document listing candidate functions/types and proposed extraction path.                     | Focus on `twig-cli/src/git.rs`, `twig-cli/src/cli/git.rs`, `twig-core` modules.   | ✅ Completed – see "Git Utility Audit" section                                                             |
+| P0       | Define plugin crate scaffolding & build integration.                       | Plugin compiles as optional crate with minimal main function & Clap wiring.                          | Determine placement under `plugins/` or `twig-flow/`. Update workspace manifests. | ✅ Completed – plugin crate scaffolded under `plugins/twig-flow`                                           |
+| P0       | Design branch graph data structures in `twig-core`.                        | Spec and initial interfaces ready for implementation.                                                | Consider performance implications for large repos.                                | ✅ Completed – branch graph domain models and builder scaffolding added under `twig-core/src/git/graph.rs` |
+| P0       | Specify branch switching shared service API.                               | Interface defined so CLI + plugin share same code path.                                              | Identify behavior parity with `twig switch`.                                      | ✅ Completed – shared service API skeleton added under `twig-core/src/git/switch.rs`                       |
+| P0       | Finalize renderer API & column schema.                                     | Document concrete structs/enums + default schema in spec and prepare module skeleton in `twig-core`. | Captures `BranchTableRenderer`, schema types, and metadata mapping rules.         |                                                                                                            |
+| P0       | Implement renderer core in `twig-core`.                                    | Produce tree+table formatter operating on `BranchGraph` with alignment + placeholders.               | No CLI integration yet; include internal feature gate for hidden customization.   |                                                                                                            |
+| P0       | Add unit & snapshot tests for renderer.                                    | Cover width calculations, connectors, and schema overrides using `insta` fixtures.                   | Lives under `twig-core` tests; uses synthetic graphs.                             |                                                                                                            |
+| P0       | Handle multi-parent `--parent` edge case.                                  | Error messaging and parent listings defined; renderer call short-circuits when multiple parents.     | Future interactive selection tracked separately.                                  |                                                                                                            |
+| P1       | Draft CLI UX for tree visualization (mock outputs).                        | Example outputs stored in spec or doc, capturing formatting rules.                                   | Hybrid tree/table layout with default `Branch/Story/PR/Notes` columns.            | ✅ Completed – see "CLI UX Mockups" section                                                                |
+| P1       | Define internal column schema configuration.                               | Document data model + default columns for renderer with hidden config override.                      | Enables future customization without public CLI surface.                          | 🚧 Blocked – moved under renderer API task                                                                 |
+| P1       | Plan integration tests & fixtures.                                         | List of test scenarios with coverage goals.                                                          | Include tree rendering snapshots, switching success/error cases.                  |                                                                                                            |
+| P1       | Explore interactive parent selection UX.                                   | Outline potential dialogs/prompts for selecting among multiple parents.                              | Depends on multi-parent error groundwork.                                         |                                                                                                            |
+| P1       | Outline documentation deliverables.                                        | ToC for plugin README/tutorial.                                                                      | Ensure canonical example requirement met.                                         |                                                                                                            |
+| P2       | Investigate caching strategies for large repos.                            | Determine if caching needed; propose approach.                                                       | Could use `.twig` state file.                                                     |                                                                                                            |
+| P2       | Explore remote branch visualization options.                               | Document feasibility and requirements.                                                               | Possibly post-v1 scope.                                                           |                                                                                                            |
+| P3       | Consider GUI/TUI enhancements for future roadmap.                          | High-level ideas only.                                                                               | Not in initial release.                                                           |                                                                                                            |
 
 ### Risks & Mitigations
 
@@ -163,14 +241,14 @@
 
 ### Candidate Extractions & Reuse Targets
 
-| Capability | Current Location | Extraction/Reuse Proposal | Notes for Implementation |
-| --- | --- | --- | --- |
-| Repository detection & branch lookup helpers | `twig-core/src/git.rs` (`detect_repository`, `get_local_branches`, `checkout_branch`) | Reuse as-is within plugin crate to avoid duplicate discovery logic. | Already plugin-friendly; expose via new helper module in plugin crate. |
-| Registry interactions & stale-branch analytics | `twig-cli/src/git.rs` (`find_stale_branches_internal`, `StaleBranchInfo`) | Extract pure data-gathering pieces into `twig-core::git::stale` module for reuse when annotating branch graphs. | Separate user prompts/printing before moving logic. 【F:twig-cli/src/git.rs†L216-L391】【F:twig-cli/src/git.rs†L400-L579】 |
-| Branch dependency visualization | `twig-cli/src/cli/tree.rs`, `twig-cli/src/user_defined_dependency_resolver.rs`, `twig-core/src/tree_renderer.rs` | Promote resolver into shared module that can coexist with commit-graph builder; keep renderer in `twig-core` but allow plugin to provide alternative data source. | Tree renderer already in core; resolver currently CLI-bound and should move alongside new graph utilities. 【F:twig-cli/src/cli/tree.rs†L1-L118】【F:twig-cli/src/user_defined_dependency_resolver.rs†L1-L200】 |
-| Branch switching engine | `twig-cli/src/cli/switch.rs` (`handle_branch_switch`, `resolve_branch_base`, `try_checkout_remote_branch`, `create_and_switch_to_branch`, Jira/GitHub association helpers) | Extract branch resolution + mutation logic into `twig-core::git::switch` with IO-free API returning structured results. CLI and plugin add UX messaging on top. | Requires splitting out network client wiring from pure branch logic; RepoState interactions already in core crate. 【F:twig-cli/src/cli/switch.rs†L84-L720】 |
-| Branch metadata persistence | `twig-core/src/state.rs` (`RepoState`, `BranchMetadata`, dependency helpers) | Reuse directly; ensure new graph module queries indices rather than reimplementing. | Provide lightweight facade for plugin consumption. 【F:twig-core/src/state.rs†L173-L276】 |
-| Jira/GitHub association storage | `twig-cli/src/cli/switch.rs` (`store_jira_association`, `store_github_pr_association`) | Move into `twig-core::state` extension helpers returning `Result<()>` without printing. CLI/plugin can wrap for messaging. | Harmonize timestamp handling and deduplicate metadata writes. 【F:twig-cli/src/cli/switch.rs†L700-L764】 |
+| Capability                                     | Current Location                                                                                                                                                           | Extraction/Reuse Proposal                                                                                                                                         | Notes for Implementation                                                                                                                                                                                        |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository detection & branch lookup helpers   | `twig-core/src/git.rs` (`detect_repository`, `get_local_branches`, `checkout_branch`)                                                                                      | Reuse as-is within plugin crate to avoid duplicate discovery logic.                                                                                               | Already plugin-friendly; expose via new helper module in plugin crate.                                                                                                                                          |
+| Registry interactions & stale-branch analytics | `twig-cli/src/git.rs` (`find_stale_branches_internal`, `StaleBranchInfo`)                                                                                                  | Extract pure data-gathering pieces into `twig-core::git::stale` module for reuse when annotating branch graphs.                                                   | Separate user prompts/printing before moving logic. 【F:twig-cli/src/git.rs†L216-L391】【F:twig-cli/src/git.rs†L400-L579】                                                                                      |
+| Branch dependency visualization                | `twig-cli/src/cli/tree.rs`, `twig-cli/src/user_defined_dependency_resolver.rs`, `twig-core/src/tree_renderer.rs`                                                           | Promote resolver into shared module that can coexist with commit-graph builder; keep renderer in `twig-core` but allow plugin to provide alternative data source. | Tree renderer already in core; resolver currently CLI-bound and should move alongside new graph utilities. 【F:twig-cli/src/cli/tree.rs†L1-L118】【F:twig-cli/src/user_defined_dependency_resolver.rs†L1-L200】 |
+| Branch switching engine                        | `twig-cli/src/cli/switch.rs` (`handle_branch_switch`, `resolve_branch_base`, `try_checkout_remote_branch`, `create_and_switch_to_branch`, Jira/GitHub association helpers) | Extract branch resolution + mutation logic into `twig-core::git::switch` with IO-free API returning structured results. CLI and plugin add UX messaging on top.   | Requires splitting out network client wiring from pure branch logic; RepoState interactions already in core crate. 【F:twig-cli/src/cli/switch.rs†L84-L720】                                                    |
+| Branch metadata persistence                    | `twig-core/src/state.rs` (`RepoState`, `BranchMetadata`, dependency helpers)                                                                                               | Reuse directly; ensure new graph module queries indices rather than reimplementing.                                                                               | Provide lightweight facade for plugin consumption. 【F:twig-core/src/state.rs†L173-L276】                                                                                                                       |
+| Jira/GitHub association storage                | `twig-cli/src/cli/switch.rs` (`store_jira_association`, `store_github_pr_association`)                                                                                     | Move into `twig-core::state` extension helpers returning `Result<()>` without printing. CLI/plugin can wrap for messaging.                                        | Harmonize timestamp handling and deduplicate metadata writes. 【F:twig-cli/src/cli/switch.rs†L700-L764】                                                                                                        |
 
 ### Gaps Identified
 
@@ -181,9 +259,9 @@
 
 ## Status Tracking (to be updated by subagent)
 
-- **Current focus:** _Draft CLI UX for tree visualization (mock outputs)_
-- **Latest completed task:** _Specify branch switching shared service API_
-- **Next up:** _Plan integration tests & fixtures_
+- **Current focus:** _Plan integration tests & fixtures_
+- **Latest completed task:** _Draft CLI UX for tree visualization (mock outputs)_
+- **Next up:** _Outline documentation deliverables_
 
 ## Lessons Learned (ongoing)
 
@@ -193,3 +271,4 @@
 - Introducing an explicit `BranchKind` (local/remote/virtual) enum in the graph models keeps downstream consumers from guessing at node semantics.
 - Collapsing edge variants into a single `BranchEdge` simplifies the model and leaves room for higher-level layers to interpret relationships as needed.
 - Defining the shared switch service API up front exposed configuration toggles (creation policy, tracking policy, dry-run) that both the CLI and plugin need to surface consistently.
+- Capturing ASCII tree conventions before implementation ensures `twig flow` aligns with existing `twig tree` output and clarifies where metadata annotations should appear.

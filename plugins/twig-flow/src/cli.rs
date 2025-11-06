@@ -1,4 +1,4 @@
-use clap::{ArgGroup, Parser};
+use clap::{ArgAction, ArgGroup, Parser};
 
 /// Command-line interface for the `twig flow` plugin.
 #[derive(Debug, Parser, Clone)]
@@ -9,14 +9,14 @@ use clap::{ArgGroup, Parser};
     .multiple(false)
 ))]
 pub struct Cli {
-  /// Render the branch tree rooted at the specified branch after switching to
-  /// it.
-  #[arg(long, value_name = "BRANCH")]
-  pub root: Option<String>,
+  /// Switch to the configured root branch before rendering the full tree.
+  #[arg(long, action = ArgAction::SetTrue)]
+  pub root: bool,
 
-  /// Render the subtree for the specified parent branch after switching to it.
-  #[arg(long, value_name = "BRANCH")]
-  pub parent: Option<String>,
+  /// Switch to the current branch's primary parent before rendering the full
+  /// tree.
+  #[arg(long, action = ArgAction::SetTrue)]
+  pub parent: bool,
 
   /// Optional branch or ticket target for switching mode.
   #[arg(value_name = "TARGET")]
