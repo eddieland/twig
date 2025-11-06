@@ -8,8 +8,8 @@ use clap::Args;
 use directories::BaseDirs;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::{detect_repository, get_current_branch_jira_issue};
+use twig_jira::{create_jira_runtime_and_client, get_jira_host};
 
-use crate::clients::{self};
 use crate::consts;
 
 /// Arguments for the commit command
@@ -47,9 +47,9 @@ pub fn handle_commit_command(args: CommitArgs) -> Result<()> {
     }
   };
 
-  let jira_host = clients::get_jira_host().context("Failed to get Jira host from environment variable")?;
+  let jira_host = get_jira_host().context("Failed to get Jira host from environment variable")?;
   let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
-  let (rt, jira_client) = clients::create_jira_runtime_and_client(base_dirs.home_dir(), &jira_host)?;
+  let (rt, jira_client) = create_jira_runtime_and_client(base_dirs.home_dir(), &jira_host)?;
 
   // Fetch the issue details
   let issue = rt

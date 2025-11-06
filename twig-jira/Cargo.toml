@@ -21,6 +21,10 @@ tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
+# Shared utilities
+twig-core = { path = "../twig-core" }
+url.workspace = true
+
 [dev-dependencies]
 # Core dependencies
 anyhow.workspace = true
@@ -28,3 +32,4 @@ anyhow.workspace = true
 # Async and testing
 tokio = { workspace = true, features = ["full"] }
 wiremock.workspace = true
+twig-test-utils = { path = "../twig-test-utils" }

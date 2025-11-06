@@ -16,4 +16,4 @@ pub mod self_update;
 pub mod user_defined_dependency_resolver;
 pub mod utils;
 
-pub use twig_core::{clients, creds};
+pub use twig_core::creds;

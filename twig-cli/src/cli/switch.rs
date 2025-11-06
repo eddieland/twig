@@ -16,11 +16,9 @@ use twig_core::jira_parser::JiraTicketParser;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::state::{BranchMetadata, RepoState};
 use twig_core::{checkout_branch, detect_repository};
-use twig_gh::GitHubClient;
 use twig_gh::models::{GitHubPullRequest, RepositoryInfo};
-use twig_jira::JiraClient;
-
-use crate::clients::{self, get_jira_host};
+use twig_gh::{GitHubClient, create_github_client_from_netrc};
+use twig_jira::{JiraClient, create_jira_client_from_netrc, get_jira_host};
 
 static GITHUB_PR_URL_REGEX: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r"github\.com/[^/]+/[^/]+/pull/(\d+)").expect("Failed to compile GitHub PR URL regex"));
@@ -145,15 +143,14 @@ pub(crate) fn handle_switch_command(switch: SwitchArgs) -> Result<()> {
       let jira_host = get_jira_host().context("Failed to get Jira host")?;
 
       let base_dirs = BaseDirs::new().context("Failed to get $HOME")?;
-      let jira = clients::create_jira_client_from_netrc(base_dirs.home_dir(), &jira_host)
-        .context("Failed to create Jira client")?;
+      let jira =
+        create_jira_client_from_netrc(base_dirs.home_dir(), &jira_host).context("Failed to create Jira client")?;
 
       handle_jira_switch(&jira, &ctx, &issue_key)
     }
     InputType::GitHubPrId(pr_number) | InputType::GitHubPrUrl(pr_number) => {
       let base_dirs = BaseDirs::new().context("Failed to get $HOME")?;
-      let gh =
-        clients::create_github_client_from_netrc(base_dirs.home_dir()).context("Failed to create GitHub client")?;
+      let gh = create_github_client_from_netrc(base_dirs.home_dir()).context("Failed to create GitHub client")?;
 
       handle_github_pr_switch(&gh, &ctx, pr_number)
     }

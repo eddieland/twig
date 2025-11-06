@@ -17,9 +17,7 @@ use twig_core::output::{
 };
 use twig_core::state::BranchMetadata;
 use twig_core::{RepoState, detect_repository, detect_repository_from_path, get_current_branch_github_pr};
-use twig_gh::PullRequestStatus;
-
-use crate::clients;
+use twig_gh::{PullRequestStatus, create_github_client_from_netrc, create_github_runtime_and_client};
 
 /// Command for GitHub integration
 #[derive(Args)]
@@ -232,7 +230,7 @@ fn handle_github_open_command(cmd: &OpenCommand) -> Result<()> {
 
   // Create GitHub client to extract repo info
   let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
-  let (_, github_client) = clients::create_github_runtime_and_client(base_dirs.home_dir())?;
+  let (_, github_client) = create_github_runtime_and_client(base_dirs.home_dir())?;
 
   // Extract owner and repo from remote URL
   let (owner, repo_name) = match github_client.extract_repo_info_from_url(remote_url) {
@@ -283,7 +281,7 @@ fn handle_github_open_command(cmd: &OpenCommand) -> Result<()> {
 /// Handle the check command
 fn handle_check_command() -> Result<()> {
   let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
-  let (rt, github_client) = clients::create_github_runtime_and_client(base_dirs.home_dir())?;
+  let (rt, github_client) = create_github_runtime_and_client(base_dirs.home_dir())?;
 
   // Test connection
   match rt.block_on(github_client.test_connection()) {
@@ -319,7 +317,7 @@ fn handle_check_command() -> Result<()> {
 /// Handle the checks command
 fn handle_checks_command(cmd: &ChecksCommand) -> Result<()> {
   let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
-  let (rt, github_client) = clients::create_github_runtime_and_client(base_dirs.home_dir())?;
+  let (rt, github_client) = create_github_runtime_and_client(base_dirs.home_dir())?;
 
   // Get repository path (current or specified)
   let repo_path = if let Some(path) = &cmd.repo {
@@ -518,7 +516,7 @@ fn handle_checks_command(cmd: &ChecksCommand) -> Result<()> {
 /// Handle the PR status command
 fn handle_pr_status_command() -> Result<()> {
   let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
-  let (rt, github_client) = clients::create_github_runtime_and_client(base_dirs.home_dir())?;
+  let (rt, github_client) = create_github_runtime_and_client(base_dirs.home_dir())?;
 
   // Get the current repository
   let repo_path = match detect_repository() {
@@ -616,7 +614,7 @@ fn handle_pr_status_command() -> Result<()> {
 /// Handle the PR list command
 fn handle_pr_list_command(cmd: &ListCommand) -> Result<()> {
   let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
-  let (rt, github_client) = clients::create_github_runtime_and_client(base_dirs.home_dir())?;
+  let (rt, github_client) = create_github_runtime_and_client(base_dirs.home_dir())?;
 
   // Get repository path (current or specified)
   let repo_path = if let Some(path) = &cmd.repo {
@@ -778,7 +776,7 @@ fn handle_pr_link_command(pr_url_or_id: &str) -> Result<()> {
   };
 
   let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
-  let github_client = clients::create_github_client_from_netrc(base_dirs.home_dir())?;
+  let github_client = create_github_client_from_netrc(base_dirs.home_dir())?;
 
   // Extract owner and repo from remote URL
   let (owner, repo_name) = match github_client.extract_repo_info_from_url(remote_url) {

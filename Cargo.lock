@@ -2553,10 +2553,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.17",
- "tokio",
  "toml",
- "twig-gh",
- "twig-jira",
  "twig-test-utils",
  "url",
  "uuid",
@@ -2574,6 +2571,8 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "twig-core",
+ "twig-test-utils",
  "wiremock",
 ]
 
@@ -2587,6 +2586,9 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "twig-core",
+ "twig-test-utils",
+ "url",
  "wiremock",
 ]
 

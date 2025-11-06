@@ -14,11 +14,8 @@ use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
 use twig_core::output::{print_error, print_warning};
 use twig_core::state::RepoState;
-use twig_gh::GitHubPullRequest;
-use twig_jira::Issue;
-
-use crate::clients;
-use crate::creds::get_github_credentials;
+use twig_gh::{GitHubPullRequest, create_github_client, get_github_credentials};
+use twig_jira::{Issue, create_jira_client_from_netrc, get_jira_host};
 
 // Structure to hold dashboard data
 #[derive(Serialize)]
@@ -189,7 +186,7 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
     if let Some(base_dirs) = BaseDirs::new() {
       // Get GitHub credentials from .netrc
       if let Ok(creds) = get_github_credentials(base_dirs.home_dir()) {
-        let gh = clients::create_github_client(&creds.username, &creds.password);
+        let gh = create_github_client(&creds.username, &creds.password);
         if let Ok((owner, repo_name)) = gh.extract_repo_info_from_url(remote_url) {
           match rt.block_on(gh.list_pull_requests(&owner, &repo_name, Some("open"), None)) {
             Ok(prs) => {
@@ -228,8 +225,8 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
   if !skip_jira {
     if let Some(base_dirs) = BaseDirs::new() {
       // Get Jira credentials from .netrc
-      let jira_host = clients::get_jira_host()?;
-      let jira = clients::create_jira_client_from_netrc(base_dirs.home_dir(), &jira_host)?;
+      let jira_host = get_jira_host()?;
+      let jira = create_jira_client_from_netrc(base_dirs.home_dir(), &jira_host)?;
 
       // Set up JQL filters
       let assignee = if dashboard.mine { Some("me") } else { None };
