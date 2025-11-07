@@ -82,6 +82,12 @@ impl BranchTableColumn {
     self
   }
 
+  /// Override the title used for the column header.
+  pub fn with_title(mut self, title: impl Into<String>) -> Self {
+    self.title = title.into();
+    self
+  }
+
   fn title(&self) -> &str {
     &self.title
   }
@@ -444,6 +450,7 @@ mod tests {
   use insta::assert_snapshot;
 
   use super::super::graph::{BranchHead, BranchKind, BranchTopology};
+  use super::super::renderer_config::{FlowRendererColumnConfig, FlowRendererSchemaConfig};
   use super::*;
 
   #[test]
@@ -477,6 +484,34 @@ mod tests {
 
     let err = renderer.render(&mut output, &graph, &root).unwrap_err();
     assert!(matches!(err, BranchTableRenderError::MissingBranchColumn));
+  }
+
+  #[test]
+  fn renders_schema_from_config() {
+    let config = FlowRendererSchemaConfig {
+      columns: vec![
+        FlowRendererColumnConfig::Branch {
+          title: Some("Branches".into()),
+          min_width: Some(12),
+        },
+        FlowRendererColumnConfig::Annotation {
+          key: "twig.notes".into(),
+          title: Some("Notes".into()),
+          min_width: Some(5),
+        },
+      ],
+      placeholder: "NA".into(),
+      column_spacing: 1,
+      show_header: true,
+    };
+
+    let schema = config.to_schema().unwrap();
+    let renderer = BranchTableRenderer::new(schema);
+    let (graph, root) = minimal_graph();
+    let mut output = String::new();
+    renderer.render(&mut output, &graph, &root).unwrap();
+
+    assert_snapshot!("flow_renderer__custom_schema", output);
   }
 
   fn sample_graph() -> (BranchGraph, BranchName) {

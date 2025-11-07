@@ -7,6 +7,7 @@ pub mod branches;
 pub mod detection;
 pub mod graph;
 pub mod renderer;
+pub mod renderer_config;
 pub mod repository;
 pub mod switch;
 
@@ -18,6 +19,10 @@ pub use graph::{
 };
 pub use renderer::{
   BranchTableColumn, BranchTableColumnKind, BranchTableRenderError, BranchTableRenderer, BranchTableSchema,
+};
+pub use renderer_config::{
+  FlowRendererColumnConfig, FlowRendererSchemaConfig, FlowRendererSchemaError, load_schema_from_config_dirs,
+  load_schema_from_path,
 };
 pub use repository::{get_repository, get_repository_from_path};
 pub use switch::{

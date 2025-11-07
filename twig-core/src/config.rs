@@ -87,6 +87,11 @@ impl ConfigDirs {
     self.config_dir.join("jira.toml")
   }
 
+  /// Get the path to the flow renderer configuration file.
+  pub fn flow_renderer_config_path(&self) -> PathBuf {
+    self.config_dir.join("flow_renderer.toml")
+  }
+
   /// Load Jira parsing configuration from file or return default
   pub fn load_jira_config(&self) -> Result<JiraParsingConfig> {
     let config_path = self.jira_config_path();
