@@ -1,0 +1,6 @@
+---
+source: twig-core/src/git/renderer.rs
+expression: output
+---
+Branch    Story     PR      Notes   
+* main    --        --      --

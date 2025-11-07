@@ -200,6 +200,29 @@ impl BranchGraph {
     Self::default()
   }
 
+  /// Construct a graph from its constituent parts.
+  ///
+  /// This helper is primarily intended for tests or for callers that already
+  /// have branch nodes materialised. The graph builder will eventually
+  /// populate these structures directly from a git repository, but exposing
+  /// this method keeps the renderer and other consumers decoupled from the
+  /// builder implementation progress.
+  pub fn from_parts<N, E, R>(nodes: N, edges: E, root_candidates: R, current_branch: Option<BranchName>) -> Self
+  where
+    N: IntoIterator<Item = BranchNode>,
+    E: IntoIterator<Item = BranchEdge>,
+    R: IntoIterator<Item = BranchName>,
+  {
+    let node_map = nodes.into_iter().map(|node| (node.name.clone(), node)).collect();
+
+    Self {
+      nodes: node_map,
+      edges: edges.into_iter().collect(),
+      root_candidates: root_candidates.into_iter().collect(),
+      current_branch,
+    }
+  }
+
   /// Number of nodes recorded in the graph.
   pub fn len(&self) -> usize {
     self.nodes.len()
