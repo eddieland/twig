@@ -7,6 +7,7 @@ pub mod branches;
 pub mod detection;
 pub mod graph;
 pub mod repository;
+pub mod switch;
 
 pub use branches::{branch_exists, checkout_branch, current_branch, get_local_branches, get_upstream_branch};
 pub use detection::{detect_repository, detect_repository_from_path, in_git_repository};
@@ -15,3 +16,9 @@ pub use graph::{
   BranchName, BranchNode, BranchNodeMetadata, BranchStaleState, BranchTopology,
 };
 pub use repository::{get_repository, get_repository_from_path};
+pub use switch::{
+  BranchBaseSource, BranchCreationBase, BranchCreationPolicy, BranchParentReference, BranchParentRequest,
+  BranchStateMutations, BranchSwitchAction, BranchSwitchContext, BranchSwitchOutcome, BranchSwitchRequest,
+  BranchSwitchService, BranchSwitchTarget, GitHubPullRequestReference, IssueAssociation, IssueReference,
+  PullRequestHead,
+};
