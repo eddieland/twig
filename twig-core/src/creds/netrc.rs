@@ -1,3 +1,10 @@
+//! # Netrc Credential Helpers
+//!
+//! Utilities for reading and writing `.netrc` files used by twig to persist
+//! service credentials. The helpers keep low-level parsing logic in one place so
+//! higher-level credential providers can focus on platform-specific concerns
+//! like permissions and secret storage fallbacks.
+
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
