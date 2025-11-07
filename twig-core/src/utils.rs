@@ -7,7 +7,22 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-/// Resolve a repository path to its canonical form
+/// Resolve a repository path to its canonical form.
+///
+/// Normalizes both absolute and relative paths so callers can reliably
+/// compare repository locations even when invoked from different working
+/// directories.
+///
+/// # Arguments
+///
+/// * `path` - A filesystem path that may be absolute or relative to the current
+///   working directory.
+///
+/// # Errors
+///
+/// Returns an error when the path does not exist or cannot be canonicalized
+/// by the operating system. The error context includes the display form of
+/// the provided path for easier debugging.
 pub fn resolve_repository_path<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
   let path = path.as_ref();
 
@@ -23,7 +38,15 @@ pub fn resolve_repository_path<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
   std::fs::canonicalize(full_path).with_context(|| format!("Failed to resolve path: {}", path.display()))
 }
 
-/// Normalize a path for consistent display
+/// Normalize a path for consistent display.
+///
+/// Expands the path into a user-friendly string, preferring `~/` prefixes
+/// when a path resides under the current user's home directory. This keeps
+/// CLI output concise while still pointing at the exact location.
+///
+/// # Arguments
+///
+/// * `path` - Any filesystem path to display back to the user.
 pub fn normalize_path_display<P: AsRef<Path>>(path: P) -> String {
   let path = path.as_ref();
 
@@ -38,7 +61,18 @@ pub fn normalize_path_display<P: AsRef<Path>>(path: P) -> String {
   path.display().to_string()
 }
 
-/// Check if a string is a valid branch name
+/// Check if a string is a valid branch name.
+///
+/// Applies a subset of Git's branch validation rules to catch common
+/// mistakes before attempting to create or checkout a branch.
+///
+/// # Arguments
+///
+/// * `name` - The branch candidate to validate.
+///
+/// # Returns
+///
+/// `true` when the string is acceptable and `false` otherwise.
 pub fn is_valid_branch_name(name: &str) -> bool {
   if name.is_empty() {
     return false;
@@ -69,7 +103,16 @@ pub fn is_valid_branch_name(name: &str) -> bool {
   true
 }
 
-/// Truncate a string to a maximum length with ellipsis
+/// Truncate a string to a maximum length with ellipsis.
+///
+/// Preserves the start of the string and appends an ellipsis so the caller
+/// can display bounded-length content without losing context entirely.
+///
+/// # Arguments
+///
+/// * `s` - Source string to shorten.
+/// * `max_len` - Maximum number of characters to return, including the ellipsis
+///   when truncation occurs.
 pub fn truncate_string(s: &str, max_len: usize) -> String {
   if s.len() <= max_len {
     s.to_string()
@@ -80,7 +123,14 @@ pub fn truncate_string(s: &str, max_len: usize) -> String {
   }
 }
 
-/// Convert a duration in seconds to a human-readable format
+/// Convert a duration in seconds to a human-readable format.
+///
+/// The output uses the largest appropriate unit (`s`, `m`, `h`, `d`) and
+/// combines units when needed for better readability.
+///
+/// # Arguments
+///
+/// * `seconds` - Length of time expressed in whole seconds.
 pub fn format_duration(seconds: u64) -> String {
   if seconds < 60 {
     format!("{seconds}s")
@@ -111,7 +161,15 @@ pub fn format_duration(seconds: u64) -> String {
   }
 }
 
-/// Extract the repository name from a path
+/// Extract the repository name from a path.
+///
+/// Returns the final path component or "unknown" when the path cannot be
+/// represented as UTF-8 (which should be exceedingly rare on supported
+/// platforms).
+///
+/// # Arguments
+///
+/// * `path` - Path pointing anywhere inside or at the root of a repository.
 pub fn extract_repo_name<P: AsRef<Path>>(path: P) -> String {
   path
     .as_ref()
@@ -121,7 +179,16 @@ pub fn extract_repo_name<P: AsRef<Path>>(path: P) -> String {
     .to_string()
 }
 
-/// Get the Jira issue associated with the current branch
+/// Get the Jira issue associated with the current branch.
+///
+/// Looks up the active Git branch inside the current repository and returns
+/// the Jira issue key that twig previously associated with the branch via the
+/// repository state file.
+///
+/// # Errors
+///
+/// Returns an error when not inside a Git repository, when the repository has
+/// no active branch (detached HEAD), or when the state file cannot be loaded.
 pub fn get_current_branch_jira_issue() -> Result<Option<String>> {
   use crate::git::{current_branch, detect_repository};
   use crate::state::RepoState;
@@ -143,7 +210,15 @@ pub fn get_current_branch_jira_issue() -> Result<Option<String>> {
   )
 }
 
-/// Get the GitHub PR number associated with the current branch
+/// Get the GitHub PR number associated with the current branch.
+///
+/// Reads repository metadata maintained by twig to determine whether the
+/// current branch is linked to a GitHub pull request.
+///
+/// # Errors
+///
+/// Returns an error when the repository cannot be detected, the active branch
+/// cannot be determined, or the state file fails to load.
 pub fn get_current_branch_github_pr() -> Result<Option<u32>> {
   use crate::git::{current_branch, detect_repository};
   use crate::state::RepoState;
