@@ -6,6 +6,7 @@
 pub mod branches;
 pub mod detection;
 pub mod graph;
+pub mod renderer;
 pub mod repository;
 pub mod switch;
 
@@ -14,6 +15,9 @@ pub use detection::{detect_repository, detect_repository_from_path, in_git_repos
 pub use graph::{
   BranchAnnotationValue, BranchEdge, BranchGraph, BranchGraphBuilder, BranchGraphError, BranchHead, BranchKind,
   BranchName, BranchNode, BranchNodeMetadata, BranchStaleState, BranchTopology,
+};
+pub use renderer::{
+  BranchTableColumn, BranchTableColumnKind, BranchTableRenderError, BranchTableRenderer, BranchTableSchema,
 };
 pub use repository::{get_repository, get_repository_from_path};
 pub use switch::{
