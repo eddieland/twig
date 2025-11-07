@@ -20,7 +20,8 @@ pub use creds::{Credentials, netrc, platform};
 pub use git::switch::{
   BranchBaseSource, BranchCreationBase, BranchCreationPolicy, BranchParentReference, BranchParentRequest,
   BranchStateMutations, BranchSwitchAction, BranchSwitchContext, BranchSwitchOutcome, BranchSwitchRequest,
-  BranchSwitchService, BranchSwitchTarget, GitHubPullRequestReference, JiraIssueReference, PullRequestHead,
+  BranchSwitchService, BranchSwitchTarget, GitHubPullRequestReference, IssueAssociation, IssueReference,
+  PullRequestHead,
 };
 pub use git::{checkout_branch, current_branch, detect_repository, detect_repository_from_path, in_git_repository};
 pub use jira_parser::{JiraParseError, JiraParsingConfig, JiraParsingMode, JiraTicketParser, create_jira_parser};

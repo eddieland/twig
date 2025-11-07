@@ -189,6 +189,7 @@
 
 - Existing switch workflow tightly couples side effects with messaging; future extractions must return structured outcomes so multiple callers (CLI, plugins) can share logic without duplicating UX code.
 - Establishing canonical request/response structs up front prevents the CLI refactor from blocking plugin development because both surfaces can be wired incrementally.
+- Normalizing issue reference types (`IssueReference`, `IssueAssociation`) now avoids a second breaking change when new providers are added later.
 - Establishing the plugin as its own workspace member clarifies dependency wiring early and keeps cargo metadata accurate for future integration tests.
 - Separating branch topology from annotations in the core graph types will let the CLI and plugin compose their own overlays without re-traversing Git data.
 - Introducing an explicit `BranchKind` (local/remote/virtual) enum in the graph models keeps downstream consumers from guessing at node semantics.

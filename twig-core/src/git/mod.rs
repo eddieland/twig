@@ -19,5 +19,6 @@ pub use repository::{get_repository, get_repository_from_path};
 pub use switch::{
   BranchBaseSource, BranchCreationBase, BranchCreationPolicy, BranchParentReference, BranchParentRequest,
   BranchStateMutations, BranchSwitchAction, BranchSwitchContext, BranchSwitchOutcome, BranchSwitchRequest,
-  BranchSwitchService, BranchSwitchTarget, GitHubPullRequestReference, JiraIssueReference, PullRequestHead,
+  BranchSwitchService, BranchSwitchTarget, GitHubPullRequestReference, IssueAssociation, IssueReference,
+  PullRequestHead,
 };

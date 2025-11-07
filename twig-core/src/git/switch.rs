@@ -53,30 +53,36 @@ pub enum BranchSwitchTarget {
   DependencyRoot,
   /// Switch to an explicit branch name.
   Branch(BranchName),
-  /// Switch to (or create) a branch associated with a Jira issue.
-  JiraIssue(JiraIssueReference),
+  /// Switch to (or create) a branch associated with an external issue (Jira,
+  /// etc.).
+  Issue(IssueReference),
   /// Switch to (or create) a branch associated with a GitHub pull request.
   GitHubPullRequest(GitHubPullRequestReference),
 }
 
-/// Reference to a Jira issue used when creating or locating associated
-/// branches.
+/// Reference to an external issue/work item used when creating or locating
+/// associated branches.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct JiraIssueReference {
-  /// Issue key in canonical `PROJ-123` format.
+pub struct IssueReference {
+  /// Issue identifier (`PROJ-123`, `#42`, etc.).
   pub key: String,
   /// Optional human readable summary that can be used when generating branch
   /// names.
   pub summary: Option<String>,
 }
 
-impl JiraIssueReference {
-  /// Construct a Jira issue reference with the provided key.
+impl IssueReference {
+  /// Construct a reference for the provided tracker.
   pub fn new(key: impl Into<String>) -> Self {
     Self {
       key: key.into(),
       summary: None,
     }
+  }
+
+  /// Convenience helper for Jira references.
+  pub fn jira(key: impl Into<String>) -> Self {
+    Self::new(key)
   }
 }
 
@@ -135,8 +141,8 @@ pub enum BranchParentRequest {
   CurrentBranch,
   /// Use an explicitly named branch.
   Explicit(BranchName),
-  /// Resolve the parent branch by looking up the provided Jira issue key.
-  JiraIssueKey(String),
+  /// Resolve the parent branch by looking up the provided issue key.
+  IssueKey(String),
   /// Do not link the new branch to any parent.
   None,
 }
@@ -206,8 +212,8 @@ pub enum BranchBaseSource {
 pub struct BranchStateMutations {
   /// Desired dependency relationship for the branch.
   pub dependency: Option<BranchDependencyUpdate>,
-  /// Jira issue key to associate with the branch.
-  pub jira_issue: Option<String>,
+  /// Issue key to associate with the branch.
+  pub issue: Option<IssueAssociation>,
   /// GitHub pull request number to associate with the branch.
   pub github_pr: Option<u32>,
 }
@@ -215,8 +221,15 @@ pub struct BranchStateMutations {
 impl BranchStateMutations {
   /// Determine whether the mutation set is empty.
   pub fn is_empty(&self) -> bool {
-    self.dependency.is_none() && self.jira_issue.is_none() && self.github_pr.is_none()
+    self.dependency.is_none() && self.issue.is_none() && self.github_pr.is_none()
   }
+}
+
+/// Association between a branch and an external issue tracker item.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IssueAssociation {
+  /// Identifier within the tracker (currently Jira).
+  pub key: String,
 }
 
 /// Desired dependency relationship for a branch.
@@ -235,8 +248,8 @@ pub enum BranchDependencyUpdate {
 pub enum BranchParentReference {
   /// Dependency pointing at an explicit branch name.
   Branch(BranchName),
-  /// Dependency resolved via a Jira issue key.
-  JiraIssueKey(String),
+  /// Dependency resolved via an issue tracker key.
+  IssueKey(String),
 }
 
 /// Result returned by a branch switch service.
