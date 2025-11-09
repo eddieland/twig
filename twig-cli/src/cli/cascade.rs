@@ -16,6 +16,7 @@ use twig_core::{RepoState, detect_repository};
 
 use crate::consts;
 use crate::user_defined_dependency_resolver::UserDefinedDependencyResolver;
+use crate::utils::is_interactive_environment;
 
 /// Helper function to check waiting branches and enqueue those whose
 /// dependencies are satisfied
@@ -64,6 +65,16 @@ pub struct CascadeArgs {
   #[arg(long)]
   pub autostash: bool,
 
+  /// Fail immediately on conflicts instead of prompting interactively
+  /// (useful for CI/CD environments)
+  #[arg(long = "no-interactive")]
+  pub no_interactive: bool,
+
+  /// Comma-separated list of commit hashes to skip during rebase, or path to a file
+  /// containing commit hashes (one per line). Commits will be excluded from the rebased branch.
+  #[arg(long = "skip-commits", value_name = "COMMITS")]
+  pub skip_commits: Option<String>,
+
   /// Path to a specific repository
   #[arg(short, long, value_name = "PATH")]
   pub repo: Option<String>,
@@ -78,15 +89,43 @@ pub fn handle_cascade_command(args: CascadeArgs) -> Result<()> {
     detect_repository().context("Not in a git repository")?
   };
 
+  // Parse skip commits if provided
+  let skip_commits = if let Some(ref skip_arg) = args.skip_commits {
+    let commits = crate::utils::parse_skip_commits(skip_arg)?;
+    
+    // Validate each commit hash format
+    for commit in &commits {
+      if !crate::utils::validate_commit_hash(commit) {
+        return Err(anyhow::anyhow!(
+          "Invalid commit hash format: '{}'. Commit hashes must be 7-64 character hex strings.",
+          commit
+        ));
+      }
+    }
+    
+    if !commits.is_empty() {
+      print_info(&format!("📋 Will skip {} commit(s) during cascade rebase", commits.len()));
+      for commit in &commits {
+        print_info(&format!("  • {}", commit));
+      }
+    }
+    
+    Some(commits)
+  } else {
+    None
+  };
+
   // Extract the values we need from args
   let max_depth = args.max_depth;
   let force = args.force;
   let force_push = args.force_push;
   let show_graph = args.show_graph;
   let autostash = args.autostash;
+  // Enable non-interactive mode if explicitly requested or if not in an interactive environment
+  let no_interactive = args.no_interactive || !is_interactive_environment();
 
   // Perform cascading rebase from current branch to children
-  rebase_downstream(&repo_path, max_depth, force, force_push, show_graph, autostash)
+  rebase_downstream(&repo_path, max_depth, force, force_push, show_graph, autostash, no_interactive, skip_commits.as_deref())
 }
 
 /// Perform cascading rebase from current branch to children
@@ -97,6 +136,8 @@ fn rebase_downstream(
   force_push: bool,
   show_graph: bool,
   autostash: bool,
+  no_interactive: bool,
+  skip_commits: Option<&[String]>,
 ) -> Result<()> {
   // Open the repository
   let repo =
@@ -219,7 +260,7 @@ fn rebase_downstream(
       }
 
       // Execute the rebase
-      let result = rebase_branch(repo_path, &branch, parent, autostash)?;
+      let result = rebase_branch(repo_path, &branch, parent, autostash, skip_commits)?;
 
       match result {
         RebaseResult::Success => {
@@ -244,7 +285,7 @@ fn rebase_downstream(
           if force {
             // Force rebase even if up-to-date
             print_info("Branch is up-to-date, but force flag is set. Rebasing anyway...");
-            let force_result = rebase_branch_force(repo_path, &branch, parent, autostash)?;
+            let force_result = rebase_branch_force(repo_path, &branch, parent, autostash, skip_commits)?;
             match force_result {
               RebaseResult::Success => {
                 print_success(&format!("Successfully force-rebased {branch} onto {parent}",));
@@ -280,6 +321,22 @@ fn rebase_downstream(
           }
         }
         RebaseResult::Conflict => {
+          // Check if we're in non-interactive mode
+          if no_interactive {
+            print_error(&format!(
+              "❌ Conflicts detected while rebasing {branch} onto {parent}"
+            ));
+            print_error("Cannot proceed in non-interactive mode (--no-interactive).");
+            print_info("To resolve conflicts manually:");
+            print_info("  1. Resolve the conflicts in the working directory");
+            print_info("  2. Stage the resolved files: git add <file>");
+            print_info("  3. Continue the rebase: git rebase --continue");
+            print_info("Or abort the rebase: git rebase --abort");
+            return Err(anyhow::anyhow!(
+              "Rebase conflicts detected in non-interactive mode"
+            ));
+          }
+
           // Handle conflicts - may need to loop for multiple conflicts
           let mut conflict_handled = false;
           while !conflict_handled {
@@ -669,7 +726,22 @@ enum ConflictResolution {
 }
 
 /// Rebase a branch onto another branch
-fn rebase_branch(repo_path: &Path, _branch: &str, onto: &str, autostash: bool) -> Result<RebaseResult> {
+fn rebase_branch(
+  repo_path: &Path,
+  _branch: &str,
+  onto: &str,
+  autostash: bool,
+  skip_commits: Option<&[String]>,
+) -> Result<RebaseResult> {
+  // If skip_commits are specified, use cherry-pick approach
+  if let Some(commits) = skip_commits {
+    if !commits.is_empty() {
+      print_info(&format!("Rebasing with {} commit(s) to skip", commits.len()));
+      return rebase_with_skip_commits(repo_path, onto, autostash, commits);
+    }
+  }
+
+  // Standard rebase if no commits to skip
   // Build the rebase command
   let mut args = vec!["rebase"];
 
@@ -714,8 +786,153 @@ fn rebase_branch(repo_path: &Path, _branch: &str, onto: &str, autostash: bool) -
   }
 }
 
+/// Rebase with specific commits skipped using cherry-pick approach
+fn rebase_with_skip_commits(
+  repo_path: &Path,
+  onto: &str,
+  autostash: bool,
+  skip_commits: &[String],
+) -> Result<RebaseResult> {
+  // Get the list of commits to rebase
+  let output = Command::new(consts::GIT_EXECUTABLE)
+    .args(&["rev-list", "--reverse", &format!("{}..HEAD", onto)])
+    .current_dir(repo_path)
+    .output()
+    .context("Failed to get commit list")?;
+
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    return Err(anyhow::anyhow!("Failed to get commit list: {}", stderr));
+  }
+
+  let commits = String::from_utf8_lossy(&output.stdout);
+  let commit_list: Vec<&str> = commits.lines().collect();
+
+  if commit_list.is_empty() {
+    return Ok(RebaseResult::UpToDate);
+  }
+
+  // Perform autostash if requested
+  if autostash {
+    let _ = Command::new(consts::GIT_EXECUTABLE)
+      .args(&["stash", "push", "-m", "twig cascade autostash"])
+      .current_dir(repo_path)
+      .output();
+  }
+
+  // Reset to onto branch
+  let reset_output = Command::new(consts::GIT_EXECUTABLE)
+    .args(&["reset", "--hard", onto])
+    .current_dir(repo_path)
+    .output()
+    .context("Failed to reset to target branch")?;
+
+  if !reset_output.status.success() {
+    let stderr = String::from_utf8_lossy(&reset_output.stderr);
+    if autostash {
+      let _ = Command::new(consts::GIT_EXECUTABLE)
+        .args(&["stash", "pop"])
+        .current_dir(repo_path)
+        .output();
+    }
+    return Err(anyhow::anyhow!("Failed to reset to {}: {}", onto, stderr));
+  }
+
+  // Cherry-pick commits, skipping the ones in skip_commits
+  let mut skipped_count = 0;
+  let mut picked_count = 0;
+  
+  for commit_hash in &commit_list {
+    let short_hash = &commit_hash[..std::cmp::min(7, commit_hash.len())];
+    
+    // Check if this commit should be skipped
+    let should_skip = skip_commits.iter().any(|skip_hash| {
+      commit_hash.starts_with(skip_hash) || skip_hash.starts_with(commit_hash)
+    });
+
+    if should_skip {
+      print_info(&format!("  ⏭️  Skipping commit {}", short_hash));
+      skipped_count += 1;
+      continue;
+    }
+
+    // Cherry-pick the commit
+    let pick_output = Command::new(consts::GIT_EXECUTABLE)
+      .args(&["cherry-pick", commit_hash])
+      .current_dir(repo_path)
+      .output()
+      .context(format!("Failed to cherry-pick commit {}", commit_hash))?;
+
+    let stdout = String::from_utf8_lossy(&pick_output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&pick_output.stderr).to_string();
+
+    if !pick_output.status.success() {
+      // Check for conflicts
+      if stderr.contains("CONFLICT") || stdout.contains("CONFLICT") {
+        print_error(&format!("Conflict while cherry-picking commit {}", short_hash));
+        if autostash {
+          let _ = Command::new(consts::GIT_EXECUTABLE)
+            .args(&["stash", "pop"])
+            .current_dir(repo_path)
+            .output();
+        }
+        return Ok(RebaseResult::Conflict);
+      }
+      
+      print_warning(&format!("Failed to cherry-pick commit {}: {}", short_hash, stderr));
+      if autostash {
+        let _ = Command::new(consts::GIT_EXECUTABLE)
+          .args(&["stash", "pop"])
+          .current_dir(repo_path)
+          .output();
+      }
+      return Ok(RebaseResult::Error);
+    }
+
+    picked_count += 1;
+  }
+
+  // Pop autostash if we used it
+  if autostash {
+    let pop_output = Command::new(consts::GIT_EXECUTABLE)
+      .args(&["stash", "pop"])
+      .current_dir(repo_path)
+      .output();
+      
+    if let Ok(output) = pop_output {
+      if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.contains("No stash entries found") {
+          print_warning(&format!("Failed to pop autostash: {}", stderr));
+        }
+      }
+    }
+  }
+
+  print_success(&format!(
+    "Cherry-picked {} commit(s), skipped {} commit(s)",
+    picked_count, skipped_count
+  ));
+
+  Ok(RebaseResult::Success)
+}
+
 /// Force rebase a branch onto another branch (used with --force flag)
-fn rebase_branch_force(repo_path: &Path, _branch: &str, onto: &str, autostash: bool) -> Result<RebaseResult> {
+fn rebase_branch_force(
+  repo_path: &Path,
+  _branch: &str,
+  onto: &str,
+  autostash: bool,
+  skip_commits: Option<&[String]>,
+) -> Result<RebaseResult> {
+  // If skip_commits are specified, use cherry-pick approach (which is always forced)
+  if let Some(commits) = skip_commits {
+    if !commits.is_empty() {
+      print_info(&format!("Force rebasing with {} commit(s) to skip", commits.len()));
+      return rebase_with_skip_commits(repo_path, onto, autostash, commits);
+    }
+  }
+
   // Build the rebase command with --force-rebase
   let mut args = vec!["rebase", "--force-rebase"];
 
@@ -923,6 +1140,8 @@ mod tests {
       force_push: false,
       show_graph: false,
       autostash: false,
+      no_interactive: false,
+      skip_commits: None,
       repo: None,
     };
 
@@ -930,6 +1149,8 @@ mod tests {
     assert!(!cascade_args.force, "force should default to false");
     assert!(!cascade_args.show_graph, "show_graph should default to false");
     assert!(!cascade_args.autostash, "autostash should default to false");
+    assert!(!cascade_args.no_interactive, "no_interactive should default to false");
+    assert!(cascade_args.skip_commits.is_none(), "skip_commits should default to None");
     assert!(cascade_args.max_depth.is_none(), "max_depth should default to None");
     assert!(cascade_args.repo.is_none(), "repo should default to None");
   }
@@ -943,6 +1164,8 @@ mod tests {
       force_push: true, // Enable force-push
       show_graph: false,
       autostash: false,
+      no_interactive: false,
+      skip_commits: None,
       repo: None,
     };
 
@@ -959,6 +1182,8 @@ mod tests {
       force_push: true,
       show_graph: true,
       autostash: true,
+      no_interactive: true,
+      skip_commits: None,
       repo: Some("/some/path".to_string()),
     };
 

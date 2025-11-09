@@ -188,6 +188,8 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
       force_push: false, // Update command doesn't force push by default
       show_graph: args.show_graph,
       autostash: args.autostash,
+      no_interactive: false, // Update command uses interactive mode by default
+      skip_commits: None,
       repo: args.repo,
     };
 
