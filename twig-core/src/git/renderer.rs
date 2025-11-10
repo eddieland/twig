@@ -82,15 +82,18 @@ impl BranchTableColumn {
     self
   }
 
-  fn title(&self) -> &str {
+  /// Column header label.
+  pub fn title(&self) -> &str {
     &self.title
   }
 
-  fn kind(&self) -> &BranchTableColumnKind {
+  /// Column kind describing how the renderer sources values.
+  pub fn kind(&self) -> &BranchTableColumnKind {
     &self.kind
   }
 
-  fn min_width(&self) -> usize {
+  /// Minimum width (characters) reserved for this column.
+  pub fn min_width(&self) -> usize {
     self.min_width
   }
 }
@@ -133,20 +136,29 @@ impl BranchTableSchema {
     self
   }
 
-  fn placeholder(&self) -> &str {
+  /// Placeholder rendered when metadata is missing.
+  pub fn placeholder(&self) -> &str {
     &self.placeholder
   }
 
-  fn column_spacing(&self) -> usize {
+  /// Number of spaces inserted between columns.
+  pub fn column_spacing(&self) -> usize {
     self.column_spacing
   }
 
-  fn show_header(&self) -> bool {
+  /// Whether the header row should be rendered.
+  pub fn show_header(&self) -> bool {
     self.show_header
   }
 
-  fn columns(&self) -> &[BranchTableColumn] {
+  /// Immutable view of the configured columns.
+  pub fn columns(&self) -> &[BranchTableColumn] {
     &self.columns
+  }
+
+  /// Mutable access for callers that need to tweak column ordering/widths in-place.
+  pub fn columns_mut(&mut self) -> &mut [BranchTableColumn] {
+    &mut self.columns
   }
 }
 
