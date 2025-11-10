@@ -82,15 +82,18 @@ impl BranchTableColumn {
     self
   }
 
-  fn title(&self) -> &str {
+  /// Column header label.
+  pub fn title(&self) -> &str {
     &self.title
   }
 
-  fn kind(&self) -> &BranchTableColumnKind {
+  /// Column kind describing how the renderer sources values.
+  pub fn kind(&self) -> &BranchTableColumnKind {
     &self.kind
   }
 
-  fn min_width(&self) -> usize {
+  /// Minimum width (characters) reserved for this column.
+  pub fn min_width(&self) -> usize {
     self.min_width
   }
 }
@@ -133,20 +136,30 @@ impl BranchTableSchema {
     self
   }
 
-  fn placeholder(&self) -> &str {
+  /// Placeholder rendered when metadata is missing.
+  pub fn placeholder(&self) -> &str {
     &self.placeholder
   }
 
-  fn column_spacing(&self) -> usize {
+  /// Number of spaces inserted between columns.
+  pub fn column_spacing(&self) -> usize {
     self.column_spacing
   }
 
-  fn show_header(&self) -> bool {
+  /// Whether the header row should be rendered.
+  pub fn show_header(&self) -> bool {
     self.show_header
   }
 
-  fn columns(&self) -> &[BranchTableColumn] {
+  /// Immutable view of the configured columns.
+  pub fn columns(&self) -> &[BranchTableColumn] {
     &self.columns
+  }
+
+  /// Mutable access for callers that need to tweak column ordering/widths
+  /// in-place.
+  pub fn columns_mut(&mut self) -> &mut [BranchTableColumn] {
+    &mut self.columns
   }
 }
 
@@ -446,6 +459,8 @@ mod tests {
   use super::super::graph::{BranchHead, BranchKind, BranchTopology};
   use super::*;
 
+  const LIFECYCLE_KEY: &str = "twig.lifecycle";
+
   #[test]
   fn renders_default_schema() {
     let (graph, root) = sample_graph();
@@ -477,6 +492,43 @@ mod tests {
 
     let err = renderer.render(&mut output, &graph, &root).unwrap_err();
     assert!(matches!(err, BranchTableRenderError::MissingBranchColumn));
+  }
+
+  #[test]
+  fn renders_without_header_when_disabled() {
+    let (graph, root) = sample_graph();
+    let mut output = String::new();
+    BranchTableRenderer::new(BranchTableSchema::default().with_header(false))
+      .render(&mut output, &graph, &root)
+      .unwrap();
+
+    assert_snapshot!("flow_renderer__no_header", output);
+  }
+
+  #[test]
+  fn renders_custom_schema_with_additional_columns() {
+    let (graph, root) = sample_graph();
+    let schema = BranchTableSchema::new(vec![
+      BranchTableColumn::branch().with_min_width(10),
+      BranchTableColumn::pull_request(),
+      BranchTableColumn::new(
+        "Lifecycle",
+        BranchTableColumnKind::Annotation {
+          key: LIFECYCLE_KEY.to_string(),
+        },
+      )
+      .with_min_width(10),
+      BranchTableColumn::notes().with_min_width(12),
+    ])
+    .with_placeholder("—")
+    .with_column_spacing(3);
+
+    let mut output = String::new();
+    BranchTableRenderer::new(schema)
+      .render(&mut output, &graph, &root)
+      .unwrap();
+
+    assert_snapshot!("flow_renderer__custom_schema", output);
   }
 
   fn sample_graph() -> (BranchGraph, BranchName) {
@@ -515,6 +567,19 @@ mod tests {
     main.topology.children = vec![feature_auth.name.clone(), feature_payment.name.clone()];
     feature_auth.topology.children = vec![feature_auth_ui.name.clone()];
     feature_payment.topology.children = vec![feature_payment_api.name.clone(), feature_payment_ui.name.clone()];
+
+    feature_auth
+      .metadata
+      .annotations
+      .insert(LIFECYCLE_KEY.to_string(), BranchAnnotationValue::Text("active".into()));
+    feature_payment
+      .metadata
+      .annotations
+      .insert(LIFECYCLE_KEY.to_string(), BranchAnnotationValue::Text("stale".into()));
+    feature_payment_ui
+      .metadata
+      .annotations
+      .insert(LIFECYCLE_KEY.to_string(), BranchAnnotationValue::Text("ready".into()));
 
     let root = main.name.clone();
     let nodes = vec![

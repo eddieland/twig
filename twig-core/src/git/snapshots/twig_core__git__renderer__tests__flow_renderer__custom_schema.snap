@@ -1,0 +1,11 @@
+---
+source: twig-core/src/git/renderer.rs
+expression: output
+---
+Branch                          PR      Lifecycle    Notes       
+* main                          —       —            —           
+├─ feature/auth-refresh         —       active       —           
+│  └─ feature/auth-refresh-ui   #982    —            in-review   
+└─ feature/payment-refactor     draft   stale        stale 21d   
+   ├─ feature/payment-api       —       —            —           
+   └─ feature/payment-ui        —       ready        ready

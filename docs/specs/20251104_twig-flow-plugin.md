@@ -149,6 +149,42 @@
 - Integration path:
   - `twig flow` plugin depends on the renderer after it is stabilized; plugin-specific formatting replaces only the high-level messaging.
 
+### Renderer API & Column Schema
+
+| Type                       | Responsibility                                                                                               | Notes                                                                                                                                                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BranchTableColumnKind`    | Encodes how a cell is populated (`Branch`, `FirstLabel`, `Annotation { key }`, `Notes`).                      | Annotation columns point at arbitrary metadata keys so future columns can be added without touching the renderer core.                                                                   |
+| `BranchTableColumn`        | Couples a human-readable title with a `kind` and `min_width`.                                                | Convenience constructors (`branch()`, `story()`, `pull_request()`, `notes()`) seed the default schema; `with_min_width` lets internal callers tune width guarantees per column.          |
+| `BranchTableSchema`        | Ordered list of columns plus presentation toggles (placeholder text, column spacing, header visibility).     | Defaults to `Branch/Story/PR/Notes`, placeholder `--`, spacing of two spaces, header enabled. Schema builders will live in `twig-core` so plugins/CLI can tweak layout before rendering. |
+| `BranchTableRenderError`   | Error enum for empty schemas, branch-column validation, unknown branches, and `fmt::Error` passthrough.      | Keeps rendering failures distinct from Git/IO errors so callers can handle them deterministically (e.g., fall back to plain `twig tree`).                                                |
+| `BranchTableRenderer`      | Stateful renderer that owns a `BranchTableSchema` and knows how to format a `BranchGraph` into any writer.   | Entry point: `render(&mut writer, &graph, &BranchName)`; returns `Result<(), BranchTableRenderError>`.                                                                                   |
+
+**Default schema**
+
+| Column  | Kind                    | Source                                                                 | Placeholder |
+| ------- | ----------------------- | ---------------------------------------------------------------------- | ----------- |
+| Branch  | `Branch`                | Graph topology + metadata (`is_current`) to add `*`, tree connectors.  | n/a         |
+| Story   | `FirstLabel`            | First label from `BranchNodeMetadata.labels`.                          | `--`        |
+| PR      | `Annotation { key }`    | `twig.pr` annotation (text/number).                                    | `--`        |
+| Notes   | `Notes`                 | Prefers `twig.notes` annotation, falls back to `BranchStaleState`.     | `--`        |
+
+Hidden configuration will reuse `BranchTableSchema` builders: callers can clone the default schema, swap/insert columns, adjust spacing, or suppress the header before passing it into the renderer. These overrides stay internal for now (toggled via config files under `.twig/`), but the data model fully supports surfacing them later without rewiring the renderer.
+
+```rust
+use twig_core::git::{BranchGraph, BranchName, BranchTableRenderer, BranchTableSchema};
+
+fn render_flow(graph: &BranchGraph, root: &BranchName) -> anyhow::Result<String> {
+  let schema = BranchTableSchema::default()
+    .with_placeholder("—")
+    .with_column_spacing(3);
+  let mut output = String::new();
+  BranchTableRenderer::new(schema).render(&mut output, graph, root)?;
+  Ok(output)
+}
+```
+
+_Module skeleton:_ `twig-core/src/git/renderer.rs` defines all structs/enums listed above, re-exports them via `twig_core::git`, and provides TODO stubs for future styling hooks (color, Unicode vs ASCII connectors). An empty schema now triggers a dedicated error so downstream callers receive actionable feedback during early integration work.
+
 ## CLI UX Mockups
 
 - Tree visualization uses ASCII connectors (`├─`, `└─`, `│`) within the `Branch` column and prefixes the currently checked-out branch with `*`.
@@ -229,12 +265,12 @@ error: the argument '--root' cannot be used with '--parent'
 | P0       | Define plugin crate scaffolding & build integration.                       | Plugin compiles as optional crate with minimal main function & Clap wiring.                          | Determine placement under `plugins/` or `twig-flow/`. Update workspace manifests. | ✅ Completed – plugin crate scaffolded under `plugins/twig-flow`                                           |
 | P0       | Design branch graph data structures in `twig-core`.                        | Spec and initial interfaces ready for implementation.                                                | Consider performance implications for large repos.                                | ✅ Completed – branch graph domain models and builder scaffolding added under `twig-core/src/git/graph.rs` |
 | P0       | Specify branch switching shared service API.                               | Interface defined so CLI + plugin share same code path.                                              | Identify behavior parity with `twig switch`.                                      | ✅ Completed – shared service API skeleton added under `twig-core/src/git/switch.rs`                       |
-| P0       | Finalize renderer API & column schema.                                     | Document concrete structs/enums + default schema in spec and prepare module skeleton in `twig-core`. | Captures `BranchTableRenderer`, schema types, and metadata mapping rules.         |                                                                                                            |
+| P0       | Finalize renderer API & column schema.                                     | Document concrete structs/enums + default schema in spec and prepare module skeleton in `twig-core`. | Captures `BranchTableRenderer`, schema types, and metadata mapping rules.         | ✅ Completed – see "Renderer API & Column Schema" and `twig-core/src/git/renderer.rs`.                      |
 | P0       | Implement renderer core in `twig-core`.                                    | Produce tree+table formatter operating on `BranchGraph` with alignment + placeholders.               | No CLI integration yet; include internal feature gate for hidden customization.   |                                                                                                            |
-| P0       | Add unit & snapshot tests for renderer.                                    | Cover width calculations, connectors, and schema overrides using `insta` fixtures.                   | Lives under `twig-core` tests; uses synthetic graphs.                             |                                                                                                            |
+| P0       | Add unit & snapshot tests for renderer.                                    | Cover width calculations, connectors, and schema overrides using `insta` fixtures.                   | Lives under `twig-core` tests; uses synthetic graphs.                             | ✅ Completed – see `twig-core/src/git/renderer.rs` tests + new snapshots (`flow_renderer__no_header`, `flow_renderer__custom_schema`). |
 | P0       | Handle multi-parent `--parent` edge case.                                  | Error messaging and parent listings defined; renderer call short-circuits when multiple parents.     | Future interactive selection tracked separately.                                  |                                                                                                            |
 | P1       | Draft CLI UX for tree visualization (mock outputs).                        | Example outputs stored in spec or doc, capturing formatting rules.                                   | Hybrid tree/table layout with default `Branch/Story/PR/Notes` columns.            | ✅ Completed – see "CLI UX Mockups" section                                                                |
-| P1       | Define internal column schema configuration.                               | Document data model + default columns for renderer with hidden config override.                      | Enables future customization without public CLI surface.                          | 🚧 Blocked – moved under renderer API task                                                                 |
+| P1       | Define internal column schema configuration.                               | Document data model + default columns for renderer with hidden config override.                      | Enables future customization without public CLI surface.                          | ⏳ Pending – unblocked by renderer API; implementation will hook config files into schema overrides.       |
 | P1       | Plan integration tests & fixtures.                                         | List of test scenarios with coverage goals.                                                          | Include tree rendering snapshots, switching success/error cases.                  |                                                                                                            |
 | P1       | Explore interactive parent selection UX.                                   | Outline potential dialogs/prompts for selecting among multiple parents.                              | Depends on multi-parent error groundwork.                                         |                                                                                                            |
 | P1       | Outline documentation deliverables.                                        | ToC for plugin README/tutorial.                                                                      | Ensure canonical example requirement met.                                         | ✅ Completed – see "Documentation Deliverables Outline" section                                            |
