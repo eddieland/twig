@@ -227,6 +227,43 @@ $ twig flow --root --parent
 error: the argument '--root' cannot be used with '--parent'
 ```
 
+## Interactive Parent Selection UX
+
+Multiple-parent situations will become common once teams author both Git upstreams and custom Twig dependencies. Instead of forcing users to memorize which parent will be selected, `twig flow --parent` upgrades to an interactive picker that only appears when ambiguity exists.
+
+### Candidate discovery & ranking
+
+- Aggregate parent candidates from three sources: (1) explicit dependencies stored in `RepoState::dependencies`, (2) Git upstream configured for the branch, and (3) graph-inferred parents (topology edges built from merge bases). Each candidate is tagged with its source so the prompt can justify why it is available.
+- Sort candidates by confidence: explicit Twig dependencies first (preserve author intent), then Git upstream, then inferred parents ordered by recency (`BranchHead.committed_at`) or alphabetical fallback.
+- Deduplicate identical branch names even if they came from multiple sources; keep the highest-confidence source and list any secondary sources inline (e.g., `feature/payment-refactor — defined dependency, also upstream origin/feature/payment-refactor`).
+
+### Prompt shape
+
+```text
+Multiple parents found for "feature/payment-ui":
+ 1. feature/payment-refactor      (defined dependency, Story PROJ-451, last updated 3d ago)
+ 2. main                          (git upstream)
+ 3. feature/mobile-platform       (inferred via merge-base, stale 17d)
+Select a parent [1-3] (default 1, ? for details, q to abort):
+```
+
+- `Enter` with no input selects the first candidate (Twig dependency). Typing the index or branch name is also accepted to reduce friction for power users.
+- `?` expands the prompt with extra metadata per option (full commit summary, PR annotation, last modifier) without leaving the selection flow.
+- `q` or `ctrl-c` aborts the command before any checkout occurs; the plugin prints `Aborted parent selection, repository left on <current>` via `print_warning`.
+
+### Non-interactive & scripted modes
+
+- `twig flow --parent --no-input` (or when `stdin` is not a TTY) bypasses the prompt. The plugin surfaces the same error currently planned for the multi-parent edge case (`Multiple parents found... rerun without --no-input or pass --parent=<name>`).
+- A new `--parent=<branch>` override hooks into Clap's value parser so callers can skip the picker entirely. The override is mutually exclusive with the bare `--parent` boolean.
+- For CI scenarios, set `TWIG_ASSUME_PARENT=<branch>` to preselect a branch silently; the picker only displays when the environment variable differs from the available candidates (to avoid silently choosing the wrong branch).
+
+### Implementation outline
+
+- Extend the switch service request with an optional `parent_selection: ParentSelectionStrategy`, where `ParentSelectionStrategy::Interactive` owns the prompt loop and `ParentSelectionStrategy::Preselected(BranchName)` bypasses it.
+- Implement the prompt inside the plugin crate using `twig_core::output::print_info` for instructional lines and `twig_core::output::print_error` for invalid selections. All candidate formatting lives in a helper so future callers (e.g., `twig switch --parent`) can reuse it.
+- Emit tracing events (`tracing::info!`) capturing the number of candidates, the chosen branch, and whether the selection was interactive to simplify telemetry.
+- Keep the renderer decoupled from the picker: the selection finishes first, then `twig flow` proceeds with the checkout and finally renders the tree rooted at the new current branch.
+
 ## Documentation Deliverables Outline
 
 ### Plugin README (plugins/twig-flow/README.md)
@@ -272,7 +309,7 @@ error: the argument '--root' cannot be used with '--parent'
 | P1       | Draft CLI UX for tree visualization (mock outputs).                        | Example outputs stored in spec or doc, capturing formatting rules.                                   | Hybrid tree/table layout with default `Branch/Story/PR/Notes` columns.            | ✅ Completed – see "CLI UX Mockups" section                                                                |
 | P1       | Define internal column schema configuration.                               | Document data model + default columns for renderer with hidden config override.                      | Enables future customization without public CLI surface.                          | ⏳ Pending – unblocked by renderer API; implementation will hook config files into schema overrides.       |
 | P1       | Plan integration tests & fixtures.                                         | List of test scenarios with coverage goals.                                                          | Include tree rendering snapshots, switching success/error cases.                  |                                                                                                            |
-| P1       | Explore interactive parent selection UX.                                   | Outline potential dialogs/prompts for selecting among multiple parents.                              | Depends on multi-parent error groundwork.                                         |                                                                                                            |
+| P1       | Explore interactive parent selection UX.                                   | Outline potential dialogs/prompts for selecting among multiple parents.                              | Depends on multi-parent error groundwork.                                         | ✅ Completed – see "Interactive Parent Selection UX" section                                              |
 | P1       | Outline documentation deliverables.                                        | ToC for plugin README/tutorial.                                                                      | Ensure canonical example requirement met.                                         | ✅ Completed – see "Documentation Deliverables Outline" section                                            |
 | P2       | Investigate caching strategies for large repos.                            | Determine if caching needed; propose approach.                                                       | Could use `.twig` state file.                                                     |                                                                                                            |
 | P2       | Explore remote branch visualization options.                               | Document feasibility and requirements.                                                               | Possibly post-v1 scope.                                                           |                                                                                                            |
@@ -324,8 +361,8 @@ error: the argument '--root' cannot be used with '--parent'
 ## Status Tracking (to be updated by subagent)
 
 - **Current focus:** _Plan integration tests & fixtures_
-- **Latest completed task:** _Outline documentation deliverables_
-- **Next up:** _Explore interactive parent selection UX_
+- **Latest completed task:** _Explore interactive parent selection UX_
+- **Next up:** _Handle multi-parent `--parent` edge case_
 
 ## Lessons Learned (ongoing)
 
