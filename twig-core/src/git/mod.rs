@@ -28,14 +28,14 @@ pub use switch::{
 };
 
 /// Get commits ahead/behind between two branches
-/// 
+///
 /// # Arguments
 /// * `branch` - The branch to compare
 /// * `base` - The base branch to compare against
-/// 
+///
 /// # Returns
 /// A tuple of (ahead, behind) commit counts
 pub fn get_commits_ahead_behind(_branch: &str, _base: &str) -> anyhow::Result<(usize, usize)> {
-    // TODO: Implement actual git ahead/behind calculation
-    Ok((0, 0))
+  // TODO: Implement actual git ahead/behind calculation
+  Ok((0, 0))
 }
