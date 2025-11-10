@@ -32,6 +32,13 @@ pub enum BranchSubcommands {
   #[command(alias = "rm-dep")]
   RemoveDep(RemoveDepCommand),
 
+  /// Show the parent branch(es) of the current or specified branch
+  #[command(long_about = "Display the parent branch(es) of the current branch or a specified branch.\n\n\
+                     Shows all direct parent dependencies that have been defined\n\
+                     for the branch. If the branch has no defined parents, shows\n\
+                     the Git upstream branch if available.")]
+  Parent(ParentCommand),
+
   /// Root branch management
   #[command(long_about = "Manage which branches are treated as root branches.\n\n\
                      Root branches appear at the top level of the tree view\n\
@@ -65,6 +72,18 @@ pub struct RemoveDepCommand {
   /// The parent branch name
   #[arg(required = true, index = 2)]
   pub parent: String,
+
+  /// Path to a specific repository
+  #[arg(long, short = 'r', value_name = "PATH")]
+  pub repo: Option<String>,
+}
+
+/// Show parent branch(es) of a branch
+#[derive(Args)]
+pub struct ParentCommand {
+  /// The branch name (defaults to current branch)
+  #[arg(index = 1)]
+  pub branch: Option<String>,
 
   /// Path to a specific repository
   #[arg(long, short = 'r', value_name = "PATH")]
@@ -145,6 +164,66 @@ pub struct RootListCommand {
 /// including adding and removing dependencies, and managing root branches.
 pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
   match branch.subcommand {
+    BranchSubcommands::Parent(cmd) => {
+      // Get the repository path
+      let repo_path = if let Some(repo_arg) = cmd.repo {
+        crate::utils::resolve_repository_path(Some(&repo_arg))?
+      } else {
+        detect_repository().context("Not in a git repository")?
+      };
+
+      // Get the branch name (current or specified)
+      let branch_name = if let Some(branch) = cmd.branch {
+        branch
+      } else {
+        let repo = git2::Repository::open(&repo_path)
+          .context("Failed to open repository")?;
+        let head = repo.head().context("Failed to get HEAD")?;
+        let branch_ref = head.shorthand().context("Failed to get branch name")?;
+        branch_ref.to_string()
+      };
+
+      // Load repository state
+      let repo_state = RepoState::load(&repo_path)?;
+
+      // Get parent dependencies for the branch
+      let parents: Vec<_> = repo_state
+        .dependencies
+        .iter()
+        .filter(|dep| dep.child == branch_name)
+        .map(|dep| dep.parent.clone())
+        .collect();
+
+      if parents.is_empty() {
+        // Check for Git upstream branch
+        let repo = git2::Repository::open(&repo_path)
+          .context("Failed to open repository")?;
+        
+        if let Ok(branch) = repo.find_branch(&branch_name, git2::BranchType::Local) {
+          if let Ok(upstream) = branch.upstream() {
+            if let Some(upstream_name) = upstream.name()? {
+              print_info(&format!("No twig parent defined for '{}', but Git upstream is: {}", 
+                branch_name, upstream_name));
+            } else {
+              print_info(&format!("No parent branches defined for '{}'", branch_name));
+            }
+          } else {
+            print_info(&format!("No parent branches defined for '{}'", branch_name));
+          }
+        } else {
+          print_info(&format!("No parent branches defined for '{}'", branch_name));
+        }
+      } else if parents.len() == 1 {
+        print_success(&format!("Parent branch of '{}': {}", branch_name, parents[0]));
+      } else {
+        print_success(&format!("Parent branches of '{}':", branch_name));
+        for parent in parents {
+          print_info(&format!("  {}", parent));
+        }
+      }
+
+      Ok(())
+    }
     BranchSubcommands::Depend(cmd) => {
       // Get the repository path
       let repo_path = if let Some(repo_arg) = cmd.repo {
