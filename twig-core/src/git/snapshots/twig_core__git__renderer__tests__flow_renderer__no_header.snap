@@ -1,0 +1,11 @@
+---
+source: twig-core/src/git/renderer.rs
+expression: output
+---
+* main                         --        --      --       
+├─ feature/auth-refresh        PROJ-451  --      --       
+│  └─ feature/auth-refresh-ui  PROJ-451  #982    in-review
+└─ feature/payment-refactor    --        draft   stale 21d
+   ├─ feature/payment-api      --        --      --       
+   └─ feature/payment-ui       --        --      ready    
+
