@@ -191,6 +191,41 @@ $ twig flow --root --parent
 error: the argument '--root' cannot be used with '--parent'
 ```
 
+## Documentation Deliverables Outline
+
+### Plugin README (plugins/twig-flow/README.md)
+
+- Purpose & positioning: describe how `twig flow` complements the base Twig CLI and when to rely on it instead of `twig switch` / `twig tree`.
+- Installation & upgrade: enumerate Cargo workspace feature flags, `cargo install --path plugins/twig-flow`, and how Twig locates plugin binaries.
+- Quickstart commands: provide copy/paste snippets for `twig flow`, `twig flow --root`, `twig flow --parent`, and `twig flow <target>` paired with annotated output.
+- Architecture overview: explain the separation between `twig-core` (graph + renderer + switch service) and the plugin crate (Clap parsing, IO orchestration).
+- Configuration & prerequisites: call out required Twig config dirs, `.netrc` expectations, and how to opt into alternate column schemas while they remain hidden flags.
+- Troubleshooting & FAQ: document likely error states (missing repo, detached HEAD, Jira config absent) with remediation steps that mirror CLI messaging.
+- Contributing & testing: outline `make fmt`, `make test` / `cargo nextest`, snapshot update workflow, and integration-test locations for future contributors.
+
+### Tutorial / Walkthrough (docs/plugins/twig-flow.md)
+
+- Scenario narrative that walks through viewing a branch tree, switching via Jira key, and interpreting metadata columns on a sample repo.
+- Embedded snapshots or ASCII renderings so readers can compare their output with the canonical renderer expectations.
+- Cross-links back to `twig-core` modules and plugin source files so contributors can jump from docs directly into code.
+
+### Inline Documentation Requirements
+
+- Rustdoc coverage for every public type/function in `twig-core::git::{graph,renderer}` and the plugin's CLI entrypoints, including `# Errors`/`# Examples` sections where clarity is needed.
+- Example snippets showing how to construct a `BranchTableSchema`, customize columns, and invoke the shared switch service without the plugin wrapper.
+- Internal developer docs (module-level comments) describing invariants such as column alignment rules, connector selection, and metadata sourcing.
+
+### Release Notes & CHANGELOG Hooks
+
+- Workspace-level CHANGELOG entry announcing the plugin, feature bullets, and doc links once shipped.
+- Plugin-scoped `CHANGELOG.md` seeded under `plugins/twig-flow/` so future UX changes have a canonical log.
+- README badge or short blurb in the root `README.md` marketing `twig flow` as the flagship plugin with a link to screenshots/gifs.
+
+### Discovery & Reference Artifacts
+
+- Update `PLUGINS.md` (or create a dedicated section) summarizing how to enable `twig flow` and pointing to the README/tutorial.
+- Ensure `twig flow --help` examples mirror README quickstart commands to keep CLI help and docs in sync.
+
 ## Subagent Execution Plan
 
 ### Task Backlog
@@ -209,7 +244,7 @@ error: the argument '--root' cannot be used with '--parent'
 | P1       | Define internal column schema configuration.                               | Document data model + default columns for renderer with hidden config override.                      | Enables future customization without public CLI surface.                          | 🚧 Blocked – moved under renderer API task                                                                 |
 | P1       | Plan integration tests & fixtures.                                         | List of test scenarios with coverage goals.                                                          | Include tree rendering snapshots, switching success/error cases.                  |                                                                                                            |
 | P1       | Explore interactive parent selection UX.                                   | Outline potential dialogs/prompts for selecting among multiple parents.                              | Depends on multi-parent error groundwork.                                         |                                                                                                            |
-| P1       | Outline documentation deliverables.                                        | ToC for plugin README/tutorial.                                                                      | Ensure canonical example requirement met.                                         |                                                                                                            |
+| P1       | Outline documentation deliverables.                                        | ToC for plugin README/tutorial.                                                                      | Ensure canonical example requirement met.                                         | ✅ Completed – see "Documentation Deliverables Outline" section                                            |
 | P2       | Investigate caching strategies for large repos.                            | Determine if caching needed; propose approach.                                                       | Could use `.twig` state file.                                                     |                                                                                                            |
 | P2       | Explore remote branch visualization options.                               | Document feasibility and requirements.                                                               | Possibly post-v1 scope.                                                           |                                                                                                            |
 | P3       | Consider GUI/TUI enhancements for future roadmap.                          | High-level ideas only.                                                                               | Not in initial release.                                                           |                                                                                                            |
@@ -260,8 +295,8 @@ error: the argument '--root' cannot be used with '--parent'
 ## Status Tracking (to be updated by subagent)
 
 - **Current focus:** _Plan integration tests & fixtures_
-- **Latest completed task:** _Draft CLI UX for tree visualization (mock outputs)_
-- **Next up:** _Outline documentation deliverables_
+- **Latest completed task:** _Outline documentation deliverables_
+- **Next up:** _Explore interactive parent selection UX_
 
 ## Lessons Learned (ongoing)
 
