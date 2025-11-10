@@ -268,15 +268,50 @@ error: the argument '--root' cannot be used with '--parent'
 | P0       | Finalize renderer API & column schema.                                     | Document concrete structs/enums + default schema in spec and prepare module skeleton in `twig-core`. | Captures `BranchTableRenderer`, schema types, and metadata mapping rules.         | ✅ Completed – see "Renderer API & Column Schema" and `twig-core/src/git/renderer.rs`.                      |
 | P0       | Implement renderer core in `twig-core`.                                    | Produce tree+table formatter operating on `BranchGraph` with alignment + placeholders.               | No CLI integration yet; include internal feature gate for hidden customization.   |                                                                                                            |
 | P0       | Add unit & snapshot tests for renderer.                                    | Cover width calculations, connectors, and schema overrides using `insta` fixtures.                   | Lives under `twig-core` tests; uses synthetic graphs.                             | ✅ Completed – see `twig-core/src/git/renderer.rs` tests + new snapshots (`flow_renderer__no_header`, `flow_renderer__custom_schema`). |
-| P0       | Handle multi-parent `--parent` edge case.                                  | Error messaging and parent listings defined; renderer call short-circuits when multiple parents.     | Future interactive selection tracked separately.                                  |                                                                                                            |
 | P1       | Draft CLI UX for tree visualization (mock outputs).                        | Example outputs stored in spec or doc, capturing formatting rules.                                   | Hybrid tree/table layout with default `Branch/Story/PR/Notes` columns.            | ✅ Completed – see "CLI UX Mockups" section                                                                |
 | P1       | Define internal column schema configuration.                               | Document data model + default columns for renderer with hidden config override.                      | Enables future customization without public CLI surface.                          | ⏳ Pending – unblocked by renderer API; implementation will hook config files into schema overrides.       |
-| P1       | Plan integration tests & fixtures.                                         | List of test scenarios with coverage goals.                                                          | Include tree rendering snapshots, switching success/error cases.                  |                                                                                                            |
-| P1       | Explore interactive parent selection UX.                                   | Outline potential dialogs/prompts for selecting among multiple parents.                              | Depends on multi-parent error groundwork.                                         |                                                                                                            |
+| P1       | Plan integration tests & fixtures.                                         | List of test scenarios with coverage goals.                                                          | Include tree rendering snapshots, switching success/error cases.                  | ✅ Completed – see "Integration Test & Fixture Plan" section                                              |
 | P1       | Outline documentation deliverables.                                        | ToC for plugin README/tutorial.                                                                      | Ensure canonical example requirement met.                                         | ✅ Completed – see "Documentation Deliverables Outline" section                                            |
-| P2       | Investigate caching strategies for large repos.                            | Determine if caching needed; propose approach.                                                       | Could use `.twig` state file.                                                     |                                                                                                            |
-| P2       | Explore remote branch visualization options.                               | Document feasibility and requirements.                                                               | Possibly post-v1 scope.                                                           |                                                                                                            |
+| P3       | Explore interactive parent selection UX (deferred).                        | Outline potential dialogs/prompts for selecting among multiple parents once MVP ships.               | Blocked until baseline `--parent` fallback experience settles.                    | 🚫 Deferred – explicitly out of MVP scope to keep near-term flow lean.                                      |
 | P3       | Consider GUI/TUI enhancements for future roadmap.                          | High-level ideas only.                                                                               | Not in initial release.                                                           |                                                                                                            |
+| P3       | Handle multi-parent `--parent` edge case.                                  | Error messaging and parent listings defined; renderer call short-circuits when multiple parents.     | Future interactive selection tracked separately.                                  |                                                                                                            |
+
+## Integration Test & Fixture Plan
+
+### Harness & Layout
+
+- **Location:** Place integration tests under `plugins/twig-flow/tests/` (e.g., `flow_cli.rs`) so they exercise the compiled plugin via `assert_cmd` against the real binary.
+- **Shared utilities:** Lean on `twig-test-utils` (`GitRepoTestGuard`, `setup_test_env_with_init`, `NetrcGuard`) to create disposable repos, populate commits, and isolate XDG directories.
+- **Snapshots:** Keep renderer expectations in `plugins/twig-flow/tests/snapshots/` using `insta`. Split files by concern (`flow_renderer__default_columns.snap`, `flow_renderer__wide_columns.snap`) to minimize churn.
+- **Execution:** `make test` / `cargo nextest run -p twig-flow` should run the full suite. Document `INSTALLOW=1 make update-snapshots` as the blessed workflow when render output changes intentionally.
+
+### Scenario Matrix
+
+| Area | Scenario | Verification |
+| --- | --- | --- |
+| Rendering | `twig flow` (no flags) on repo with branching depth 3 | Snapshot matches hybrid tree/table layout and highlights current branch |
+| Rendering | `--root` vs `--parent` flags | Snapshot ensures checkout messaging precedes table; verify mutually exclusive flags error path |
+| Rendering | Column width stress test | Fixture with long names + Jira keys confirms padding/truncation per schema |
+| Switching | Checkout existing branch (`twig flow feature/api`) | Assert repo HEAD changes and graph rerenders with new focus |
+| Switching | Create-and-switch path (`twig flow feature/new --create`) | Validate creation log plus tree refresh; confirm metadata persisted via `RepoState` |
+| Switching | Remote tracking adoption | Simulate remote branch fetch; ensure plugin mirrors shared switch prompts/results |
+| Switching | Jira ticket resolution (`twig flow PROJ-123`) | Fake Jira config + metadata fixture resolves ticket to branch and prints Story column |
+| Error Handling | Conflicting flags (`--root --parent`) | Assert CLI exits non-zero and prints clap-style error |
+| Error Handling | Multi-parent parent selection fallback | Until interactive UX ships, assert descriptive error enumerates candidate parents |
+| Error Handling | Missing repo or detached HEAD | Ensure plugin reuses `twig-core::git::detect_repository` errors and prints actionable guidance |
+
+### Fixture Strategy
+
+- **Graph fixtures:** Introduce helper builders in `plugins/twig-flow/tests/fixtures.rs` that wrap `GitRepoTestGuard` to create branching DAGs plus metadata JSON for Story/PR/Notes columns.
+- **Switch fixtures:** Extend `twig-test-utils` if needed with helpers such as `set_tracking_branch(repo, local, remote)` to keep remote scenarios readable; document any new helpers inside this spec before implementation.
+- **Jira fixtures:** Use `setup_test_env_with_init` to seed fake Jira config (`jira.toml`) and `.netrc` creds via `NetrcGuard`. Network calls remain stubbed—tests manipulate switch service inputs directly.
+- **Snapshot hygiene:** When schema toggles change expected columns, provide helper that rehydrates `BranchTableSchema` defaults before printing to keep snapshots deterministic. Store builder constants near fixtures for reuse.
+
+### Coverage & Ownership
+
+- Renderer-specific unit tests continue living in `twig-core`; integration tests validate the plugin wires renderer + switch service correctly.
+- Assign each scenario an owner (initially Twig Flow maintainers) in test module doc comments so CI failures route quickly.
+- Document an opt-in env var (planned `FLOW_FIXTURE_LOG=debug`) to surface additional tracing when a test fails without polluting default output.
 
 ### Risks & Mitigations
 
@@ -323,9 +358,10 @@ error: the argument '--root' cannot be used with '--parent'
 
 ## Status Tracking (to be updated by subagent)
 
-- **Current focus:** _Plan integration tests & fixtures_
-- **Latest completed task:** _Outline documentation deliverables_
-- **Next up:** _Explore interactive parent selection UX_
+- **Current focus:** _Define internal column schema configuration_
+- **Latest completed task:** _Plan integration tests & fixtures_
+- **Next up:** _Handle multi-parent `--parent` edge case_
+- **Deferred (post-MVP):** _Interactive parent selection UX_
 
 ## Lessons Learned (ongoing)
 
