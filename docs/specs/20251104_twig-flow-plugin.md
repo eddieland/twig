@@ -217,14 +217,7 @@ error: the argument '--root' cannot be used with '--parent'
 
 ### Release Notes & CHANGELOG Hooks
 
-- Workspace-level CHANGELOG entry announcing the plugin, feature bullets, and doc links once shipped.
 - Plugin-scoped `CHANGELOG.md` seeded under `plugins/twig-flow/` so future UX changes have a canonical log.
-- README badge or short blurb in the root `README.md` marketing `twig flow` as the flagship plugin with a link to screenshots/gifs.
-
-### Discovery & Reference Artifacts
-
-- Update `PLUGINS.md` (or create a dedicated section) summarizing how to enable `twig flow` and pointing to the README/tutorial.
-- Ensure `twig flow --help` examples mirror README quickstart commands to keep CLI help and docs in sync.
 
 ## Subagent Execution Plan
 
