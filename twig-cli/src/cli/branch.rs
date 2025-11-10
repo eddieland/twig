@@ -33,10 +33,12 @@ pub enum BranchSubcommands {
   RemoveDep(RemoveDepCommand),
 
   /// Show the parent branch(es) of the current or specified branch
-  #[command(long_about = "Display the parent branch(es) of the current branch or a specified branch.\n\n\
+  #[command(
+    long_about = "Display the parent branch(es) of the current branch or a specified branch.\n\n\
                      Shows all direct parent dependencies that have been defined\n\
                      for the branch. If the branch has no defined parents, shows\n\
-                     the Git upstream branch if available.")]
+                     the Git upstream branch if available."
+  )]
   Parent(ParentCommand),
 
   /// Root branch management
@@ -176,8 +178,7 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
       let branch_name = if let Some(branch) = cmd.branch {
         branch
       } else {
-        let repo = git2::Repository::open(&repo_path)
-          .context("Failed to open repository")?;
+        let repo = git2::Repository::open(&repo_path).context("Failed to open repository")?;
         let head = repo.head().context("Failed to get HEAD")?;
         let branch_ref = head.shorthand().context("Failed to get branch name")?;
         branch_ref.to_string()
@@ -196,14 +197,15 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
 
       if parents.is_empty() {
         // Check for Git upstream branch
-        let repo = git2::Repository::open(&repo_path)
-          .context("Failed to open repository")?;
-        
+        let repo = git2::Repository::open(&repo_path).context("Failed to open repository")?;
+
         if let Ok(branch) = repo.find_branch(&branch_name, git2::BranchType::Local) {
           if let Ok(upstream) = branch.upstream() {
             if let Some(upstream_name) = upstream.name()? {
-              print_info(&format!("No twig parent defined for '{}', but Git upstream is: {}", 
-                branch_name, upstream_name));
+              print_info(&format!(
+                "No twig parent defined for '{}', but Git upstream is: {}",
+                branch_name, upstream_name
+              ));
             } else {
               print_info(&format!("No parent branches defined for '{}'", branch_name));
             }
