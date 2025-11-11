@@ -9,7 +9,7 @@ use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
-use git2::{BranchType, FetchOptions, Repository as Git2Repository};
+use git2::{BranchType, ErrorCode, FetchOptions, Repository as Git2Repository};
 use owo_colors::OwoColorize;
 use serde::Serialize;
 use tokio::{task, time};
@@ -728,9 +728,59 @@ fn prompt_for_deletion(branch_name: &str) -> Result<bool> {
 
 /// Delete a git branch
 fn delete_branch(repo: &Git2Repository, branch_name: &str) -> Result<()> {
-  let mut branch = repo.find_branch(branch_name, git2::BranchType::Local)?;
-  branch.delete()?;
+  let reference_name = format!("refs/heads/{branch_name}");
+  let mut reference = repo
+    .find_reference(&reference_name)
+    .with_context(|| format!("Failed to find branch reference '{reference_name}'"))?;
+
+  reference
+    .delete()
+    .with_context(|| format!("Failed to delete reference '{reference_name}'"))?;
+
+  cleanup_branch_config(repo, branch_name);
+
   Ok(())
+}
+
+fn cleanup_branch_config(repo: &Git2Repository, branch_name: &str) {
+  let mut config = match repo.config() {
+    Ok(config) => config,
+    Err(err) => {
+      tracing::debug!(error = %err, branch = branch_name, "Failed to open git config for cleanup");
+      return;
+    }
+  };
+
+  let pattern = format!("branch.{branch_name}.*");
+  let mut keys = Vec::new();
+
+  match config.entries(Some(&pattern)) {
+    Ok(mut entries) => {
+      while let Some(entry) = entries.next() {
+        match entry {
+          Ok(entry) => {
+            if let Some(name) = entry.name() {
+              keys.push(name.to_string());
+            }
+          }
+          Err(err) => {
+            tracing::debug!(error = %err, branch = branch_name, "Failed to read branch config entry");
+          }
+        }
+      }
+    }
+    Err(err) => {
+      tracing::debug!(error = %err, branch = branch_name, "Failed to enumerate branch config entries");
+    }
+  }
+
+  for key in keys {
+    if let Err(err) = config.remove(&key) {
+      if err.code() != ErrorCode::NotFound {
+        tracing::debug!(error = %err, %key, branch = branch_name, "Failed to remove branch config entry");
+      }
+    }
+  }
 }
 
 /// Display prune summary
@@ -769,6 +819,7 @@ fn display_prune_summary(summary: &PruneSummary) {
 #[cfg(test)]
 mod tests {
   use chrono::Utc;
+  use git2::{BranchType, ErrorCode};
   use serde_json::Value;
   use twig_core::RepoState;
   use twig_test_utils::{
@@ -776,6 +827,37 @@ mod tests {
   };
 
   use super::*;
+
+  #[test]
+  fn delete_branch_removes_related_config_entries() {
+    let git_repo = GitRepoTestGuard::new();
+    let repo = &git_repo.repo;
+
+    create_commit(repo, "README.md", "# Test Repo", "Initial commit").unwrap();
+    create_branch(repo, "main", None).unwrap();
+    checkout_branch(repo, "main").unwrap();
+    create_branch(repo, "feature/test-cleanup", Some("main")).unwrap();
+
+    let mut config = repo.config().unwrap();
+    config
+      .set_str("branch.feature/test-cleanup.github-pr-owner-number", "123")
+      .unwrap();
+    config.set_str("branch.feature/test-cleanup.remote", "origin").unwrap();
+
+    delete_branch(repo, "feature/test-cleanup").unwrap();
+
+    assert!(repo.find_branch("feature/test-cleanup", BranchType::Local).is_err());
+
+    let config = repo.config().unwrap();
+    assert!(matches!(
+      config.get_entry("branch.feature/test-cleanup.github-pr-owner-number"),
+      Err(err) if err.code() == ErrorCode::NotFound
+    ));
+    assert!(matches!(
+      config.get_entry("branch.feature/test-cleanup.remote"),
+      Err(err) if err.code() == ErrorCode::NotFound
+    ));
+  }
 
   #[test]
   fn test_find_stale_branches_with_date_filtering() {
