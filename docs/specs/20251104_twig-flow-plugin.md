@@ -266,8 +266,12 @@ error: the argument '--root' cannot be used with '--parent'
 | P0       | Design branch graph data structures in `twig-core`.                        | Spec and initial interfaces ready for implementation.                                                | Consider performance implications for large repos.                                | ✅ Completed – branch graph domain models and builder scaffolding added under `twig-core/src/git/graph.rs` |
 | P0       | Specify branch switching shared service API.                               | Interface defined so CLI + plugin share same code path.                                              | Identify behavior parity with `twig switch`.                                      | ✅ Completed – shared service API skeleton added under `twig-core/src/git/switch.rs`                       |
 | P0       | Finalize renderer API & column schema.                                     | Document concrete structs/enums + default schema in spec and prepare module skeleton in `twig-core`. | Captures `BranchTableRenderer`, schema types, and metadata mapping rules.         | ✅ Completed – see "Renderer API & Column Schema" and `twig-core/src/git/renderer.rs`.                      |
-| P0       | Implement renderer core in `twig-core`.                                    | Produce tree+table formatter operating on `BranchGraph` with alignment + placeholders.               | No CLI integration yet; include internal feature gate for hidden customization.   |                                                                                                            |
-| P0       | Add unit & snapshot tests for renderer.                                    | Cover width calculations, connectors, and schema overrides using `insta` fixtures.                   | Lives under `twig-core` tests; uses synthetic graphs.                             | ✅ Completed – see `twig-core/src/git/renderer.rs` tests + new snapshots (`flow_renderer__no_header`, `flow_renderer__custom_schema`). |
+| P0       | Implement renderer core in `twig-core`.                                    | Produce tree+table formatter operating on `BranchGraph` with alignment + placeholders.               | No CLI integration yet; include internal feature gate for hidden customization.   |
+| P0       | Wire tree visualization mode in plugin.                                    | `twig flow` renders branch table via shared renderer, honors `--root`/`--parent`, and surfaces errors via output helpers. | Integrates repo detection + branch graph builder; replaces placeholder info message. |
+| P0       | Wire branch switching mode in plugin.                                      | `twig flow <target>` delegates to shared switch service and prints outcomes consistent with `twig switch`. | Supports Jira ticket resolution, new branch creation, and dry-run confirmations. |
+| P0       | Add end-to-end plugin tests.                                               | Integration tests cover visualization (snapshot) and switching scenarios using `twig-test-utils`.    | Lives under `plugins/twig-flow/tests`; exercises both modes and error cases.      |
+|
+| P0       | Add unit & snapshot tests for renderer.                                    | Cover width calculations, connectors, and schema overrides using `insta` fixtures.                   | Lives under `twig-core` tests; uses synthetic graphs.                   | ✅ Completed – see `twig-core/src/git/renderer.rs` tests + new snapshots (`flow_renderer__no_header`, `flow_renderer__custom_schema`). |
 | P0       | Handle multi-parent `--parent` edge case.                                  | Error messaging and parent listings defined; renderer call short-circuits when multiple parents.     | Future interactive selection tracked separately.                                  |                                                                                                            |
 | P1       | Draft CLI UX for tree visualization (mock outputs).                        | Example outputs stored in spec or doc, capturing formatting rules.                                   | Hybrid tree/table layout with default `Branch/Story/PR/Notes` columns.            | ✅ Completed – see "CLI UX Mockups" section                                                                |
 | P1       | Define internal column schema configuration.                               | Document data model + default columns for renderer with hidden config override.                      | Enables future customization without public CLI surface.                          | ⏳ Pending – unblocked by renderer API; implementation will hook config files into schema overrides.       |
@@ -323,9 +327,9 @@ error: the argument '--root' cannot be used with '--parent'
 
 ## Status Tracking (to be updated by subagent)
 
-- **Current focus:** _Plan integration tests & fixtures_
-- **Latest completed task:** _Outline documentation deliverables_
-- **Next up:** _Explore interactive parent selection UX_
+- **Current focus:** _Implement renderer core in `twig-core`_
+- **Latest completed task:** _Add unit & snapshot tests for renderer_
+- **Next up:** _Wire tree visualization mode in plugin_
 
 ## Lessons Learned (ongoing)
 
