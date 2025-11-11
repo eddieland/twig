@@ -9,14 +9,13 @@ use clap::{ArgGroup, Parser};
     .multiple(false)
 ))]
 pub struct Cli {
-  /// Render the branch tree rooted at the specified branch after switching to
-  /// it.
-  #[arg(long, value_name = "BRANCH")]
-  pub root: Option<String>,
+  /// Switch to the configured root branch before rendering the tree.
+  #[arg(long)]
+  pub root: bool,
 
-  /// Render the subtree for the specified parent branch after switching to it.
-  #[arg(long, value_name = "BRANCH")]
-  pub parent: Option<String>,
+  /// Switch to the current branch's parent before rendering.
+  #[arg(long)]
+  pub parent: bool,
 
   /// Optional branch or ticket target for switching mode.
   #[arg(value_name = "TARGET")]
