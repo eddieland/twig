@@ -12,9 +12,11 @@ use std::fmt;
 use std::sync::Arc;
 
 use anyhow::Error as AnyError;
-use chrono::{DateTime, Utc};
-use git2::Oid;
+use chrono::{DateTime, TimeZone, Utc};
+use git2::{self, BranchType, Oid, Repository};
 use thiserror::Error;
+
+use crate::state::RepoState;
 
 /// Canonical identifier for a branch within a [`BranchGraph`].
 ///
@@ -267,10 +269,9 @@ pub enum BranchGraphError {
   /// HEAD).
   #[error("repository does not contain a valid HEAD reference")]
   MissingHead,
-  /// Placeholder variant signalling that full graph construction has not yet
-  /// been implemented.
-  #[error("branch graph construction has not been implemented yet")]
-  NotImplemented,
+  /// The repository does not expose a working directory (bare repository).
+  #[error("repository does not have a working directory")]
+  MissingWorkdir,
   /// Wrapper for lower-level errors originating from `git2`.
   #[error(transparent)]
   Git(#[from] git2::Error),
@@ -331,11 +332,253 @@ impl BranchGraphBuilder {
   }
 
   /// Produce a branch graph for the provided repository.
-  ///
-  /// The implementation will be provided in a follow-up task; for now we
-  /// return a stable error variant so downstream callers can begin integrating
-  /// against the API.
-  pub fn build(self, _repo: &git2::Repository) -> Result<BranchGraph, BranchGraphError> {
-    Err(BranchGraphError::NotImplemented)
+  pub fn build(self, repo: &Repository) -> Result<BranchGraph, BranchGraphError> {
+    let workdir = repo.workdir().ok_or(BranchGraphError::MissingWorkdir)?;
+    let repo_state = RepoState::load(workdir).map_err(BranchGraphError::Other)?;
+
+    let head_branch = repo
+      .head()
+      .ok()
+      .and_then(|head| head.shorthand().map(|s| s.to_string()));
+    let mut nodes = self.collect_branches(repo, &repo_state)?;
+
+    if nodes.is_empty() {
+      return Ok(BranchGraph::new());
+    }
+
+    let edges = if self.include_declared_dependencies {
+      self.apply_dependencies(&repo_state, &mut nodes)
+    } else {
+      Vec::new()
+    };
+
+    let root_candidates = self.resolve_root_candidates(&repo_state, &nodes, head_branch.as_deref());
+    let current_branch = head_branch
+      .as_ref()
+      .and_then(|name| nodes.get(name))
+      .map(|node| node.name.clone());
+
+    Ok(BranchGraph::from_parts(
+      nodes.into_values(),
+      edges,
+      root_candidates,
+      current_branch,
+    ))
+  }
+
+  fn collect_branches(
+    &self,
+    repo: &Repository,
+    repo_state: &RepoState,
+  ) -> Result<BTreeMap<String, BranchNode>, BranchGraphError> {
+    let mut nodes = BTreeMap::new();
+    self.collect_branch_type(repo, BranchType::Local, BranchKind::Local, repo_state, &mut nodes)?;
+
+    if self.include_remote_branches {
+      self.collect_branch_type(repo, BranchType::Remote, BranchKind::Remote, repo_state, &mut nodes)?;
+    }
+
+    Ok(nodes)
+  }
+
+  fn collect_branch_type(
+    &self,
+    repo: &Repository,
+    branch_type: BranchType,
+    kind: BranchKind,
+    repo_state: &RepoState,
+    nodes: &mut BTreeMap<String, BranchNode>,
+  ) -> Result<(), BranchGraphError> {
+    let branches = repo.branches(Some(branch_type))?;
+
+    for branch_result in branches {
+      let (branch, _) = branch_result?;
+      let Some(name) = branch.name()?.map(|s| s.to_string()) else {
+        continue;
+      };
+
+      if nodes.contains_key(&name) {
+        continue;
+      }
+
+      let head = Self::branch_head(&branch)?;
+      let upstream = branch
+        .upstream()
+        .ok()
+        .and_then(|upstream| upstream.name().ok().flatten().map(|s| s.to_string()));
+
+      let mut metadata = BranchNodeMetadata {
+        is_current: branch.is_head(),
+        ..BranchNodeMetadata::default()
+      };
+      Self::apply_branch_metadata(repo_state, &name, &mut metadata);
+
+      let node = BranchNode {
+        name: BranchName::from(name.clone()),
+        kind,
+        head,
+        upstream: upstream.map(BranchName::from),
+        topology: BranchTopology::default(),
+        metadata,
+      };
+
+      nodes.insert(name, node);
+    }
+
+    Ok(())
+  }
+
+  fn branch_head(branch: &git2::Branch<'_>) -> Result<BranchHead, BranchGraphError> {
+    let reference = branch.get();
+    let commit = reference.peel_to_commit()?;
+    let summary = commit.summary().map(|s| s.to_string());
+    let author = commit.author().name().map(|name| name.to_string());
+    let time = commit.time();
+    let timestamp = time.seconds() + i64::from(time.offset_minutes()) * 60;
+    let committed_at = Utc.timestamp_opt(timestamp, 0).single();
+
+    Ok(BranchHead {
+      oid: commit.id(),
+      summary,
+      author,
+      committed_at,
+    })
+  }
+
+  fn apply_branch_metadata(repo_state: &RepoState, branch: &str, metadata: &mut BranchNodeMetadata) {
+    if let Some(branch_meta) = repo_state.get_branch_metadata(branch) {
+      if let Some(jira) = &branch_meta.jira_issue {
+        metadata.labels.insert(jira.clone());
+      }
+
+      if let Some(pr) = branch_meta.github_pr {
+        metadata
+          .annotations
+          .insert("twig.pr".to_string(), BranchAnnotationValue::Numeric(pr as i64));
+      }
+    }
+  }
+
+  fn apply_dependencies(&self, repo_state: &RepoState, nodes: &mut BTreeMap<String, BranchNode>) -> Vec<BranchEdge> {
+    let mut edges = Vec::new();
+    let mut parents_by_child: BTreeMap<String, Vec<BranchName>> = BTreeMap::new();
+
+    for dependency in repo_state.list_dependencies() {
+      if nodes.contains_key(&dependency.child) && nodes.contains_key(&dependency.parent) {
+        let parent_name = nodes
+          .get(&dependency.parent)
+          .map(|node| node.name.clone())
+          .expect("checked via contains_key");
+        parents_by_child
+          .entry(dependency.child.clone())
+          .or_default()
+          .push(parent_name);
+      }
+    }
+
+    for dependency in repo_state.list_dependencies() {
+      if let Some(child_branch) = nodes.get(&dependency.child).map(|node| node.name.clone())
+        && let Some(parent_node) = nodes.get_mut(&dependency.parent)
+      {
+        if !parent_node.topology.children.iter().any(|child| child == &child_branch) {
+          parent_node.topology.children.push(child_branch.clone());
+        }
+        edges.push(BranchEdge::new(parent_node.name.clone(), child_branch));
+      }
+    }
+
+    for node in nodes.values_mut() {
+      node.topology.children.sort();
+    }
+
+    for (child, parents) in parents_by_child {
+      if let Some(child_node) = nodes.get_mut(&child) {
+        if let Some(primary) = parents.first() {
+          child_node.topology.primary_parent = Some(primary.clone());
+        }
+        child_node.topology.secondary_parents = parents.iter().skip(1).cloned().collect();
+      }
+    }
+
+    edges
+  }
+
+  fn resolve_root_candidates(
+    &self,
+    repo_state: &RepoState,
+    nodes: &BTreeMap<String, BranchNode>,
+    head_branch: Option<&str>,
+  ) -> Vec<BranchName> {
+    let mut roots = Vec::new();
+
+    for root in repo_state.get_root_branches() {
+      if let Some(node) = nodes.get(&root) {
+        roots.push(node.name.clone());
+      }
+    }
+
+    if roots.is_empty()
+      && let Some(head) = head_branch
+      && let Some(node) = nodes.get(head)
+    {
+      roots.push(node.name.clone());
+    }
+
+    if roots.is_empty()
+      && let Some(node) = nodes.values().next()
+    {
+      roots.push(node.name.clone());
+    }
+
+    roots
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use chrono::Utc;
+  use twig_test_utils::git::{GitRepoTestGuard, create_commit};
+
+  use super::*;
+  use crate::state::{BranchMetadata, RepoState};
+
+  #[test]
+  fn builds_graph_with_dependencies_and_metadata() {
+    let repo_guard = GitRepoTestGuard::new();
+    let repo = &repo_guard.repo;
+
+    create_commit(repo, "README.md", "hello", "initial").unwrap();
+    let head = repo.head().unwrap().peel_to_commit().unwrap();
+    let head_name = repo.head().unwrap().shorthand().unwrap().to_string();
+    repo.branch("feature/payment", &head, false).unwrap();
+
+    let workdir = repo.workdir().unwrap();
+
+    let mut state = RepoState::default();
+    state.add_root(head_name.clone(), true).unwrap();
+    state.add_branch_issue(BranchMetadata {
+      branch: "feature/payment".into(),
+      jira_issue: Some("PROJ-123".into()),
+      github_pr: Some(42),
+      created_at: Utc::now().to_rfc3339(),
+    });
+    state
+      .add_dependency("feature/payment".to_string(), head_name.clone())
+      .unwrap();
+    state.save(workdir).unwrap();
+
+    let graph = BranchGraphBuilder::new().build(repo).unwrap();
+    assert_eq!(graph.len(), 2);
+
+    let root = graph.root_candidates().first().unwrap();
+    assert_eq!(root.as_str(), head_name);
+
+    let feature = graph.get(&BranchName::from("feature/payment")).unwrap();
+    assert_eq!(feature.topology.primary_parent.as_ref().unwrap().as_str(), head_name);
+    assert!(feature.metadata.labels.contains("PROJ-123"));
+    match feature.metadata.annotations.get("twig.pr").unwrap() {
+      BranchAnnotationValue::Numeric(value) => assert_eq!(*value, 42),
+      other => panic!("unexpected annotation value: {other:?}"),
+    }
   }
 }

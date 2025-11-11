@@ -2566,6 +2566,7 @@ version = "0.3.1"
 dependencies = [
  "anyhow",
  "clap",
+ "git2",
  "twig-core",
  "twig-test-utils",
 ]
