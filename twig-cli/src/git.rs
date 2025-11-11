@@ -775,10 +775,10 @@ fn cleanup_branch_config(repo: &Git2Repository, branch_name: &str) {
   }
 
   for key in keys {
-    if let Err(err) = config.remove(&key) {
-      if err.code() != ErrorCode::NotFound {
-        tracing::debug!(error = %err, %key, branch = branch_name, "Failed to remove branch config entry");
-      }
+    if let Err(err) = config.remove(&key)
+      && err.code() != ErrorCode::NotFound
+    {
+      tracing::debug!(error = %err, %key, branch = branch_name, "Failed to remove branch config entry");
     }
   }
 }
