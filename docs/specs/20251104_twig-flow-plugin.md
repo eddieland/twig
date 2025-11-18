@@ -268,7 +268,7 @@ error: the argument '--root' cannot be used with '--parent'
 | P0       | Finalize renderer API & column schema.                                     | Document concrete structs/enums + default schema in spec and prepare module skeleton in `twig-core`.                      | Captures `BranchTableRenderer`, schema types, and metadata mapping rules.            | ✅ Completed – see "Renderer API & Column Schema" and `twig-core/src/git/renderer.rs`.                                                 |
 | P0       | Implement renderer core in `twig-core`.                                    | Produce tree+table formatter operating on `BranchGraph` with alignment + placeholders.                                    | No CLI integration yet; include internal feature gate for hidden customization.      | ✅ Completed – renderer + builder integration landed in `twig-core/src/git/{graph,renderer}.rs`.                                      |
 | P0       | Wire tree visualization mode in plugin.                                    | `twig flow` renders branch table via shared renderer, honors `--root`/`--parent`, and surfaces errors via output helpers. | Integrates repo detection + branch graph builder; replaces placeholder info message. | ✅ Completed – plugin tree path uses `BranchGraphBuilder` + renderer (`plugins/twig-flow/src/tree.rs`).                                 |
-| P0       | Wire branch switching mode in plugin.                                      | `twig flow <target>` delegates to shared switch service and prints outcomes consistent with `twig switch`.                | Supports Jira ticket resolution, new branch creation, and dry-run confirmations.     |
+| P0       | Wire branch switching mode in plugin.                                      | `twig flow <target>` delegates to shared switch service and prints outcomes consistent with `twig switch`.                | Supports Jira ticket resolution, new branch creation, and dry-run confirmations.     | ✅ Completed – plugin switching path now checks out existing branches or creates them from `HEAD` (`plugins/twig-flow/src/switch.rs`); follow-ups will extend request parsing for Jira/PR targets. |
 | P0       | Add end-to-end plugin tests.                                               | Integration tests cover visualization (snapshot) and switching scenarios using `twig-test-utils`.                         | Lives under `plugins/twig-flow/tests`; exercises both modes and error cases.         |
 | P0       | Add unit & snapshot tests for renderer.                                    | Cover width calculations, connectors, and schema overrides using `insta` fixtures.                                        | Lives under `twig-core` tests; uses synthetic graphs.                                | ✅ Completed – see `twig-core/src/git/renderer.rs` tests + new snapshots (`flow_renderer__no_header`, `flow_renderer__custom_schema`). |
 | P0       | Handle multi-parent `--parent` edge case.                                  | Error messaging and parent listings defined; renderer call short-circuits when multiple parents.                          | Future interactive selection tracked separately.                                     | ✅ Completed – plugin now surfaces explicit error/output when multiple parents exist (`plugins/twig-flow/src/tree.rs`).                |
@@ -326,9 +326,9 @@ error: the argument '--root' cannot be used with '--parent'
 
 ## Status Tracking (to be updated by subagent)
 
-- **Current focus:** _Wire branch switching mode in plugin_
-- **Latest completed task:** _Wire tree visualization mode in plugin_
-- **Next up:** _Add end-to-end plugin tests_
+- **Current focus:** _Add end-to-end plugin tests_
+- **Latest completed task:** _Wire branch switching mode in plugin_
+- **Next up:** _Expand switch parsing to Jira/PR targets_
 
 ## Lessons Learned (ongoing)
 
