@@ -3,7 +3,9 @@
 //! Implements the plugin discovery system that allows twig to execute external
 //! plugins following the kubectl/Docker-inspired plugin model.
 
+use std::collections::BTreeMap;
 use std::env;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result};
@@ -77,12 +79,26 @@ fn plugin_exists(plugin_name: &str) -> Result<bool> {
   Ok(false)
 }
 
-/// List available plugins in PATH
-pub fn list_available_plugins() -> Result<Vec<String>> {
-  let mut plugins = Vec::new();
+/// Metadata describing a discovered plugin binary.
+#[derive(Debug, Clone)]
+pub struct PluginInfo {
+  /// Canonical plugin name without the `twig-` prefix.
+  pub name: String,
+  /// Ordered list of plugin locations in PATH order (primary first).
+  pub paths: Vec<PathBuf>,
+  /// File size in bytes for the primary plugin location, if available.
+  pub size_in_bytes: Option<u64>,
+}
 
-  // Get PATH environment variable
+/// List available plugins in PATH with basic metadata.
+pub fn list_available_plugins() -> Result<Vec<PluginInfo>> {
   let path_var = env::var("PATH").unwrap_or_default();
+  list_available_plugins_from_path(&path_var)
+}
+
+fn list_available_plugins_from_path(path_var: &str) -> Result<Vec<PluginInfo>> {
+  let mut plugins: BTreeMap<String, Vec<PathBuf>> = BTreeMap::new();
+
   let paths: Vec<&str> = if cfg!(windows) {
     path_var.split(';').collect()
   } else {
@@ -111,16 +127,34 @@ pub fn list_available_plugins() -> Result<Vec<String>> {
             plugin_name
           };
 
-          if !plugins.contains(&plugin_name.to_string()) {
-            plugins.push(plugin_name.to_string());
+          let entry_path = entry.path();
+          let plugin_paths = plugins.entry(plugin_name.to_string()).or_default();
+
+          if !plugin_paths.contains(&entry_path) {
+            plugin_paths.push(entry_path);
           }
         }
       }
     }
   }
 
-  plugins.sort();
-  Ok(plugins)
+  let mut plugin_info: Vec<PluginInfo> = Vec::new();
+
+  for (name, paths) in plugins {
+    if paths.is_empty() {
+      continue;
+    }
+
+    let size_in_bytes = std::fs::metadata(&paths[0]).map(|metadata| metadata.len()).ok();
+
+    plugin_info.push(PluginInfo {
+      name,
+      paths,
+      size_in_bytes,
+    });
+  }
+
+  Ok(plugin_info)
 }
 
 /// Generate suggestions for unknown commands
@@ -233,6 +267,10 @@ fn levenshtein_distance(s1: &str, s2: &str) -> usize {
 
 #[cfg(test)]
 mod tests {
+  use std::fs;
+
+  use tempfile::TempDir;
+
   use super::*;
 
   #[test]
@@ -254,5 +292,46 @@ mod tests {
 
     let suggestions = suggest_similar_commands("brach", &plugins);
     assert!(suggestions.contains(&"branch".to_string()));
+  }
+
+  #[test]
+  fn list_available_plugins_collects_paths_and_sizes() {
+    let first_dir = TempDir::new().expect("failed to create temp dir");
+    let second_dir = TempDir::new().expect("failed to create temp dir");
+
+    let primary_plugin = first_dir.path().join("twig-example");
+    fs::write(&primary_plugin, b"#!/bin/sh\necho primary\n").unwrap();
+
+    let duplicate_plugin = second_dir.path().join("twig-example");
+    fs::write(&duplicate_plugin, b"#!/bin/sh\necho duplicate\n").unwrap();
+
+    let secondary_plugin = second_dir.path().join("twig-another");
+    fs::write(&secondary_plugin, b"#!/bin/sh\necho another\n").unwrap();
+
+    let custom_path = format!("{}:{}", first_dir.path().display(), second_dir.path().display());
+
+    let plugins = list_available_plugins_from_path(&custom_path).expect("listing plugins failed");
+
+    let example = plugins
+      .iter()
+      .find(|plugin| plugin.name == "example")
+      .expect("example plugin missing");
+
+    assert_eq!(example.paths, vec![primary_plugin.clone(), duplicate_plugin]);
+    assert_eq!(
+      example.size_in_bytes,
+      fs::metadata(&primary_plugin).ok().map(|metadata| metadata.len())
+    );
+
+    let another = plugins
+      .iter()
+      .find(|plugin| plugin.name == "another")
+      .expect("another plugin missing");
+
+    assert_eq!(another.paths, vec![secondary_plugin.clone()]);
+    assert_eq!(
+      another.size_in_bytes,
+      fs::metadata(&secondary_plugin).ok().map(|metadata| metadata.len())
+    );
   }
 }

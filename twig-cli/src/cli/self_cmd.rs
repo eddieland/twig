@@ -97,8 +97,41 @@ fn list_plugins() -> Result<()> {
   print_header("Available Twig plugins");
 
   for plugin in plugins {
-    println!("  {}", format_command(&format!("twig-{plugin}")));
+    println!("  {}", format_command(&format!("twig-{}", plugin.name)));
+
+    if let Some(primary) = plugin.paths.first() {
+      println!("    Path: {}", primary.display());
+    }
+
+    if let Some(size_in_bytes) = plugin.size_in_bytes {
+      println!("    Size: {}", format_file_size(size_in_bytes));
+    }
+
+    if plugin.paths.len() > 1 {
+      println!("    Also found at:");
+      for alternate in plugin.paths.iter().skip(1) {
+        println!("      - {}", alternate.display());
+      }
+    }
   }
 
   Ok(())
+}
+
+fn format_file_size(bytes: u64) -> String {
+  const KIB: f64 = 1024.0;
+  let mut size = bytes as f64;
+  let units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let mut unit_index = 0;
+
+  while size >= KIB && unit_index < units.len() - 1 {
+    size /= KIB;
+    unit_index += 1;
+  }
+
+  if unit_index == 0 {
+    format!("{} {}", bytes, units[unit_index])
+  } else {
+    format!("{size:.1} {}", units[unit_index])
+  }
 }
