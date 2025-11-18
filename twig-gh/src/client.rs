@@ -72,7 +72,9 @@ impl GitHubClient {
 }
 
 /// Create a GitHub client from credentials
+#[instrument(level = "debug", skip(token))]
 pub fn create_github_client(username: &str, token: &str) -> GitHubClient {
+  debug!(username, "Creating GitHub client from credentials");
   let auth = GitHubAuth {
     username: username.to_string(),
     token: token.to_string(),
