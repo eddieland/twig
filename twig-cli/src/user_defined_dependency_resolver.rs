@@ -86,6 +86,9 @@ impl UserDefinedDependencyResolver {
     // Second pass: build parent-child relationships from user-defined dependencies
     self.build_dependencies_from_state(&mut branch_nodes, repo_state);
 
+    // Attach orphaned branches to the default root (if configured)
+    self.attach_orphans_to_default_root(&mut branch_nodes, repo_state);
+
     Ok(branch_nodes)
   }
 
@@ -111,6 +114,51 @@ impl UserDefinedDependencyResolver {
         {
           parent_node.children.push(child_name.clone());
         }
+      }
+    }
+  }
+
+  /// Attach orphaned branches to the default root so they appear under it in
+  /// the tree
+  fn attach_orphans_to_default_root(&self, branch_nodes: &mut HashMap<String, BranchNode>, repo_state: &RepoState) {
+    let Some(default_root) = repo_state.get_default_root() else {
+      return;
+    };
+
+    if !branch_nodes.contains_key(default_root) {
+      return;
+    }
+
+    let default_root = default_root.to_string();
+    let root_names: std::collections::HashSet<_> = repo_state
+      .list_roots()
+      .iter()
+      .map(|root| root.branch.as_str())
+      .collect();
+
+    let orphaned: Vec<_> = branch_nodes
+      .iter()
+      .filter(|(branch_name, node)| {
+        node.parents.is_empty() && !root_names.contains(branch_name.as_str()) && **branch_name != default_root
+      })
+      .map(|(branch_name, _)| branch_name.clone())
+      .collect();
+
+    if orphaned.is_empty() {
+      return;
+    }
+
+    for branch_name in orphaned {
+      if let Some(child_node) = branch_nodes.get_mut(&branch_name)
+        && !child_node.parents.contains(&default_root)
+      {
+        child_node.parents.push(default_root.clone());
+      }
+
+      if let Some(parent_node) = branch_nodes.get_mut(&default_root)
+        && !parent_node.children.contains(&branch_name)
+      {
+        parent_node.children.push(branch_name.clone());
       }
     }
   }
@@ -325,13 +373,16 @@ mod tests {
     let mut branch_nodes = create_test_branch_nodes();
 
     resolver.build_dependencies_from_state(&mut branch_nodes, &repo_state);
+    resolver.attach_orphans_to_default_root(&mut branch_nodes, &repo_state);
     let (roots, orphaned) = resolver.build_tree_from_user_dependencies(&branch_nodes, &repo_state);
 
     // Should have main as root
     assert!(roots.contains(&"main".to_string()));
 
-    // feature/auth should be orphaned (no dependencies defined for it)
-    assert!(orphaned.contains(&"feature/auth".to_string()));
+    // Orphaned branches should be attached to the default root
+    assert!(branch_nodes["main"].children.contains(&"feature/auth".to_string()));
+    assert!(branch_nodes["feature/auth"].parents.contains(&"main".to_string()));
+    assert!(!orphaned.contains(&"feature/auth".to_string()));
   }
 
   #[test]
