@@ -99,14 +99,7 @@ pub fn list_available_plugins() -> Result<Vec<PluginInfo>> {
 fn list_available_plugins_from_path(path_var: &str) -> Result<Vec<PluginInfo>> {
   let mut plugins: BTreeMap<String, Vec<PathBuf>> = BTreeMap::new();
 
-  let paths: Vec<&str> = if cfg!(windows) {
-    path_var.split(';').collect()
-  } else {
-    path_var.split(':').collect()
-  };
-
-  for path_str in paths {
-    let path = std::path::Path::new(path_str);
+  for path in env::split_paths(path_var) {
     if !path.exists() {
       continue;
     }
@@ -308,7 +301,10 @@ mod tests {
     let secondary_plugin = second_dir.path().join("twig-another");
     fs::write(&secondary_plugin, b"#!/bin/sh\necho another\n").unwrap();
 
-    let custom_path = format!("{}:{}", first_dir.path().display(), second_dir.path().display());
+    let custom_path = std::env::join_paths([first_dir.path(), second_dir.path()])
+      .expect("failed to construct custom PATH")
+      .into_string()
+      .expect("temporary plugin paths should be valid UTF-8");
 
     let plugins = list_available_plugins_from_path(&custom_path).expect("listing plugins failed");
 
