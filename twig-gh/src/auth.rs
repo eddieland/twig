@@ -9,6 +9,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use tokio::runtime::Runtime;
+use tracing::{debug, instrument};
 use twig_core::creds::Credentials;
 use twig_core::creds::platform::{CredentialProvider, get_credential_provider};
 
@@ -17,17 +18,23 @@ use crate::{GitHubClient, create_github_client};
 const GITHUB_MACHINE: &str = "github.com";
 
 /// Check if GitHub credentials are available for the current user.
+#[instrument(level = "debug", skip(home))]
 pub fn check_github_credentials(home: &Path) -> Result<bool> {
   let provider = get_credential_provider(home);
   let creds = provider.get_credentials(GITHUB_MACHINE)?;
+  debug!("Checked for GitHub credentials");
   Ok(creds.is_some())
 }
 
 /// Load GitHub credentials from the configured credential provider.
+#[instrument(level = "debug", skip(home))]
 pub fn get_github_credentials(home: &Path) -> Result<Credentials> {
   let provider = get_credential_provider(home);
   match provider.get_credentials(GITHUB_MACHINE)? {
-    Some(creds) => Ok(creds),
+    Some(creds) => {
+      debug!(username = %creds.username, "Loaded GitHub credentials");
+      Ok(creds)
+    }
     None => {
       #[cfg(unix)]
       let error_msg = "GitHub credentials not found in .netrc file. Please add credentials for machine 'github.com'.";
@@ -40,13 +47,15 @@ pub fn get_github_credentials(home: &Path) -> Result<Credentials> {
 }
 
 /// Creates an authenticated GitHub client using credentials from .netrc.
+#[instrument(level = "debug", skip(home))]
 pub fn create_github_client_from_netrc(home: &Path) -> Result<GitHubClient> {
   let credentials = get_github_credentials(home).context("Failed to get credentials")?;
-
+  debug!(username = %credentials.username, "Creating GitHub client from .netrc credentials");
   Ok(create_github_client(&credentials.username, &credentials.password))
 }
 
 /// Creates a tokio runtime and an authenticated GitHub client.
+#[instrument(level = "debug", skip(home))]
 pub fn create_github_runtime_and_client(home: &Path) -> Result<(Runtime, GitHubClient)> {
   let rt = Runtime::new().context("Failed to create async runtime")?;
   let client = create_github_client_from_netrc(home)?;
