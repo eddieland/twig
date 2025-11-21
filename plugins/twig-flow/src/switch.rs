@@ -70,12 +70,17 @@ fn branch_exists(repo: &Repository, name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+  use std::sync::Mutex;
+
   use twig_test_utils::{GitRepoTestGuard, checkout_branch as checkout, create_branch, create_commit};
 
   use super::*;
 
+  static TEST_GUARD: Mutex<()> = Mutex::new(());
+
   #[test]
   fn switches_to_existing_branch() -> Result<()> {
+    let _lock = TEST_GUARD.lock().unwrap();
     let guard = GitRepoTestGuard::new_and_change_dir();
     create_commit(&guard.repo, "file.txt", "content", "initial")?;
     create_branch(&guard.repo, "feature/existing", None)?;
@@ -99,6 +104,7 @@ mod tests {
 
   #[test]
   fn creates_branch_when_missing() -> Result<()> {
+    let _lock = TEST_GUARD.lock().unwrap();
     let guard = GitRepoTestGuard::new_and_change_dir();
     create_commit(&guard.repo, "file.txt", "content", "initial")?;
 
