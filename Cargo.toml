@@ -129,3 +129,37 @@ opt-level = 1          # Reduce from 2 to 1 for faster compilation
 lto = "thin"           # Use thin LTO instead of full LTO
 codegen-units = 16     # Increase from 1 to enable parallel compilation
 debug = false          # Ensure no debug info
+
+# Warn on these additional lints to keep hygiene consistent across the workspace
+[lints.clippy]
+# --- Panic & unwrap safety ---
+unwrap_used = "warn"
+panic = "warn"
+panic_in_result_fn = "warn"
+todo = "warn"
+unimplemented = "warn"
+
+# --- Result / Option correctness ---
+map_err_ignore = "warn"
+bind_instead_of_map = "warn"
+map_flatten = "warn"
+
+# --- Logging & debugging hygiene ---
+print_stdout = "warn"
+print_stderr = "warn"
+dbg_macro = "warn"
+
+# --- Correctness & readability ---
+inefficient_to_string = "warn"
+shadow_unrelated = "warn"
+match_bool = "warn"
+needless_borrow = "warn"
+needless_lifetimes = "warn"
+useless_conversion = "warn"
+undocumented_unsafe_blocks = "warn"
+
+# --- API Hygiene ---
+missing_const_for_fn = "warn"
+redundant_pub_crate = "warn"
+pub_underscore_fields = "warn"
+pub_without_shorthand = "warn"

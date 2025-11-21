@@ -32,7 +32,7 @@ fn embed_build_info() {
     "cargo:rustc-env=BUILD_TIMESTAMP={}",
     std::time::SystemTime::now()
       .duration_since(std::time::UNIX_EPOCH)
-      .unwrap()
+      .expect("BUILD_TIMESTAMP value")
       .as_secs()
   );
 
