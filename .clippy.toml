@@ -16,3 +16,38 @@ allowed-duplicate-crates = []
 # This prevents Clippy from flagging proper nouns, acronyms, and common technical terms
 # that shouldn't be formatted as code identifiers
 doc-valid-idents = ["GitHub"]
+
+# Warn on these additional lints to keep hygiene consistent across the workspace
+warns = [
+  # --- Panic & unwrap safety ---
+  "clippy::unwrap_used",
+  "clippy::panic",
+  "clippy::panic_in_result_fn",
+  "clippy::todo",
+  "clippy::unimplemented",
+
+  # --- Result / Option correctness ---
+  "clippy::map_err_ignore",
+  "clippy::bind_instead_of_map",
+  "clippy::map_flatten",
+
+  # --- Logging & debugging hygiene ---
+  "clippy::print_stdout",
+  "clippy::print_stderr",
+  "clippy::dbg_macro",
+
+  # --- Correctness & readability ---
+  "clippy::inefficient_to_string",
+  "clippy::shadow_unrelated",
+  "clippy::match_bool",
+  "clippy::needless_borrow",
+  "clippy::needless_lifetimes",
+  "clippy::useless_conversion",
+  "clippy::undocumented_unsafe_blocks",
+
+  # --- API Hygiene ---
+  "clippy::missing_const_for_fn",
+  "clippy::redundant_pub_crate",
+  "clippy::pub_underscore_fields",
+  "clippy::pub_without_shorthand",
+]
