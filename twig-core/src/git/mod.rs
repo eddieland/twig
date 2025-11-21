@@ -24,7 +24,7 @@ pub use switch::{
   BranchBaseSource, BranchCreationBase, BranchCreationPolicy, BranchParentReference, BranchParentRequest,
   BranchStateMutations, BranchSwitchAction, BranchSwitchContext, BranchSwitchOutcome, BranchSwitchRequest,
   BranchSwitchService, BranchSwitchTarget, GitHubPullRequestReference, IssueAssociation, IssueReference,
-  PullRequestHead,
+  PullRequestHead, switch_or_create_local_branch,
 };
 
 /// Get commits ahead/behind between two branches

@@ -8,10 +8,57 @@
 
 use std::path::Path;
 
-use git2::{Oid, Repository};
+use anyhow::{Context, Result};
+use git2::{BranchType, Oid, Repository};
 
+use crate::git::checkout_branch;
 use crate::git::graph::BranchName;
 use crate::state::RepoState;
+
+/// Switch to the provided branch, creating it from `HEAD` when missing.
+///
+/// This helper mirrors the simple switching behaviour previously embedded in
+/// the `twig flow` plugin so that CLI and plugin callers can share logic.
+/// Callers are responsible for ensuring the repository is in a usable state
+/// (non-bare, working tree present).
+pub fn switch_or_create_local_branch(repository: &Repository, target: &BranchName) -> Result<BranchSwitchOutcome> {
+  if branch_exists(repository, target) {
+    checkout_branch(repository, target.as_str())?;
+
+    return Ok(BranchSwitchOutcome {
+      branch: target.clone(),
+      action: BranchSwitchAction::CheckedOutExisting,
+      state_mutations: BranchStateMutations::default(),
+    });
+  }
+
+  let head_commit = repository
+    .head()
+    .context("Repository does not have an active HEAD commit")?
+    .peel_to_commit()
+    .context("Failed to resolve HEAD commit")?;
+
+  repository
+    .branch(target.as_str(), &head_commit, false)
+    .with_context(|| format!("Failed to create branch \"{target}\" from HEAD"))?;
+  checkout_branch(repository, target.as_str())?;
+
+  Ok(BranchSwitchOutcome {
+    branch: target.clone(),
+    action: BranchSwitchAction::Created {
+      base: BranchCreationBase {
+        commit: head_commit.id(),
+        source: BranchBaseSource::Head,
+      },
+      upstream: None,
+    },
+    state_mutations: BranchStateMutations::default(),
+  })
+}
+
+fn branch_exists(repository: &Repository, target: &BranchName) -> bool {
+  repository.find_branch(target.as_str(), BranchType::Local).is_ok()
+}
 
 /// Request describing a branch switch operation.
 ///
@@ -191,7 +238,7 @@ pub struct BranchCreationBase {
 }
 
 /// Source of a branch base resolution.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum BranchBaseSource {
   /// The repository's HEAD commit.
@@ -276,4 +323,50 @@ pub trait BranchSwitchService {
     context: BranchSwitchContext<'_>,
     request: BranchSwitchRequest,
   ) -> anyhow::Result<BranchSwitchOutcome>;
+}
+
+#[cfg(test)]
+mod tests {
+  use twig_test_utils::git::{GitRepoTestGuard, create_branch, create_commit};
+
+  use super::*;
+
+  #[test]
+  fn checks_out_existing_branch() -> Result<()> {
+    let guard = GitRepoTestGuard::new();
+    create_commit(&guard.repo, "file.txt", "content", "initial")?;
+    create_branch(&guard.repo, "feature/existing", None)?;
+
+    let outcome = switch_or_create_local_branch(&guard.repo, &BranchName::from("feature/existing"))?;
+
+    assert!(matches!(outcome.action, BranchSwitchAction::CheckedOutExisting));
+
+    let refreshed = git2::Repository::open(guard.repo.path())?;
+    let head = refreshed.head()?;
+    assert_eq!(head.shorthand(), Some("feature/existing"));
+
+    Ok(())
+  }
+
+  #[test]
+  fn creates_branch_from_head_when_missing() -> Result<()> {
+    let guard = GitRepoTestGuard::new();
+    create_commit(&guard.repo, "file.txt", "content", "initial")?;
+
+    let outcome = switch_or_create_local_branch(&guard.repo, &BranchName::from("feature/new"))?;
+
+    match outcome.action {
+      BranchSwitchAction::Created { base, upstream } => {
+        assert_eq!(base.source, BranchBaseSource::Head);
+        assert!(upstream.is_none());
+      }
+      action => panic!("unexpected action {action:?}"),
+    }
+
+    let refreshed = git2::Repository::open(guard.repo.path())?;
+    let head = refreshed.head()?;
+    assert_eq!(head.shorthand(), Some("feature/new"));
+
+    Ok(())
+  }
 }
