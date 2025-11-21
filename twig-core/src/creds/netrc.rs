@@ -1,3 +1,9 @@
+//! Helpers for reading and writing credentials stored in `.netrc` files.
+//!
+//! These utilities are shared by the platform-specific credential providers and
+//! keep parsing and serialization logic in one place so the CLI and service
+//! clients can consistently discover credentials.
+
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -7,12 +13,46 @@ use anyhow::{Context, Result};
 use crate::creds::platform::FilePermissions;
 use crate::creds::{Credentials, platform};
 
-/// Get the path to the .netrc file
+/// Returns the path to the `.netrc` file for the provided home directory.
+///
+/// # Arguments
+///
+/// * `home` - The user's home directory, typically from
+///   `directories::BaseDirs::home_dir`.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::Path;
+/// use twig_core::creds::netrc::get_netrc_path;
+///
+/// let home = Path::new("/home/user");
+/// let path = get_netrc_path(home);
+/// assert_eq!(path, Path::new("/home/user/.netrc"));
+/// ```
 pub fn get_netrc_path(home: &Path) -> PathBuf {
   home.join(".netrc")
 }
 
-/// Parse a .netrc file for credentials for a specific machine
+/// Parses a `.netrc` file and returns credentials for the requested machine.
+///
+/// The parser supports both single-line (`machine host login user password pass`)
+/// and multi-line formats. If the target machine is not present or has missing
+/// `login`/`password` values, `Ok(None)` is returned.
+///
+/// # Arguments
+///
+/// * `path` - Path to the `.netrc` file to read.
+/// * `target_machine` - Hostname to search for (e.g. `github.com`).
+///
+/// # Returns
+///
+/// * `Ok(Some(Credentials))` when valid credentials are found.
+/// * `Ok(None)` when the machine entry is missing or incomplete.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be opened or read.
 pub fn parse_netrc_file(path: &Path, target_machine: &str) -> Result<Option<Credentials>> {
   let file = File::open(path).context("Failed to open .netrc file")?;
   let reader = BufReader::new(file);
@@ -58,7 +98,23 @@ pub fn parse_netrc_file(path: &Path, target_machine: &str) -> Result<Option<Cred
   Ok(None)
 }
 
-/// Write or update a .netrc entry for a specific machine
+/// Writes or updates a `.netrc` entry for the given machine.
+///
+/// Existing entries for the machine are replaced; otherwise a new entry is
+/// appended. When writing on Unix platforms, the file permissions are tightened
+/// to `600` to avoid exposing credentials.
+///
+/// # Arguments
+///
+/// * `path` - Location of the `.netrc` file.
+/// * `machine` - Hostname to associate with the credentials.
+/// * `username` - Login value to store.
+/// * `password` - Password or token to store.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read from or written to, or if
+/// permissions cannot be set.
 pub fn write_netrc_entry(path: &Path, machine: &str, username: &str, password: &str) -> Result<()> {
   // Read existing content if file exists
   let mut existing_content = String::new();
