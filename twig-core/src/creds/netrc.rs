@@ -1,3 +1,10 @@
+//! Helpers for reading and writing `.netrc` files shared across credential providers.
+//!
+//! These utilities centralize file parsing and permission handling so platform-specific
+//! credential providers can rely on consistent `.netrc` behaviour. Functions here avoid
+//! prompting or IO beyond the targeted file operations, making them suitable for both
+//! interactive CLI flows and non-interactive automation.
+
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};

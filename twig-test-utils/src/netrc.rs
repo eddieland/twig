@@ -1,3 +1,9 @@
+//! Helpers for managing temporary `.netrc` files in tests.
+//!
+//! The utilities here create isolated home directories and write throwaway `.netrc`
+//! entries so integration tests can exercise credential flows without touching the
+//! developer's real configuration.
+
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
