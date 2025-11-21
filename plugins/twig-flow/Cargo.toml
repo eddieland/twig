@@ -15,4 +15,6 @@ git2 = { workspace = true }
 twig-core = { path = "../../twig-core" }
 
 [dev-dependencies]
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
 twig-test-utils = { path = "../../twig-test-utils" }
