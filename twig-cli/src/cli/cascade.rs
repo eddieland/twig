@@ -495,7 +495,7 @@ fn handle_rebase_conflict(_repo_path: &Path, _branch: &str) -> Result<ConflictRe
   // This would be replaced with actual user input in a real implementation
   let choice = dialoguer::Select::new()
     .with_prompt("Select an option")
-    .items(&["Continue", "Abort to original", "Abort stay here", "Skip"])
+    .items(["Continue", "Abort to original", "Abort stay here", "Skip"])
     .default(0)
     .interact()
     .unwrap_or(0);
