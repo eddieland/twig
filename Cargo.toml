@@ -55,22 +55,22 @@ anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 directories = "6.0"
 git2 = { version = "0.20", features = ["https"] }
-open = "5.3"
+open = "5.3.3"
 regex = "1.12"
 thiserror = "2"
 
 # CLI and UI dependencies
-clap = { version = "4.5", features = ["derive"] }
-clap_complete = "4.5"
-console = "0.15.11"
-dialoguer = "0.11.0"
-emojis = "0.6"
-indicatif = "0.17"
+clap = { version = "4.5.53", features = ["derive"] }
+clap_complete = "4.5.61"
+console = "0.16.1"
+dialoguer = "0.12.0"
+emojis = "0.8.0"
+indicatif = "0.18.3"
 owo-colors = { version = "4.2", features = ["supports-colors"] }
 tabled = "0.20"
 
 # Interactive UI
-skim = "0.18"
+skim = "0.20.5"
 ratatui = "0.29"
 crossterm = "0.29"
 nucleo = "0.5"
@@ -80,7 +80,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # Async and networking
-reqwest = { version = "0.12", features = ["json", "native-tls", "blocking"], default-features = false }
+reqwest = { version = "0.12.24", features = ["json", "native-tls", "blocking"], default-features = false }
 tokio = { version = "1.48", features = ["rt", "rt-multi-thread", "time", "macros"] }
 
 # Serialization
@@ -93,15 +93,15 @@ url = "2.5"
 assert_cmd = "2.0"
 predicates = "3.1"
 uuid = { version = "1.18", features = ["v4", "serde"] }
-flate2 = "1.0"
+flate2 = "1.1.5"
 tar = "0.4"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
 
 # Windows-specific dependencies
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
 
 # Testing dependencies
-insta = "1.43"
+insta = "1.44.1"
 tempfile = "3.23"
 wiremock = "0.6.5"
 
