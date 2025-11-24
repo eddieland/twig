@@ -56,7 +56,7 @@ chrono = { version = "0.4", features = ["serde"] }
 directories = "6.0"
 git2 = { version = "0.20", features = ["https"] }
 open = "5.3"
-regex = "1.11"
+regex = "1.12"
 thiserror = "2"
 
 # CLI and UI dependencies
