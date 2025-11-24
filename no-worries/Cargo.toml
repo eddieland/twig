@@ -15,7 +15,7 @@ path = "src/lib.rs"
 # Core dependencies
 backtrace = "0.3.76"
 chrono = { workspace = true }
-is-terminal = "0.4.12"
+is-terminal = "0.4.17"
 
 # UI dependencies
 owo-colors = { workspace = true }
