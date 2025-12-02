@@ -102,8 +102,8 @@ impl GitRepoTestGuard {
   /// Returns the original directory so it can be restored later if needed
   pub fn change_dir(&mut self) -> PathBuf {
     // If we've already changed the directory, return early
-    if self.original_dir.is_some() {
-      return self.original_dir.as_ref().unwrap().clone();
+    if let Some(dir) = &self.original_dir {
+      return dir.clone();
     }
 
     // Save the current directory so we can restore it later
