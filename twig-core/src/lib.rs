@@ -18,10 +18,12 @@ pub mod utils;
 pub use config::{ConfigDirs, get_config_dirs};
 pub use creds::{Credentials, netrc, platform};
 pub use git::switch::{
-  BranchBaseSource, BranchCreationBase, BranchCreationPolicy, BranchParentReference, BranchParentRequest,
-  BranchStateMutations, BranchSwitchAction, BranchSwitchContext, BranchSwitchOutcome, BranchSwitchRequest,
-  BranchSwitchService, BranchSwitchTarget, GitHubPullRequestReference, IssueAssociation, IssueReference,
-  PullRequestHead,
+  BranchBase, BranchBaseResolution, BranchBaseSource, BranchCreationBase, BranchCreationPolicy, BranchParentReference,
+  BranchParentRequest, BranchStateMutations, BranchSwitchAction, BranchSwitchContext, BranchSwitchOutcome,
+  BranchSwitchRequest, BranchSwitchService, BranchSwitchTarget, GitHubPullRequestReference, IssueAssociation,
+  IssueReference, PullRequestHead, SwitchInput, detect_switch_input, extract_jira_issue_from_url,
+  extract_pr_number_from_url, lookup_branch_tip, parse_jira_issue_key, resolve_branch_base,
+  store_github_pr_association, store_jira_association, try_checkout_remote_branch,
 };
 pub use git::{checkout_branch, current_branch, detect_repository, detect_repository_from_path, in_git_repository};
 pub use jira_parser::{JiraParseError, JiraParsingConfig, JiraParsingMode, JiraTicketParser, create_jira_parser};
