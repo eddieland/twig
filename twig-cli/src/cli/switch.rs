@@ -4,27 +4,23 @@
 //! switching to branches based on various inputs.
 
 use std::path::Path;
-use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use clap::Args;
 use directories::BaseDirs;
-use git2::{ErrorClass, ErrorCode, Repository as Git2Repository};
-use regex::Regex;
+use git2::Repository as Git2Repository;
 use tokio::runtime::Runtime;
+use twig_core::git::switch::{
+  BranchBaseResolution, SwitchInput, detect_switch_input, resolve_branch_base, store_github_pr_association,
+  store_jira_association, try_checkout_remote_branch,
+};
 use twig_core::jira_parser::JiraTicketParser;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
-use twig_core::state::{BranchMetadata, RepoState};
+use twig_core::state::RepoState;
 use twig_core::{checkout_branch, detect_repository};
 use twig_gh::models::{GitHubPullRequest, RepositoryInfo};
 use twig_gh::{GitHubClient, create_github_client_from_netrc};
 use twig_jira::{JiraClient, create_jira_client_from_netrc, get_jira_host};
-
-static GITHUB_PR_URL_REGEX: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"github\.com/[^/]+/[^/]+/pull/(\d+)").expect("Failed to compile GitHub PR URL regex"));
-
-static JIRA_ISSUE_URL_REGEX: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"/browse/([A-Z]{2,}-\d+)").expect("Failed to compile Jira issue URL regex"));
 
 /// Command for intelligently switching to branches based on various inputs
 #[derive(Args)]
@@ -138,8 +134,8 @@ pub(crate) fn handle_switch_command(switch: SwitchArgs) -> Result<()> {
   };
 
   // Detect input type and handle accordingly
-  match detect_input_type(jira_parser.as_ref(), input) {
-    InputType::JiraIssueKey(issue_key) | InputType::JiraIssueUrl(issue_key) => {
+  match detect_switch_input(jira_parser.as_ref(), input) {
+    SwitchInput::JiraIssueKey(issue_key) | SwitchInput::JiraIssueUrl(issue_key) => {
       let jira_host = get_jira_host().context("Failed to get Jira host")?;
 
       let base_dirs = BaseDirs::new().context("Failed to get $HOME")?;
@@ -148,13 +144,13 @@ pub(crate) fn handle_switch_command(switch: SwitchArgs) -> Result<()> {
 
       handle_jira_switch(&jira, &ctx, &issue_key)
     }
-    InputType::GitHubPrId(pr_number) | InputType::GitHubPrUrl(pr_number) => {
+    SwitchInput::GitHubPrId(pr_number) | SwitchInput::GitHubPrUrl(pr_number) => {
       let base_dirs = BaseDirs::new().context("Failed to get $HOME")?;
       let gh = create_github_client_from_netrc(base_dirs.home_dir()).context("Failed to create GitHub client")?;
 
       handle_github_pr_switch(&gh, &ctx, pr_number)
     }
-    InputType::BranchName(branch_name) => handle_branch_switch(
+    SwitchInput::BranchName(branch_name) => handle_branch_switch(
       ctx.repo,
       ctx.repo_path,
       &branch_name,
@@ -162,254 +158,8 @@ pub(crate) fn handle_switch_command(switch: SwitchArgs) -> Result<()> {
       ctx.parent_option,
       ctx.jira_parser,
     ),
+    _ => unreachable!("Unhandled switch input variant"),
   }
-}
-
-/// Input type detection
-#[derive(Debug)]
-enum InputType {
-  JiraIssueKey(String),
-  JiraIssueUrl(String),
-  GitHubPrId(u32),
-  GitHubPrUrl(u32),
-  BranchName(String),
-}
-
-/// Detect the type of input provided
-fn detect_input_type(jira_parser: Option<&JiraTicketParser>, input: &str) -> InputType {
-  // Check for GitHub PR URL
-  if input.contains("github.com")
-    && input.contains("/pull/")
-    && let Ok(pr_number) = extract_pr_number_from_url(input)
-  {
-    return InputType::GitHubPrUrl(pr_number);
-  }
-
-  // Check for Jira issue URL
-  if (input.contains("atlassian.net/browse/") || (input.starts_with("http") && input.contains("/browse/")))
-    && let Some(issue_key) = extract_jira_issue_from_url(input)
-  {
-    return InputType::JiraIssueUrl(issue_key);
-  }
-
-  // Check for GitHub PR ID patterns (123, PR#123, #123)
-  let cleaned_input = input.trim_start_matches("PR#").trim_start_matches('#');
-  if let Ok(pr_number) = cleaned_input.parse::<u32>() {
-    return InputType::GitHubPrId(pr_number);
-  }
-
-  // Check for Jira issue key pattern (PROJ-123, ABC-456, etc.)
-  if let Some(parser) = jira_parser
-    && let Some(normalized_key) = parse_jira_issue_key(parser, input)
-  {
-    return InputType::JiraIssueKey(normalized_key);
-  }
-
-  // Default to branch name
-  InputType::BranchName(input.to_string())
-}
-
-/// Parse and normalize a Jira issue key using the provided parser
-fn parse_jira_issue_key(parser: &JiraTicketParser, input: &str) -> Option<String> {
-  parser.parse(input).ok()
-}
-
-/// Extract PR number from GitHub URL
-fn extract_pr_number_from_url(url: &str) -> Result<u32> {
-  if let Some(captures) = GITHUB_PR_URL_REGEX.captures(url) {
-    let pr_str = captures.get(1).unwrap().as_str();
-    let pr_number = pr_str
-      .parse::<u32>()
-      .with_context(|| format!("Failed to parse PR number '{pr_str}' as a valid integer"))?;
-    Ok(pr_number)
-  } else {
-    Err(anyhow::anyhow!("Could not extract PR number from URL: {url}"))
-  }
-}
-
-/// Extract Jira issue key from Jira URL
-fn extract_jira_issue_from_url(url: &str) -> Option<String> {
-  JIRA_ISSUE_URL_REGEX
-    .captures(url)
-    .and_then(|captures| captures.get(1))
-    .map(|m| m.as_str().to_string())
-}
-
-/// Resolve parent branch based on the provided option
-#[derive(Clone, Debug)]
-enum BranchBase {
-  Head,
-  Parent { name: String },
-}
-
-impl BranchBase {
-  fn parent_name(&self) -> Option<&str> {
-    match self {
-      BranchBase::Head => None,
-      BranchBase::Parent { name } => Some(name.as_str()),
-    }
-  }
-}
-
-#[derive(Clone, Debug)]
-struct BranchBaseResolution {
-  base: BranchBase,
-  commit: git2::Oid,
-}
-
-impl BranchBaseResolution {
-  fn head(commit: git2::Oid) -> Self {
-    Self {
-      base: BranchBase::Head,
-      commit,
-    }
-  }
-
-  fn parent(name: String, commit: git2::Oid) -> Self {
-    Self {
-      base: BranchBase::Parent { name },
-      commit,
-    }
-  }
-
-  fn parent_name(&self) -> Option<&str> {
-    self.base.parent_name()
-  }
-}
-
-fn resolve_branch_base(
-  repo: &Git2Repository,
-  repo_path: &std::path::Path,
-  parent_option: Option<&str>,
-  jira_parser: Option<&JiraTicketParser>,
-) -> Result<BranchBaseResolution> {
-  match parent_option.map(str::trim) {
-    None | Some("") | Some("none") => {
-      let head_commit = repo
-        .head()
-        .context("Failed to resolve HEAD for branch creation")?
-        .peel_to_commit()
-        .context("Failed to resolve HEAD commit for branch creation")?;
-      Ok(BranchBaseResolution::head(head_commit.id()))
-    }
-    Some("current") => {
-      let head = repo
-        .head()
-        .context("Failed to resolve current branch for --parent=current")?;
-
-      if !head.is_branch() {
-        return Err(anyhow::anyhow!(
-          "HEAD is not on a branch. Create a branch first or use `--parent none`."
-        ));
-      }
-
-      let branch_name = head.shorthand().unwrap_or_default().to_string();
-      let commit = head
-        .peel_to_commit()
-        .context("Failed to resolve commit for the current branch")?
-        .id();
-
-      Ok(BranchBaseResolution::parent(branch_name, commit))
-    }
-    Some(parent) => {
-      if let Some(parser) = jira_parser.as_ref()
-        && let Some(normalized_key) = parse_jira_issue_key(parser, parent)
-      {
-        let repo_state = RepoState::load(repo_path)?;
-
-        if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(&normalized_key) {
-          let commit =
-            lookup_branch_tip(repo, &branch_issue.branch)?.ok_or_else(|| parent_lookup_error(&branch_issue.branch))?;
-          return Ok(BranchBaseResolution::parent(branch_issue.branch.clone(), commit));
-        }
-      }
-
-      let commit = lookup_branch_tip(repo, parent)?.ok_or_else(|| parent_lookup_error(parent))?;
-      Ok(BranchBaseResolution::parent(parent.to_string(), commit))
-    }
-  }
-}
-
-fn lookup_branch_tip(repo: &Git2Repository, branch_name: &str) -> Result<Option<git2::Oid>> {
-  if let Ok(branch) = repo.find_branch(branch_name, git2::BranchType::Local) {
-    let commit = branch
-      .into_reference()
-      .peel_to_commit()
-      .context("Failed to resolve local branch commit")?;
-    return Ok(Some(commit.id()));
-  }
-
-  let remote_branch_name = format!("origin/{branch_name}");
-  if let Ok(branch) = repo.find_branch(&remote_branch_name, git2::BranchType::Remote) {
-    let commit = branch
-      .into_reference()
-      .peel_to_commit()
-      .context("Failed to resolve remote branch commit")?;
-    return Ok(Some(commit.id()));
-  }
-
-  if let Ok(mut remote) = repo.find_remote("origin") {
-    let mut fetch_options = git2::FetchOptions::new();
-    if let Err(err) = remote.fetch(&[branch_name], Some(&mut fetch_options), None) {
-      if err.code() == ErrorCode::NotFound || err.class() == ErrorClass::Reference {
-        return Ok(None);
-      }
-
-      Err(err).with_context(|| format!("Failed to fetch '{branch_name}' from origin"))?;
-    }
-
-    if let Ok(branch) = repo.find_branch(&remote_branch_name, git2::BranchType::Remote) {
-      let commit = branch
-        .into_reference()
-        .peel_to_commit()
-        .context("Failed to resolve fetched branch commit")?;
-      return Ok(Some(commit.id()));
-    }
-  }
-
-  Ok(None)
-}
-
-fn parent_lookup_error(parent: &str) -> anyhow::Error {
-  anyhow::anyhow!(
-    "Parent branch '{parent}' was not found. Create it first and record dependencies with `twig branch depend` or `twig branch root add`."
-  )
-}
-
-fn try_checkout_remote_branch(repo: &Git2Repository, repo_path: &Path, branch_name: &str) -> Result<bool> {
-  let remote_branch_name = format!("origin/{branch_name}");
-  let Some(commit_id) = lookup_branch_tip(repo, branch_name)? else {
-    return Ok(false);
-  };
-
-  if repo.find_branch(&remote_branch_name, git2::BranchType::Remote).is_err() {
-    return Ok(false);
-  }
-
-  let commit = repo
-    .find_commit(commit_id)
-    .with_context(|| format!("Failed to locate remote commit for '{remote_branch_name}'"))?;
-
-  print_info(&format!(
-    "Branch '{branch_name}' found on origin. Creating local tracking branch..."
-  ));
-
-  repo
-    .branch(branch_name, &commit, false)
-    .with_context(|| format!("Failed to create local branch '{branch_name}' from origin"))?;
-
-  let mut local_branch = repo
-    .find_branch(branch_name, git2::BranchType::Local)
-    .with_context(|| format!("Failed to reopen branch '{branch_name}'"))?;
-  local_branch
-    .set_upstream(Some(&remote_branch_name))
-    .with_context(|| format!("Failed to set upstream for '{branch_name}'"))?;
-
-  drop(local_branch);
-
-  switch_to_branch(repo, repo_path, branch_name)?;
-
-  Ok(true)
 }
 
 /// Handle switching to a branch based on Jira issue
@@ -486,7 +236,8 @@ fn handle_branch_switch(
 
   // Branch doesn't exist
   if create_if_missing {
-    if try_checkout_remote_branch(repo, repo_path, branch_name)? {
+    if try_checkout_remote_branch(repo, branch_name)? {
+      print_success(&format!("Checked out {branch_name} from origin.",));
       return Ok(());
     }
 
@@ -557,7 +308,7 @@ fn create_and_switch_to_branch(
   branch_base: &BranchBaseResolution,
 ) -> Result<()> {
   let base_commit = repo
-    .find_commit(branch_base.commit)
+    .find_commit(branch_base.commit())
     .with_context(|| format!("Failed to locate base commit for '{branch_name}'"))?;
 
   repo
@@ -839,46 +590,6 @@ fn sanitize_remote_name(name: &str) -> String {
   }
 }
 
-/// Store Jira issue association in repository state
-fn store_jira_association(repo_path: &Path, branch_name: &str, issue_key: &str) -> Result<()> {
-  let mut repo_state = RepoState::load(repo_path)?;
-
-  let now = std::time::SystemTime::now()
-    .duration_since(std::time::UNIX_EPOCH)
-    .unwrap()
-    .as_secs();
-  let time_str = chrono::DateTime::<chrono::Utc>::from_timestamp(now as i64, 0)
-    .unwrap()
-    .to_rfc3339();
-
-  repo_state.add_branch_issue(BranchMetadata {
-    branch: branch_name.to_string(),
-    jira_issue: Some(issue_key.to_string()),
-    github_pr: None,
-    created_at: time_str,
-  });
-
-  repo_state.save(repo_path)?;
-  Ok(())
-}
-
-/// Store GitHub PR association in repository state
-fn store_github_pr_association(repo_path: &Path, branch_name: &str, pr_number: u32) -> Result<()> {
-  let mut repo_state = RepoState::load(repo_path)?;
-
-  let now = chrono::Utc::now().to_rfc3339();
-
-  repo_state.add_branch_issue(BranchMetadata {
-    branch: branch_name.to_string(),
-    jira_issue: None, // No Jira issue associated
-    github_pr: Some(pr_number),
-    created_at: now,
-  });
-
-  repo_state.save(repo_path)?;
-  Ok(())
-}
-
 #[cfg(test)]
 mod tests {
   use std::env;
@@ -907,94 +618,6 @@ mod tests {
   impl Drop for DirGuard {
     fn drop(&mut self) {
       let _ = env::set_current_dir(&self.original);
-    }
-  }
-
-  #[test]
-  fn test_parse_jira_issue_key() {
-    use twig_core::jira_parser::{JiraParsingConfig, JiraTicketParser};
-
-    let parser = JiraTicketParser::new(JiraParsingConfig::default());
-
-    assert_eq!(parse_jira_issue_key(&parser, "PROJ-123"), Some("PROJ-123".to_string()));
-    assert_eq!(parse_jira_issue_key(&parser, "ABC-456"), Some("ABC-456".to_string()));
-    assert_eq!(
-      parse_jira_issue_key(&parser, "LONGPROJECT-999"),
-      Some("LONGPROJECT-999".to_string())
-    );
-    assert_eq!(parse_jira_issue_key(&parser, "PROJ-"), None); // no number
-    assert_eq!(parse_jira_issue_key(&parser, "123-PROJ"), None); // wrong order
-  }
-
-  #[test]
-  fn test_extract_jira_issue_from_url() {
-    assert_eq!(
-      extract_jira_issue_from_url("https://company.atlassian.net/browse/PROJ-123"),
-      Some("PROJ-123".to_string())
-    );
-    assert_eq!(
-      extract_jira_issue_from_url("https://example.com/jira/browse/ABC-456"),
-      Some("ABC-456".to_string())
-    );
-    assert_eq!(extract_jira_issue_from_url("https://example.com/other/page"), None);
-  }
-
-  #[test]
-  fn test_extract_pr_number_from_url() {
-    assert_eq!(
-      extract_pr_number_from_url("https://github.com/owner/repo/pull/123").unwrap(),
-      123
-    );
-    assert!(extract_pr_number_from_url("https://github.com/owner/repo").is_err());
-  }
-
-  #[test]
-  fn test_detect_input_type() {
-    use twig_core::jira_parser::{JiraParsingConfig, JiraTicketParser};
-
-    let parser = JiraTicketParser::new(JiraParsingConfig::default());
-
-    // Jira issue keys
-    if let InputType::JiraIssueKey(key) = detect_input_type(Some(&parser), "PROJ-123") {
-      assert_eq!(key, "PROJ-123");
-    } else {
-      panic!("Expected JiraIssueKey");
-    }
-
-    // Jira URLs
-    if let InputType::JiraIssueUrl(key) =
-      detect_input_type(Some(&parser), "https://company.atlassian.net/browse/PROJ-123")
-    {
-      assert_eq!(key, "PROJ-123");
-    } else {
-      panic!("Expected JiraIssueUrl");
-    }
-
-    // GitHub PR IDs
-    if let InputType::GitHubPrId(pr) = detect_input_type(Some(&parser), "123") {
-      assert_eq!(pr, 123);
-    } else {
-      panic!("Expected GitHubPrId");
-    }
-
-    if let InputType::GitHubPrId(pr) = detect_input_type(Some(&parser), "PR#123") {
-      assert_eq!(pr, 123);
-    } else {
-      panic!("Expected GitHubPrId");
-    }
-
-    // GitHub PR URLs
-    if let InputType::GitHubPrUrl(pr) = detect_input_type(Some(&parser), "https://github.com/owner/repo/pull/123") {
-      assert_eq!(pr, 123);
-    } else {
-      panic!("Expected GitHubPrUrl");
-    }
-
-    // Branch names
-    if let InputType::BranchName(name) = detect_input_type(Some(&parser), "feature/my-branch") {
-      assert_eq!(name, "feature/my-branch");
-    } else {
-      panic!("Expected BranchName");
     }
   }
 
@@ -1048,11 +671,7 @@ mod tests {
       "test remote branch",
     )?;
 
-    assert!(try_checkout_remote_branch(
-      &repo,
-      repo_guard.path(),
-      "feature/existing"
-    )?);
+    assert!(try_checkout_remote_branch(&repo, "feature/existing")?);
 
     let repo = git2::Repository::open(repo_guard.path())?;
     let local_branch = repo.find_branch("feature/existing", BranchType::Local)?;
