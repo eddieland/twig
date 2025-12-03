@@ -12,6 +12,7 @@ use crate::consts::{ACCEPT, API_BASE_URL, USER_AGENT};
 use crate::models::GitHubAuth;
 
 /// Represents a GitHub API client
+#[derive(Clone)]
 pub struct GitHubClient {
   pub(crate) client: Client,
   pub(crate) base_url: String,
