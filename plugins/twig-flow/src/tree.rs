@@ -1,10 +1,12 @@
+use std::collections::HashSet;
+
 use anyhow::{Context, Result, anyhow};
 use git2::Repository;
 use twig_core::git::{
   BranchGraph, BranchGraphBuilder, BranchGraphError, BranchName, BranchTableColorMode, BranchTableRenderer,
   BranchTableSchema, BranchTableStyle, checkout_branch, get_repository,
 };
-use twig_core::output::{print_error, print_success, print_warning};
+use twig_core::output::{format_command, print_error, print_info, print_success, print_warning};
 use twig_core::state::RepoState;
 
 use crate::Cli;
@@ -53,6 +55,11 @@ pub fn run(cli: &Cli) -> Result<()> {
   };
 
   render_table(&graph, &root)?;
+
+  let orphaned = find_orphaned_branches(&graph, &repo_state);
+  if !orphaned.is_empty() {
+    display_orphaned_branches(&orphaned);
+  }
 
   Ok(())
 }
@@ -196,4 +203,41 @@ fn handle_graph_error(err: BranchGraphError) {
       print_error(&format!("Failed to build branch graph: {inner}"));
     }
   }
+}
+
+fn find_orphaned_branches(graph: &BranchGraph, repo_state: &RepoState) -> Vec<String> {
+  let configured_roots: HashSet<_> = repo_state.get_root_branches().into_iter().collect();
+
+  let mut orphaned: Vec<String> = graph
+    .iter()
+    .filter_map(|(name, _)| {
+      let branch = name.as_str();
+      let has_parent = !repo_state.get_dependency_parents(branch).is_empty();
+      if has_parent || configured_roots.contains(branch) {
+        None
+      } else {
+        Some(branch.to_string())
+      }
+    })
+    .collect();
+
+  orphaned.sort();
+  orphaned.dedup();
+  orphaned
+}
+
+fn display_orphaned_branches(orphaned: &[String]) {
+  println!();
+  print_warning("Orphaned branches (no dependencies defined):");
+  for branch in orphaned {
+    println!("  • {branch}");
+  }
+
+  let label = if orphaned.len() == 1 { "branch" } else { "branches" };
+  println!();
+  print_info(&format!(
+    "Found {} orphaned {label}. Re-parent them with {}.",
+    orphaned.len(),
+    format_command("twig adopt")
+  ));
 }
