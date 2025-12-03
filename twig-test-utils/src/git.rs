@@ -223,6 +223,17 @@ pub fn create_branch(repo: &Repository, branch_name: &str, start_point: Option<&
   Ok(())
 }
 
+/// Ensure a `main` branch exists and is checked out.
+pub fn ensure_main_branch(repo: &Repository) -> Result<()> {
+  if repo.find_branch("main", BranchType::Local).is_ok() {
+    return checkout_branch(repo, "main");
+  }
+
+  let head_commit = repo.head()?.peel_to_commit()?;
+  repo.branch("main", &head_commit, false)?;
+  checkout_branch(repo, "main")
+}
+
 /// Helper function to checkout a branch
 pub fn checkout_branch(repo: &Repository, branch_name: &str) -> Result<()> {
   let obj = repo

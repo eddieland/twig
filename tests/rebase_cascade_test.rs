@@ -6,7 +6,7 @@ use std::path::Path;
 use anyhow::Result;
 use git2::{BranchType, Repository as Git2Repository, Signature};
 use twig_core::state::RepoState;
-use twig_test_utils::git::GitRepoTestGuard;
+use twig_test_utils::git::{GitRepoTestGuard, ensure_main_branch};
 
 /// Helper function to create a commit in a repository
 fn create_commit(repo: &Git2Repository, file_name: &str, content: &str, message: &str) -> Result<()> {
@@ -143,18 +143,13 @@ fn run_cascade_command(
 #[test]
 fn test_rebase_command() -> Result<()> {
   // Create a temporary git repository
-  let git_repo = GitRepoTestGuard::new_and_change_dir();
+  let git_repo = GitRepoTestGuard::new();
   let repo = &git_repo.repo;
   let repo_path = git_repo.path();
 
   // Create initial commit on main branch
   create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
-
-  // Create main branch explicitly (since the first commit might be on a detached
-  // HEAD)
-  let head_commit = repo.head()?.peel_to_commit()?;
-  repo.branch("main", &head_commit, false)?;
-  checkout_branch(repo, "main")?;
+  ensure_main_branch(repo)?;
 
   // Create feature branch
   create_branch(repo, "feature", Some("main"))?;
@@ -195,17 +190,14 @@ fn test_rebase_command() -> Result<()> {
 #[test]
 fn test_cascade_command() -> Result<()> {
   // Create a temporary git repository
-  let git_repo = GitRepoTestGuard::new_and_change_dir();
+  let git_repo = GitRepoTestGuard::new();
   let repo = &git_repo.repo;
   let repo_path = git_repo.path();
 
   // Create initial commit on main branch
   create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
 
-  // Create main branch explicitly
-  let head_commit = repo.head()?.peel_to_commit()?;
-  repo.branch("main", &head_commit, false)?;
-  checkout_branch(repo, "main")?;
+  ensure_main_branch(repo)?;
 
   // Create feature branch
   create_branch(repo, "feature", Some("main"))?;
@@ -276,17 +268,14 @@ fn test_cascade_command() -> Result<()> {
 #[test]
 fn test_rebase_with_force_flag() -> Result<()> {
   // Create a temporary git repository
-  let git_repo = GitRepoTestGuard::new_and_change_dir();
+  let git_repo = GitRepoTestGuard::new();
   let repo = &git_repo.repo;
   let repo_path = git_repo.path();
 
   // Create initial commit on main branch
   create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
 
-  // Create main branch explicitly
-  let head_commit = repo.head()?.peel_to_commit()?;
-  repo.branch("main", &head_commit, false)?;
-  checkout_branch(repo, "main")?;
+  ensure_main_branch(repo)?;
 
   // Create feature branch
   create_branch(repo, "feature", Some("main"))?;
@@ -310,17 +299,14 @@ fn test_rebase_with_force_flag() -> Result<()> {
 #[test]
 fn test_cascade_with_max_depth() -> Result<()> {
   // Create a temporary git repository
-  let git_repo = GitRepoTestGuard::new_and_change_dir();
+  let git_repo = GitRepoTestGuard::new();
   let repo = &git_repo.repo;
   let repo_path = git_repo.path();
 
   // Create initial commit on main branch
   create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
 
-  // Create main branch explicitly
-  let head_commit = repo.head()?.peel_to_commit()?;
-  repo.branch("main", &head_commit, false)?;
-  checkout_branch(repo, "main")?;
+  ensure_main_branch(repo)?;
 
   // Create feature branch
   create_branch(repo, "feature", Some("main"))?;

@@ -241,10 +241,9 @@ impl AutoDependencyDiscovery {
 mod tests {
   use std::path::Path;
 
-  use git2::BranchType;
   use twig_core::state::BranchMetadata;
   use twig_core::tree_renderer::BranchNode;
-  use twig_test_utils::git::{GitRepoTestGuard, checkout_branch, create_branch, create_commit};
+  use twig_test_utils::git::{GitRepoTestGuard, checkout_branch, create_branch, create_commit, ensure_main_branch};
 
   use super::*;
 
@@ -265,17 +264,14 @@ mod tests {
   #[test]
   fn test_discover_git_dependencies_simple_chain() -> Result<()> {
     // Create a temporary git repository
-    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let git_repo = GitRepoTestGuard::new();
     let repo = &git_repo.repo;
     let repo_path = git_repo.path();
 
     // Create initial commit on main branch
     create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
 
-    // Create main branch explicitly
-    let head_commit = repo.head()?.peel_to_commit()?;
-    repo.branch("main", &head_commit, false)?;
-    checkout_branch(repo, "main")?;
+    ensure_main_branch(repo)?;
 
     // Create feature branch
     create_branch(repo, "feature", Some("main"))?;
@@ -320,17 +316,14 @@ mod tests {
   #[test]
   fn test_suggest_dependencies() -> Result<()> {
     // Create a temporary git repository
-    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let git_repo = GitRepoTestGuard::new();
     let repo = &git_repo.repo;
     let repo_path = git_repo.path();
 
     // Create initial commit on main branch
     create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
 
-    // Create main branch explicitly
-    let head_commit = repo.head()?.peel_to_commit()?;
-    repo.branch("main", &head_commit, false)?;
-    checkout_branch(repo, "main")?;
+    ensure_main_branch(repo)?;
 
     // Create feature branch
     create_branch(repo, "feature", Some("main"))?;
@@ -370,17 +363,14 @@ mod tests {
   #[test]
   fn test_suggest_dependencies_with_existing_dependencies() -> Result<()> {
     // Create a temporary git repository
-    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let git_repo = GitRepoTestGuard::new();
     let repo = &git_repo.repo;
     let repo_path = git_repo.path();
 
     // Create initial commit on main branch
     create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
 
-    // Create main branch explicitly
-    let head_commit = repo.head()?.peel_to_commit()?;
-    repo.branch("main", &head_commit, false)?;
-    checkout_branch(repo, "main")?;
+    ensure_main_branch(repo)?;
 
     // Create feature branch
     create_branch(repo, "feature", Some("main"))?;
@@ -424,17 +414,14 @@ mod tests {
   #[test]
   fn test_get_auto_discovered_roots() -> Result<()> {
     // Create a temporary git repository
-    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let git_repo = GitRepoTestGuard::new();
     let repo = &git_repo.repo;
     let repo_path = git_repo.path();
 
     // Create initial commit on main branch
     create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
 
-    // Create main branch explicitly
-    let head_commit = repo.head()?.peel_to_commit()?;
-    repo.branch("main", &head_commit, false)?;
-    checkout_branch(repo, "main")?;
+    ensure_main_branch(repo)?;
 
     // Create feature branch
     create_branch(repo, "feature", Some("main"))?;
@@ -471,17 +458,14 @@ mod tests {
   #[test]
   fn test_with_branch_metadata() -> Result<()> {
     // Create a temporary git repository
-    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let git_repo = GitRepoTestGuard::new();
     let repo = &git_repo.repo;
     let repo_path = git_repo.path();
 
     // Create initial commit on main branch
     create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
 
-    // Create main branch explicitly
-    let head_commit = repo.head()?.peel_to_commit()?;
-    repo.branch("main", &head_commit, false)?;
-    checkout_branch(repo, "main")?;
+    ensure_main_branch(repo)?;
 
     // Create feature branch
     create_branch(repo, "feature", Some("main"))?;
@@ -526,16 +510,13 @@ mod tests {
   #[test]
   fn test_analyze_commit_ancestry() -> Result<()> {
     // Create a temporary git repository
-    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let git_repo = GitRepoTestGuard::new();
     let repo = &git_repo.repo;
 
     // Create initial commit on main branch
     create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
 
-    // Create main branch explicitly
-    let head_commit = repo.head()?.peel_to_commit()?;
-    repo.branch("main", &head_commit, false)?;
-    checkout_branch(repo, "main")?;
+    ensure_main_branch(repo)?;
 
     // Create feature branch
     create_branch(repo, "feature", Some("main"))?;

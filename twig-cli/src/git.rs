@@ -773,21 +773,20 @@ mod tests {
   use twig_core::RepoState;
   use twig_test_utils::{
     GitRepoTestGuard, checkout_branch, create_branch, create_commit, create_commit_with_time, days_ago,
+    ensure_main_branch,
   };
 
   use super::*;
 
   #[test]
   fn test_find_stale_branches_with_date_filtering() {
-    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let git_repo = GitRepoTestGuard::new();
     let repo = &git_repo.repo;
 
     // Create initial commit
     create_commit(repo, "README.md", "# Test Repo", "Initial commit").unwrap();
 
-    // Create main branch
-    create_branch(repo, "main", None).unwrap();
-    checkout_branch(repo, "main").unwrap();
+    ensure_main_branch(repo).unwrap();
 
     // Create a recent branch (should not be stale)
     create_branch(repo, "recent-feature", Some("main")).unwrap();
@@ -824,16 +823,14 @@ mod tests {
 
   #[test]
   fn test_root_branches_excluded_from_stale_detection() {
-    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let git_repo = GitRepoTestGuard::new();
     let repo = &git_repo.repo;
     let repo_path = git_repo.path();
 
     // Create initial commit
     create_commit(repo, "README.md", "# Test Repo", "Initial commit").unwrap();
 
-    // Create main branch
-    create_branch(repo, "main", None).unwrap();
-    checkout_branch(repo, "main").unwrap();
+    ensure_main_branch(repo).unwrap();
 
     // Create an old branch that would normally be stale
     create_branch(repo, "old-root-branch", Some("main")).unwrap();
@@ -878,13 +875,12 @@ mod tests {
 
   #[test]
   fn test_find_novel_commits() {
-    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let git_repo = GitRepoTestGuard::new();
     let repo = &git_repo.repo;
 
     // Create initial commit and main branch
     create_commit(repo, "README.md", "# Test Repo", "Initial commit").unwrap();
-    create_branch(repo, "main", None).unwrap();
-    checkout_branch(repo, "main").unwrap();
+    ensure_main_branch(repo).unwrap();
 
     // Add some commits to main
     create_commit(repo, "main1.txt", "main work 1", "Main commit 1").unwrap();
@@ -908,13 +904,13 @@ mod tests {
 
   #[test]
   fn test_enhance_branch_info_with_dependencies() {
-    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let git_repo = GitRepoTestGuard::new();
     let repo = &git_repo.repo;
     let repo_path = git_repo.path();
 
     // Create test branches
     create_commit(repo, "README.md", "# Test Repo", "Initial commit").unwrap();
-    create_branch(repo, "main", None).unwrap();
+    ensure_main_branch(repo).unwrap();
     create_branch(repo, "feature", Some("main")).unwrap();
 
     // Set up repository state with dependencies
@@ -942,7 +938,7 @@ mod tests {
 
   #[test]
   fn test_branch_deletion() {
-    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let git_repo = GitRepoTestGuard::new();
     let repo = &git_repo.repo;
 
     // Create test branch
@@ -961,7 +957,7 @@ mod tests {
 
   #[test]
   fn test_display_stale_branches_empty() {
-    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let git_repo = GitRepoTestGuard::new();
     let repo_path = git_repo.path();
 
     let stale_branches = vec![];
@@ -971,7 +967,7 @@ mod tests {
 
   #[test]
   fn test_display_stale_branches_with_data() {
-    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let git_repo = GitRepoTestGuard::new();
     let repo_path = git_repo.path();
 
     let stale_branches = vec![StaleBranchInfo {
@@ -1012,12 +1008,11 @@ mod tests {
 
   #[test]
   fn test_enhance_branch_info_missing_parent_branch_does_not_fail() {
-    let git_repo = GitRepoTestGuard::new_and_change_dir();
+    let git_repo = GitRepoTestGuard::new();
     let repo = &git_repo.repo;
 
     create_commit(repo, "README.md", "# Test Repo", "Initial commit").unwrap();
-    create_branch(repo, "main", None).unwrap();
-    checkout_branch(repo, "main").unwrap();
+    ensure_main_branch(repo).unwrap();
 
     create_branch(repo, "feature/child", Some("main")).unwrap();
 
