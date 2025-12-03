@@ -75,6 +75,192 @@ pub fn detect_switch_input(jira_parser: Option<&JiraTicketParser>, input: &str) 
   SwitchInput::BranchName(input.to_string())
 }
 
+/// Options controlling how switch helpers behave.
+#[derive(Debug, Clone, Default)]
+pub struct SwitchExecutionOptions {
+  /// Whether to create the target branch when it is missing.
+  pub create_missing: bool,
+  /// Parent selection hint when creating a new branch.
+  pub parent_option: Option<String>,
+}
+
+/// Attempt to switch based on raw user input (branch/Jira/PR).
+///
+/// This helper combines input detection with local/remote checkout and basic
+/// association storage so callers (CLI or plugins) do not have to duplicate the
+/// branching logic from `twig switch`.
+pub fn switch_from_input(
+  repository: &Repository,
+  repository_path: &Path,
+  repo_state: &RepoState,
+  jira_parser: Option<&JiraTicketParser>,
+  raw_input: &str,
+  options: &SwitchExecutionOptions,
+) -> Result<BranchSwitchOutcome> {
+  match detect_switch_input(jira_parser, raw_input) {
+    SwitchInput::BranchName(name) => switch_to_branch_name(repository, repository_path, jira_parser, &name, options),
+    SwitchInput::JiraIssueKey(key) | SwitchInput::JiraIssueUrl(key) => {
+      switch_from_jira(repository, repository_path, repo_state, jira_parser, &key, options)
+    }
+    SwitchInput::GitHubPrId(pr) | SwitchInput::GitHubPrUrl(pr) => {
+      switch_from_pr(repository, repository_path, repo_state, pr, options)
+    }
+  }
+}
+
+fn switch_to_branch_name(
+  repository: &Repository,
+  repository_path: &Path,
+  jira_parser: Option<&JiraTicketParser>,
+  branch_name: &str,
+  options: &SwitchExecutionOptions,
+) -> Result<BranchSwitchOutcome> {
+  let target = BranchName::from(branch_name);
+  let head = repository
+    .head()
+    .ok()
+    .and_then(|h| h.shorthand().map(|s| s.to_string()));
+  if head.as_deref() == Some(target.as_str()) {
+    return Ok(BranchSwitchOutcome {
+      branch: target.clone(),
+      action: BranchSwitchAction::AlreadyCurrent,
+      state_mutations: BranchStateMutations::default(),
+    });
+  }
+
+  if branch_exists(repository, &target) {
+    checkout_branch(repository, target.as_str())?;
+    return Ok(BranchSwitchOutcome {
+      branch: target,
+      action: BranchSwitchAction::CheckedOutExisting,
+      state_mutations: BranchStateMutations::default(),
+    });
+  }
+
+  if !options.create_missing {
+    return Err(anyhow::anyhow!(
+      "Branch '{}' does not exist locally. Enable creation before switching.",
+      branch_name
+    ));
+  }
+
+  if try_checkout_remote_branch(repository, branch_name)? {
+    return Ok(BranchSwitchOutcome {
+      branch: BranchName::from(branch_name),
+      action: BranchSwitchAction::CheckedOutRemote {
+        remote: "origin".to_string(),
+        remote_ref: BranchName::from(format!("origin/{branch_name}")),
+      },
+      state_mutations: BranchStateMutations::default(),
+    });
+  }
+
+  let branch_base = resolve_branch_base(
+    repository,
+    repository_path,
+    options.parent_option.as_deref(),
+    jira_parser,
+  )?;
+  create_branch_from_base(repository, branch_name, branch_base)
+}
+
+fn switch_from_jira(
+  repository: &Repository,
+  repository_path: &Path,
+  repo_state: &RepoState,
+  jira_parser: Option<&JiraTicketParser>,
+  issue_key: &str,
+  options: &SwitchExecutionOptions,
+) -> Result<BranchSwitchOutcome> {
+  if let Some(branch_issue) = repo_state.get_branch_issue_by_jira(issue_key) {
+    return switch_to_branch_name(repository, repository_path, jira_parser, &branch_issue.branch, options);
+  }
+
+  if !options.create_missing {
+    return Err(anyhow::anyhow!(
+      "No branch found for Jira issue {issue_key}. Enable creation to make one."
+    ));
+  }
+
+  let branch_name = derive_jira_branch_name(issue_key);
+  let mut outcome = switch_to_branch_name(repository, repository_path, jira_parser, &branch_name, options)?;
+  outcome.state_mutations.issue = Some(IssueAssociation {
+    key: issue_key.to_string(),
+  });
+  Ok(outcome)
+}
+
+fn switch_from_pr(
+  repository: &Repository,
+  repository_path: &Path,
+  repo_state: &RepoState,
+  pr_number: u32,
+  options: &SwitchExecutionOptions,
+) -> Result<BranchSwitchOutcome> {
+  for branch_issue in repo_state.list_branch_issues() {
+    if let Some(github_pr) = branch_issue.github_pr
+      && github_pr == pr_number
+    {
+      return switch_to_branch_name(repository, repository_path, None, &branch_issue.branch, options);
+    }
+  }
+
+  if !options.create_missing {
+    return Err(anyhow::anyhow!(
+      "No branch found for GitHub PR #{pr_number}. Enable creation to make one."
+    ));
+  }
+
+  let branch_name = derive_pr_branch_name(pr_number);
+  let mut outcome = switch_to_branch_name(repository, repository_path, None, &branch_name, options)?;
+  outcome.state_mutations.github_pr = Some(pr_number);
+  Ok(outcome)
+}
+
+fn derive_jira_branch_name(issue_key: &str) -> String {
+  issue_key.to_lowercase()
+}
+
+fn derive_pr_branch_name(pr_number: u32) -> String {
+  format!("pr/{pr_number}")
+}
+
+fn create_branch_from_base(
+  repository: &Repository,
+  branch_name: &str,
+  branch_base: BranchBaseResolution,
+) -> Result<BranchSwitchOutcome> {
+  let commit = repository
+    .find_commit(branch_base.commit())
+    .with_context(|| format!("Failed to locate base commit for '{branch_name}'"))?;
+
+  repository
+    .branch(branch_name, &commit, false)
+    .with_context(|| format!("Failed to create branch '{branch_name}'"))?;
+  checkout_branch(repository, branch_name)?;
+
+  let mut state_mutations = BranchStateMutations::default();
+  if let Some(parent) = branch_base.parent_name() {
+    state_mutations.dependency = Some(BranchDependencyUpdate::Set(BranchParentReference::Branch(
+      BranchName::from(parent),
+    )));
+  }
+
+  let action = BranchSwitchAction::Created {
+    base: BranchCreationBase {
+      commit: commit.id(),
+      source: branch_base.source(),
+    },
+    upstream: None,
+  };
+
+  Ok(BranchSwitchOutcome {
+    branch: BranchName::from(branch_name),
+    action,
+    state_mutations,
+  })
+}
+
 /// Parse and normalize a Jira issue key using the provided parser.
 pub fn parse_jira_issue_key(parser: &JiraTicketParser, input: &str) -> Option<String> {
   parser.parse(input).ok()
@@ -237,6 +423,52 @@ pub fn store_github_pr_association(repo_path: &Path, branch_name: &str, pr_numbe
   Ok(())
 }
 
+/// Persist requested state mutations after a branch switch.
+pub fn apply_branch_state_mutations(repo_path: &Path, outcome: &BranchSwitchOutcome) -> Result<()> {
+  if outcome.state_mutations.is_empty() {
+    return Ok(());
+  }
+
+  let mut repo_state = RepoState::load(repo_path)?;
+
+  if let Some(dependency) = &outcome.state_mutations.dependency {
+    match dependency {
+      BranchDependencyUpdate::Clear => {
+        repo_state.remove_all_dependencies_for_branch(outcome.branch.as_str());
+      }
+      BranchDependencyUpdate::Set(parent) => match parent {
+        BranchParentReference::Branch(name) => {
+          repo_state.add_dependency(outcome.branch.to_string(), name.to_string())?;
+        }
+        BranchParentReference::IssueKey(_) => {}
+      },
+    }
+  }
+
+  if let Some(issue) = &outcome.state_mutations.issue {
+    let now = chrono::Utc::now().to_rfc3339();
+    repo_state.add_branch_issue(BranchMetadata {
+      branch: outcome.branch.to_string(),
+      jira_issue: Some(issue.key.clone()),
+      github_pr: None,
+      created_at: now,
+    });
+  }
+
+  if let Some(pr) = outcome.state_mutations.github_pr {
+    let now = chrono::Utc::now().to_rfc3339();
+    repo_state.add_branch_issue(BranchMetadata {
+      branch: outcome.branch.to_string(),
+      jira_issue: None,
+      github_pr: Some(pr),
+      created_at: now,
+    });
+  }
+
+  repo_state.save(repo_path)?;
+  Ok(())
+}
+
 /// Resolve the tip commit for a branch, fetching origin if necessary.
 pub fn lookup_branch_tip(repo: &Repository, branch_name: &str) -> Result<Option<Oid>> {
   if let Ok(branch) = repo.find_branch(branch_name, git2::BranchType::Local) {
@@ -335,6 +567,14 @@ impl BranchBaseResolution {
   /// Optional parent branch name that should be linked to the new branch.
   pub fn parent_name(&self) -> Option<&str> {
     self.base.parent_name()
+  }
+
+  /// Map this resolution to a [`BranchBaseSource`] used for reporting.
+  pub fn source(&self) -> BranchBaseSource {
+    match &self.base {
+      BranchBase::Head => BranchBaseSource::Head,
+      BranchBase::Parent { name } => BranchBaseSource::LocalBranch(BranchName::from(name.as_str())),
+    }
   }
 }
 
@@ -733,6 +973,68 @@ mod tests {
     let refreshed = git2::Repository::open(guard.repo.path())?;
     let head = refreshed.head()?;
     assert_eq!(head.shorthand(), Some("feature/new"));
+
+    Ok(())
+  }
+
+  #[test]
+  fn switches_using_jira_key_and_records_state() -> Result<()> {
+    let guard = GitRepoTestGuard::new();
+    create_commit(&guard.repo, "file.txt", "content", "initial")?;
+    create_branch(&guard.repo, "feature/work", None)?;
+
+    // Save association to repo state
+    let repo_path = guard.repo.workdir().expect("workdir");
+    let mut state = RepoState::load(repo_path)?;
+    state.add_branch_issue(BranchMetadata {
+      branch: "feature/work".into(),
+      jira_issue: Some("PROJ-123".into()),
+      github_pr: None,
+      created_at: chrono::Utc::now().to_rfc3339(),
+    });
+    state.save(repo_path)?;
+
+    let parser = JiraTicketParser::new(JiraParsingConfig::default());
+
+    let options = SwitchExecutionOptions {
+      create_missing: true,
+      parent_option: None,
+    };
+
+    let outcome = switch_from_input(&guard.repo, repo_path, &state, Some(&parser), "PROJ-123", &options)
+      .expect("switch should succeed");
+    apply_branch_state_mutations(repo_path, &outcome)?;
+
+    let refreshed = git2::Repository::open(repo_path)?;
+    assert_eq!(refreshed.head()?.shorthand(), Some("feature/work"));
+
+    Ok(())
+  }
+
+  #[test]
+  fn creates_branch_for_jira_when_missing() -> Result<()> {
+    let guard = GitRepoTestGuard::new();
+    create_commit(&guard.repo, "file.txt", "content", "initial")?;
+
+    let repo_path = guard.repo.workdir().expect("workdir");
+    let state = RepoState::load(repo_path)?;
+
+    let parser = JiraTicketParser::new(JiraParsingConfig::default());
+
+    let options = SwitchExecutionOptions {
+      create_missing: true,
+      parent_option: None,
+    };
+
+    let outcome = switch_from_input(&guard.repo, repo_path, &state, Some(&parser), "PROJ-999", &options)?;
+    apply_branch_state_mutations(repo_path, &outcome)?;
+
+    let refreshed = git2::Repository::open(repo_path)?;
+    assert_eq!(refreshed.head()?.shorthand(), Some("proj-999"));
+
+    let state_after = RepoState::load(repo_path)?;
+    let metadata = state_after.get_branch_metadata("proj-999").expect("metadata stored");
+    assert_eq!(metadata.jira_issue.as_deref(), Some("PROJ-999"));
 
     Ok(())
   }
