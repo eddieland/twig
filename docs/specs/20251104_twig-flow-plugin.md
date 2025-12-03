@@ -1,5 +1,7 @@
 # 20251104 Twig Flow Plugin Specification
 
+**Status:** Effectively finalized; major new implementation work should be captured in a separate follow-up spec rather than expanding this document.
+
 ## Purpose
 
 - Define the architecture and feature scope for `twig flow`, a Rust-based plugin that serves as the canonical example for building Twig plugins.
@@ -285,14 +287,19 @@ error: the argument '--root' cannot be used with '--parent'
 | P0       | Handle multi-parent `--parent` edge case.                                  | Error messaging and parent listings defined; renderer call short-circuits when multiple parents.                          | Future interactive selection tracked separately.                                     | ✅ Completed – plugin now surfaces explicit error/output when multiple parents exist (`plugins/twig-flow/src/tree.rs`).                |
 | P0       | Add colorized/embellished output for readability.                          | Renderer and plugin apply color/formatting (with color-disabled fallback) to highlight current branch, metadata, and statuses without breaking alignment. | Define palette + ANSI handling, update snapshots/fixtures accordingly, and ensure non-color terminals degrade gracefully. | ✅ Completed – palette + `BranchTableStyle`/`BranchTableColorMode` live in `twig-core/src/git/renderer.rs`; snapshots cover colorized defaults and a no-color fallback. |
 | P1       | Draft CLI UX for tree visualization (mock outputs).                        | Example outputs stored in spec or doc, capturing formatting rules.                                                        | Hybrid tree/table layout with default `Branch/Story/PR/Notes` columns.               | ✅ Completed – see "CLI UX Mockups" section                                                                                            |
-| P1       | Define internal column schema configuration.                               | Document data model + default columns for renderer with hidden config override.                                           | Enables future customization without public CLI surface.                             | ⏳ Pending – unblocked by renderer API; implementation will hook config files into schema overrides.                                   |
 | P1       | Plan integration tests & fixtures.                                         | List of test scenarios with coverage goals.                                                                               | Include tree rendering snapshots, switching success/error cases.                     | ✅ Completed – scenarios exercised in `plugins/twig-flow/tests/integration.rs`; additional cases can extend this file.                                                      |
 | P1       | Surface branch commit deltas in visualization.                             | Renderer outputs `+<n>` for commits unique to the branch and `-<n>` for commits missing relative to parent.                 | Adds parent comparison overlay to tree/table output so users can see divergence at a glance.                               | ✅ Completed – renderer now appends ahead/behind counts beside branch names using commit graph comparisons.                          |
-| P1       | Explore interactive parent selection UX.                                   | Outline potential dialogs/prompts for selecting among multiple parents.                                                   | Depends on multi-parent error groundwork.                                            | ⏳ Pending – design still open; ties into future interactive flows.                                                                  |
 | P1       | Outline documentation deliverables.                                        | ToC for plugin README/tutorial.                                                                                           | Ensure canonical example requirement met.                                            | ✅ Completed – see "Documentation Deliverables Outline" section                                                                        |
-| P2       | Investigate caching strategies for large repos.                            | Determine if caching needed; propose approach.                                                                            | Could use `.twig` state file.                                                        |                                                                                                                                        |
-| P2       | Explore remote branch visualization options.                               | Document feasibility and requirements.                                                                                    | Possibly post-v1 scope.                                                              |                                                                                                                                        |
 | P3       | Consider GUI/TUI enhancements for future roadmap.                          | High-level ideas only.                                                                                                    | Not in initial release.                                                              |                                                                                                                                        |
+
+### Deferred Items
+
+| Priority | Task                                          | Definition of Done                                                                              | Notes                                                 | Status                                                                                                              |
+| -------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| P1       | Define internal column schema configuration.  | Document data model + default columns for renderer with hidden config override.                 | Enables future customization without public CLI surface. | ⏸️ Deferred – out of scope for this spec; future doc will own hidden schema config wiring.                           |
+| P1       | Explore interactive parent selection UX.      | Outline potential dialogs/prompts for selecting among multiple parents.                         | Depends on multi-parent error groundwork.             | ⏸️ Deferred – explicitly out of scope for this spec; revisit in a follow-up UX/design doc.                           |
+| P2       | Investigate caching strategies for large repos.| Determine if caching needed; propose approach.                                                   | Could use `.twig` state file.                         | ⏸️ Deferred – not needed at current stage; consider in a future perf-focused iteration.                              |
+| P2       | Explore remote branch visualization options.   | Document feasibility and requirements.                                                           | Possibly post-v1 scope.                               | ⏸️ Deferred – out of scope for this spec; revisit when expanding flow to remotes.                                    |
 
 ### Risks & Mitigations
 
@@ -339,9 +346,9 @@ error: the argument '--root' cannot be used with '--parent'
 
 ## Status Tracking (to be updated by subagent)
 
-- **Current focus:** _Define internal column schema configuration + hidden overrides_
+- **Current focus:** _None – remaining backlog items are deferred_
 - **Latest completed task:** _Colorized branch table output with ANSI-safe alignment and fallback modes_
-- **Next up:** _Explore interactive parent selection UX (building on the multi-parent error handling groundwork)_
+- **Next up:** _TBD – all outstanding items moved to the Deferred table; set a new deliverable in a future planning pass_
 
 ## Lessons Learned (ongoing)
 
