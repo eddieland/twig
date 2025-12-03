@@ -67,6 +67,17 @@ fn checkout_branch(repo: &Git2Repository, branch_name: &str) -> Result<()> {
   Ok(())
 }
 
+fn ensure_main_branch(repo: &Git2Repository) -> Result<()> {
+  if repo.find_branch("main", BranchType::Local).is_ok() {
+    return checkout_branch(repo, "main");
+  }
+
+  let head_commit = repo.head()?.peel_to_commit()?;
+  repo.branch("main", &head_commit, false)?;
+  checkout_branch(repo, "main")?;
+  Ok(())
+}
+
 /// Helper function to add a dependency between branches
 fn add_branch_dependency(repo_path: &Path, child: &str, parent: &str) -> Result<()> {
   let mut repo_state = RepoState::load(repo_path).unwrap_or_default();
@@ -143,18 +154,13 @@ fn run_cascade_command(
 #[test]
 fn test_rebase_command() -> Result<()> {
   // Create a temporary git repository
-  let git_repo = GitRepoTestGuard::new_and_change_dir();
+  let git_repo = GitRepoTestGuard::new();
   let repo = &git_repo.repo;
   let repo_path = git_repo.path();
 
   // Create initial commit on main branch
   create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
-
-  // Create main branch explicitly (since the first commit might be on a detached
-  // HEAD)
-  let head_commit = repo.head()?.peel_to_commit()?;
-  repo.branch("main", &head_commit, false)?;
-  checkout_branch(repo, "main")?;
+  ensure_main_branch(repo)?;
 
   // Create feature branch
   create_branch(repo, "feature", Some("main"))?;
@@ -195,17 +201,14 @@ fn test_rebase_command() -> Result<()> {
 #[test]
 fn test_cascade_command() -> Result<()> {
   // Create a temporary git repository
-  let git_repo = GitRepoTestGuard::new_and_change_dir();
+  let git_repo = GitRepoTestGuard::new();
   let repo = &git_repo.repo;
   let repo_path = git_repo.path();
 
   // Create initial commit on main branch
   create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
 
-  // Create main branch explicitly
-  let head_commit = repo.head()?.peel_to_commit()?;
-  repo.branch("main", &head_commit, false)?;
-  checkout_branch(repo, "main")?;
+  ensure_main_branch(repo)?;
 
   // Create feature branch
   create_branch(repo, "feature", Some("main"))?;
@@ -276,17 +279,14 @@ fn test_cascade_command() -> Result<()> {
 #[test]
 fn test_rebase_with_force_flag() -> Result<()> {
   // Create a temporary git repository
-  let git_repo = GitRepoTestGuard::new_and_change_dir();
+  let git_repo = GitRepoTestGuard::new();
   let repo = &git_repo.repo;
   let repo_path = git_repo.path();
 
   // Create initial commit on main branch
   create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
 
-  // Create main branch explicitly
-  let head_commit = repo.head()?.peel_to_commit()?;
-  repo.branch("main", &head_commit, false)?;
-  checkout_branch(repo, "main")?;
+  ensure_main_branch(repo)?;
 
   // Create feature branch
   create_branch(repo, "feature", Some("main"))?;
@@ -310,17 +310,14 @@ fn test_rebase_with_force_flag() -> Result<()> {
 #[test]
 fn test_cascade_with_max_depth() -> Result<()> {
   // Create a temporary git repository
-  let git_repo = GitRepoTestGuard::new_and_change_dir();
+  let git_repo = GitRepoTestGuard::new();
   let repo = &git_repo.repo;
   let repo_path = git_repo.path();
 
   // Create initial commit on main branch
   create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
 
-  // Create main branch explicitly
-  let head_commit = repo.head()?.peel_to_commit()?;
-  repo.branch("main", &head_commit, false)?;
-  checkout_branch(repo, "main")?;
+  ensure_main_branch(repo)?;
 
   // Create feature branch
   create_branch(repo, "feature", Some("main"))?;
