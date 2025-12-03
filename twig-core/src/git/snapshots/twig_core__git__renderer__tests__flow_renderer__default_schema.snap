@@ -2,7 +2,7 @@
 source: twig-core/src/git/renderer.rs
 expression: output
 ---
-[1mBranch[0m                                 [1mStory[0m     [1mPR[0m      [1mNotes[0m    
+[97;1mBranch[0m                                 [97;1mStory[0m     [97;1mPR[0m      [97;1mNotes[0m    
 [92;1m*[0m [92;1mmain[0m                                 [90m--[0m        [90m--[0m      [90m--[0m       
 [90m├─ [0m[1mfeature/auth-refresh[0m ([32m+3[0m/[90m-0[0m)        [36mPROJ-451[0m  [90m--[0m      [90m--[0m       
 [90m│  └─ [0m[1mfeature/auth-refresh-ui[0m ([32m+1[0m/[31m-1[0m)  [36mPROJ-451[0m  [33m#982[0m    [33min-review[0m

@@ -702,7 +702,7 @@ fn placeholder_style() -> Style {
 }
 
 fn header_style() -> Style {
-  Style::new().bold()
+  Style::new().bright_white().bold()
 }
 
 fn ready_style() -> Style {
