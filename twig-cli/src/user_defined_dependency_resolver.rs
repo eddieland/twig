@@ -59,6 +59,26 @@ impl UserDefinedDependencyResolver {
     repo: &Git2Repository,
     repo_state: &RepoState,
   ) -> Result<HashMap<String, BranchNode>> {
+    let mut branch_nodes = self.build_branch_nodes(repo, repo_state)?;
+
+    // Attach orphaned branches to the default root (if configured)
+    self.attach_orphans_to_default_root(&mut branch_nodes, repo_state);
+
+    Ok(branch_nodes)
+  }
+
+  /// Resolve user-defined dependencies without attaching orphaned branches to
+  /// the default root. Useful when callers need to reason about true orphans
+  /// instead of the display-oriented tree structure.
+  pub fn resolve_user_dependencies_without_default_root(
+    &self,
+    repo: &Git2Repository,
+    repo_state: &RepoState,
+  ) -> Result<HashMap<String, BranchNode>> {
+    self.build_branch_nodes(repo, repo_state)
+  }
+
+  fn build_branch_nodes(&self, repo: &Git2Repository, repo_state: &RepoState) -> Result<HashMap<String, BranchNode>> {
     let mut branch_nodes = HashMap::new();
 
     // Get all local branches
@@ -85,9 +105,6 @@ impl UserDefinedDependencyResolver {
 
     // Second pass: build parent-child relationships from user-defined dependencies
     self.build_dependencies_from_state(&mut branch_nodes, repo_state);
-
-    // Attach orphaned branches to the default root (if configured)
-    self.attach_orphans_to_default_root(&mut branch_nodes, repo_state);
 
     Ok(branch_nodes)
   }

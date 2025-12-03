@@ -84,7 +84,7 @@ pub(crate) fn handle_adopt_command(args: AdoptArgs) -> Result<()> {
   let mut repo_state = RepoState::load(&repo_path).unwrap_or_default();
 
   let user_resolver = UserDefinedDependencyResolver;
-  let branch_nodes = user_resolver.resolve_user_dependencies(&repo, &repo_state)?;
+  let branch_nodes = user_resolver.resolve_user_dependencies_without_default_root(&repo, &repo_state)?;
   let (_, orphaned) = user_resolver.build_tree_from_user_dependencies(&branch_nodes, &repo_state);
 
   if orphaned.is_empty() {
