@@ -9,7 +9,8 @@
 use std::collections::BTreeSet;
 use std::fmt::{self, Write as FmtWrite};
 
-use console::measure_text_width;
+use console::{colors_enabled, measure_text_width, strip_ansi_codes};
+use owo_colors::{OwoColorize, Style};
 use thiserror::Error;
 
 use super::graph::{
@@ -176,6 +177,76 @@ impl Default for BranchTableSchema {
   }
 }
 
+/// Color strategy for branch table rendering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BranchTableColorMode {
+  /// Enable colors when the output stream supports them.
+  Auto,
+  /// Force colorized output regardless of terminal detection.
+  Always,
+  /// Disable colors entirely.
+  Never,
+}
+
+/// Presentation settings applied to the branch table.
+#[derive(Debug, Clone, Copy)]
+pub struct BranchTableStyle {
+  color_mode: BranchTableColorMode,
+  dim_placeholders: bool,
+  bold_headers: bool,
+  dim_connectors: bool,
+}
+
+impl BranchTableStyle {
+  /// Create a new style configuration.
+  pub fn new(color_mode: BranchTableColorMode) -> Self {
+    Self {
+      color_mode,
+      dim_placeholders: true,
+      bold_headers: true,
+      dim_connectors: true,
+    }
+  }
+
+  /// Choose how colors should be applied.
+  pub fn with_color_mode(mut self, color_mode: BranchTableColorMode) -> Self {
+    self.color_mode = color_mode;
+    self
+  }
+
+  /// Toggle dimming for placeholder values.
+  pub fn with_dim_placeholders(mut self, dim: bool) -> Self {
+    self.dim_placeholders = dim;
+    self
+  }
+
+  /// Toggle bold styling for header cells.
+  pub fn with_bold_headers(mut self, bold: bool) -> Self {
+    self.bold_headers = bold;
+    self
+  }
+
+  /// Toggle dimming for tree connectors.
+  pub fn with_dim_connectors(mut self, dim: bool) -> Self {
+    self.dim_connectors = dim;
+    self
+  }
+
+  fn colors_enabled(&self) -> bool {
+    match self.color_mode {
+      BranchTableColorMode::Auto => colors_enabled(),
+      BranchTableColorMode::Always => true,
+      BranchTableColorMode::Never => false,
+    }
+  }
+}
+
+impl Default for BranchTableStyle {
+  fn default() -> Self {
+    Self::new(BranchTableColorMode::Auto)
+  }
+}
+
 /// Error conditions raised while rendering.
 #[derive(Debug, Error)]
 pub enum BranchTableRenderError {
@@ -197,6 +268,7 @@ pub enum BranchTableRenderError {
 #[derive(Debug, Clone)]
 pub struct BranchTableRenderer {
   schema: BranchTableSchema,
+  style: BranchTableStyle,
 }
 
 impl Default for BranchTableRenderer {
@@ -208,7 +280,16 @@ impl Default for BranchTableRenderer {
 impl BranchTableRenderer {
   /// Create a renderer backed by the provided schema.
   pub fn new(schema: BranchTableSchema) -> Self {
-    Self { schema }
+    Self {
+      schema,
+      style: BranchTableStyle::default(),
+    }
+  }
+
+  /// Apply additional styling options before rendering.
+  pub fn with_style(mut self, style: BranchTableStyle) -> Self {
+    self.style = style;
+    self
   }
 
   /// Render the branch graph rooted at `branch` into the provided writer.
@@ -229,13 +310,15 @@ impl BranchTableRenderer {
       return Err(BranchTableRenderError::MissingBranchColumn);
     }
 
+    let colors_enabled = self.style.colors_enabled();
+
     // Collect rows in depth-first order so we can generate values for each column.
     let mut stack = Vec::new();
     let mut visited = BTreeSet::new();
     let mut rows = Vec::new();
     self.collect_rows(graph, branch, &mut stack, &mut visited, &mut rows)?;
 
-    let rendered_rows = self.render_rows(graph, &rows)?;
+    let rendered_rows = self.render_rows(graph, &rows, colors_enabled)?;
     let column_widths = self.compute_column_widths(&rendered_rows);
     let spacing = " ".repeat(self.schema.column_spacing());
 
@@ -244,7 +327,13 @@ impl BranchTableRenderer {
         .schema
         .columns()
         .iter()
-        .map(|col| col.title().to_string())
+        .map(|col| {
+          if self.style.bold_headers {
+            style_text(col.title(), header_style(), colors_enabled)
+          } else {
+            col.title().to_string()
+          }
+        })
         .collect();
       self.write_row(writer, &header_cells, &column_widths, &spacing)?;
     }
@@ -293,15 +382,25 @@ impl BranchTableRenderer {
     Ok(())
   }
 
-  fn render_rows(&self, graph: &BranchGraph, rows: &[TreeRow]) -> Result<Vec<Vec<String>>, BranchTableRenderError> {
+  fn render_rows(
+    &self,
+    graph: &BranchGraph,
+    rows: &[TreeRow],
+    colors_enabled: bool,
+  ) -> Result<Vec<Vec<String>>, BranchTableRenderError> {
     let mut rendered = Vec::with_capacity(rows.len());
     for row in rows {
-      rendered.push(self.render_row(graph, row)?);
+      rendered.push(self.render_row(graph, row, colors_enabled)?);
     }
     Ok(rendered)
   }
 
-  fn render_row(&self, graph: &BranchGraph, row: &TreeRow) -> Result<Vec<String>, BranchTableRenderError> {
+  fn render_row(
+    &self,
+    graph: &BranchGraph,
+    row: &TreeRow,
+    colors_enabled: bool,
+  ) -> Result<Vec<String>, BranchTableRenderError> {
     let node = graph
       .get(&row.branch)
       .ok_or_else(|| BranchTableRenderError::UnknownBranch(row.branch.clone()))?;
@@ -309,10 +408,12 @@ impl BranchTableRenderer {
     let mut cells = Vec::with_capacity(self.schema.columns().len());
     for column in self.schema.columns() {
       let value = match column.kind() {
-        BranchTableColumnKind::Branch => self.branch_value(graph, node, &row.tree_prefix),
-        BranchTableColumnKind::FirstLabel => self.value_or_placeholder(first_label(&node.metadata)),
-        BranchTableColumnKind::Annotation { key } => self.value_or_placeholder(annotation_value(&node.metadata, key)),
-        BranchTableColumnKind::Notes => self.value_or_placeholder(notes_value(&node.metadata)),
+        BranchTableColumnKind::Branch => self.branch_value(graph, node, &row.tree_prefix, colors_enabled),
+        BranchTableColumnKind::FirstLabel => self.style_label(first_label(&node.metadata), colors_enabled),
+        BranchTableColumnKind::Annotation { key } => {
+          self.style_annotation(annotation_value(&node.metadata, key), key, colors_enabled)
+        }
+        BranchTableColumnKind::Notes => self.style_notes(notes_value(&node.metadata), colors_enabled),
       };
 
       cells.push(value);
@@ -321,11 +422,16 @@ impl BranchTableRenderer {
     Ok(cells)
   }
 
-  fn branch_value(&self, graph: &BranchGraph, node: &BranchNode, prefix: &str) -> String {
+  fn branch_value(&self, graph: &BranchGraph, node: &BranchNode, prefix: &str, colors_enabled: bool) -> String {
     let mut value = String::new();
 
     if !prefix.is_empty() {
-      value.push_str(prefix);
+      let styled_prefix = if self.style.dim_connectors {
+        style_text(prefix, connector_style(), colors_enabled)
+      } else {
+        prefix.to_string()
+      };
+      value.push_str(&styled_prefix);
     }
 
     let is_current = node.is_current()
@@ -335,32 +441,72 @@ impl BranchTableRenderer {
         .unwrap_or(false);
 
     if is_current {
-      value.push('*');
+      let marker = style_text("*", current_branch_style(), colors_enabled);
+      value.push_str(&marker);
       value.push(' ');
     }
 
-    value.push_str(node.name.as_str());
+    let branch_style = if is_current {
+      current_branch_style()
+    } else {
+      branch_name_style()
+    };
+
+    value.push_str(&style_text(node.name.as_str(), branch_style, colors_enabled));
     if let Some(divergence) = node.metadata.divergence.as_ref() {
       value.push(' ');
-      value.push_str(&format_divergence(divergence));
+      value.push_str(&format_divergence(divergence, colors_enabled));
     }
     value
   }
 
-  fn value_or_placeholder(&self, value: Option<String>) -> String {
-    value.unwrap_or_else(|| self.schema.placeholder().to_string())
+  fn style_label(&self, value: Option<String>, colors_enabled: bool) -> String {
+    value
+      .map(|label| style_text(label, label_style(), colors_enabled))
+      .unwrap_or_else(|| self.placeholder(colors_enabled))
+  }
+
+  fn style_annotation(&self, value: Option<String>, key: &str, colors_enabled: bool) -> String {
+    match value {
+      Some(value) => {
+        let style = if key == DEFAULT_PR_ANNOTATION_KEY {
+          pr_style()
+        } else {
+          annotation_style()
+        };
+        style_text(value, style, colors_enabled)
+      }
+      None => self.placeholder(colors_enabled),
+    }
+  }
+
+  fn style_notes(&self, value: Option<NotesValue>, colors_enabled: bool) -> String {
+    match value {
+      Some(NotesValue::Annotation(note)) => style_note_text(note, colors_enabled),
+      Some(NotesValue::Stale(state)) => style_stale_state(state, colors_enabled),
+      None => self.placeholder(colors_enabled),
+    }
+  }
+
+  fn placeholder(&self, colors_enabled: bool) -> String {
+    let placeholder = self.schema.placeholder().to_string();
+    if colors_enabled && self.style.dim_placeholders {
+      style_text(placeholder, placeholder_style(), true)
+    } else {
+      placeholder
+    }
   }
 
   fn compute_column_widths(&self, rows: &[Vec<String>]) -> Vec<usize> {
     let mut widths: Vec<usize> = self.schema.columns().iter().map(|column| column.min_width()).collect();
 
     for (idx, column) in self.schema.columns().iter().enumerate() {
-      widths[idx] = widths[idx].max(measure_text_width(column.title()));
+      widths[idx] = widths[idx].max(visible_width(column.title()));
     }
 
     for row in rows {
       for (idx, cell) in row.iter().enumerate() {
-        widths[idx] = widths[idx].max(measure_text_width(cell));
+        widths[idx] = widths[idx].max(visible_width(cell));
       }
     }
 
@@ -424,20 +570,44 @@ fn annotation_value(metadata: &BranchNodeMetadata, key: &str) -> Option<String> 
   metadata.annotations.get(key).map(format_annotation_value)
 }
 
-fn notes_value(metadata: &BranchNodeMetadata) -> Option<String> {
-  if let Some(note) = metadata.annotations.get(DEFAULT_NOTES_ANNOTATION_KEY) {
-    return Some(format_annotation_value(note));
-  }
-
-  metadata.stale_state.as_ref().map(|state| match state {
-    BranchStaleState::Fresh => "fresh".to_string(),
-    BranchStaleState::Stale { age_in_days } => format!("stale {age_in_days}d"),
-    BranchStaleState::Unknown => "unknown".to_string(),
-  })
+#[derive(Debug, Clone)]
+enum NotesValue {
+  Annotation(String),
+  Stale(BranchStaleState),
 }
 
-fn format_divergence(divergence: &BranchDivergence) -> String {
-  format!("(+{}/-{})", divergence.ahead, divergence.behind)
+fn notes_value(metadata: &BranchNodeMetadata) -> Option<NotesValue> {
+  if let Some(note) = metadata.annotations.get(DEFAULT_NOTES_ANNOTATION_KEY) {
+    return Some(NotesValue::Annotation(format_annotation_value(note)));
+  }
+
+  metadata.stale_state.clone().map(NotesValue::Stale)
+}
+
+fn format_divergence(divergence: &BranchDivergence, colors_enabled: bool) -> String {
+  let ahead = if colors_enabled {
+    let style = if divergence.ahead == 0 {
+      placeholder_style()
+    } else {
+      divergence_ahead_style()
+    };
+    style_text(format!("+{}", divergence.ahead), style, true)
+  } else {
+    format!("+{}", divergence.ahead)
+  };
+
+  let behind = if colors_enabled {
+    let style = if divergence.behind == 0 {
+      placeholder_style()
+    } else {
+      divergence_behind_style()
+    };
+    style_text(format!("-{}", divergence.behind), style, true)
+  } else {
+    format!("-{}", divergence.behind)
+  };
+
+  format!("({ahead}/{behind})")
 }
 
 fn format_annotation_value(value: &BranchAnnotationValue) -> String {
@@ -450,7 +620,7 @@ fn format_annotation_value(value: &BranchAnnotationValue) -> String {
 }
 
 fn pad_cell(value: &str, width: usize) -> String {
-  let current_width = measure_text_width(value);
+  let current_width = visible_width(value);
   if current_width >= width {
     value.to_string()
   } else {
@@ -458,6 +628,101 @@ fn pad_cell(value: &str, width: usize) -> String {
     output.push_str(&" ".repeat(width - current_width));
     output
   }
+}
+
+fn style_text(value: impl AsRef<str>, style: Style, colors_enabled: bool) -> String {
+  if colors_enabled {
+    value.as_ref().style(style).to_string()
+  } else {
+    value.as_ref().to_string()
+  }
+}
+
+fn style_note_text(note: String, colors_enabled: bool) -> String {
+  if !colors_enabled {
+    return note;
+  }
+
+  let normalized = note.to_ascii_lowercase();
+  if normalized.contains("ready") || normalized.contains("fresh") {
+    style_text(note, ready_style(), true)
+  } else if normalized.contains("review") {
+    style_text(note, review_style(), true)
+  } else if normalized.contains("stale") || normalized.contains("draft") || normalized.contains("blocked") {
+    style_text(note, stale_style(), true)
+  } else {
+    note
+  }
+}
+
+fn style_stale_state(state: BranchStaleState, colors_enabled: bool) -> String {
+  match state {
+    BranchStaleState::Fresh => style_text("fresh", ready_style(), colors_enabled),
+    BranchStaleState::Stale { age_in_days } => {
+      style_text(format!("stale {age_in_days}d"), stale_style(), colors_enabled)
+    }
+    BranchStaleState::Unknown => style_text("unknown", unknown_style(), colors_enabled),
+  }
+}
+
+fn connector_style() -> Style {
+  Style::new().bright_black()
+}
+
+fn branch_name_style() -> Style {
+  Style::new().bold()
+}
+
+fn current_branch_style() -> Style {
+  Style::new().bright_green().bold()
+}
+
+fn divergence_ahead_style() -> Style {
+  Style::new().green()
+}
+
+fn divergence_behind_style() -> Style {
+  Style::new().red()
+}
+
+fn label_style() -> Style {
+  Style::new().cyan()
+}
+
+fn pr_style() -> Style {
+  Style::new().yellow()
+}
+
+fn annotation_style() -> Style {
+  Style::new().magenta()
+}
+
+fn placeholder_style() -> Style {
+  Style::new().bright_black()
+}
+
+fn header_style() -> Style {
+  Style::new().bold()
+}
+
+fn ready_style() -> Style {
+  Style::new().green().bold()
+}
+
+fn review_style() -> Style {
+  Style::new().yellow()
+}
+
+fn stale_style() -> Style {
+  Style::new().yellow()
+}
+
+fn unknown_style() -> Style {
+  Style::new().bright_black()
+}
+
+fn visible_width(value: &str) -> usize {
+  measure_text_width(&strip_ansi_codes(value))
 }
 
 #[cfg(test)]
@@ -476,6 +741,7 @@ mod tests {
     let (graph, root) = sample_graph();
     let mut output = String::new();
     BranchTableRenderer::default()
+      .with_style(BranchTableStyle::new(BranchTableColorMode::Always))
       .render(&mut output, &graph, &root)
       .unwrap();
 
@@ -487,6 +753,7 @@ mod tests {
     let (graph, root) = minimal_graph();
     let mut output = String::new();
     BranchTableRenderer::default()
+      .with_style(BranchTableStyle::new(BranchTableColorMode::Always))
       .render(&mut output, &graph, &root)
       .unwrap();
 
@@ -509,6 +776,7 @@ mod tests {
     let (graph, root) = sample_graph();
     let mut output = String::new();
     BranchTableRenderer::new(BranchTableSchema::default().with_header(false))
+      .with_style(BranchTableStyle::new(BranchTableColorMode::Always))
       .render(&mut output, &graph, &root)
       .unwrap();
 
@@ -535,10 +803,23 @@ mod tests {
 
     let mut output = String::new();
     BranchTableRenderer::new(schema)
+      .with_style(BranchTableStyle::new(BranchTableColorMode::Always))
       .render(&mut output, &graph, &root)
       .unwrap();
 
     assert_snapshot!("flow_renderer__custom_schema", output);
+  }
+
+  #[test]
+  fn falls_back_to_plain_text_when_colors_disabled() {
+    let (graph, root) = sample_graph();
+    let mut output = String::new();
+    BranchTableRenderer::default()
+      .with_style(BranchTableStyle::new(BranchTableColorMode::Never))
+      .render(&mut output, &graph, &root)
+      .unwrap();
+
+    assert_snapshot!("flow_renderer__default_schema_no_color", output);
   }
 
   fn sample_graph() -> (BranchGraph, BranchName) {

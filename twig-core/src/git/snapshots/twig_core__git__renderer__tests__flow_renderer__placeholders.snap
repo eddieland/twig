@@ -2,5 +2,5 @@
 source: twig-core/src/git/renderer.rs
 expression: output
 ---
-Branch    Story     PR      Notes   
-* main    --        --      --
+[1mBranch[0m    [1mStory[0m     [1mPR[0m      [1mNotes[0m   
+[92;1m*[0m [92;1mmain[0m    [90m--[0m        [90m--[0m      [90m--[0m
