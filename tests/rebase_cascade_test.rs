@@ -6,7 +6,7 @@ use std::path::Path;
 use anyhow::Result;
 use git2::{BranchType, Repository as Git2Repository, Signature};
 use twig_core::state::RepoState;
-use twig_test_utils::git::GitRepoTestGuard;
+use twig_test_utils::git::{GitRepoTestGuard, ensure_main_branch};
 
 /// Helper function to create a commit in a repository
 fn create_commit(repo: &Git2Repository, file_name: &str, content: &str, message: &str) -> Result<()> {
@@ -64,17 +64,6 @@ fn checkout_branch(repo: &Git2Repository, branch_name: &str) -> Result<()> {
   repo.checkout_tree(&obj.into_object(), None)?;
   repo.set_head(&format!("refs/heads/{}", branch_name))?;
 
-  Ok(())
-}
-
-fn ensure_main_branch(repo: &Git2Repository) -> Result<()> {
-  if repo.find_branch("main", BranchType::Local).is_ok() {
-    return checkout_branch(repo, "main");
-  }
-
-  let head_commit = repo.head()?.peel_to_commit()?;
-  repo.branch("main", &head_commit, false)?;
-  checkout_branch(repo, "main")?;
   Ok(())
 }
 

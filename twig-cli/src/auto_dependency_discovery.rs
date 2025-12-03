@@ -241,10 +241,9 @@ impl AutoDependencyDiscovery {
 mod tests {
   use std::path::Path;
 
-  use git2::BranchType;
   use twig_core::state::BranchMetadata;
   use twig_core::tree_renderer::BranchNode;
-  use twig_test_utils::git::{GitRepoTestGuard, checkout_branch, create_branch, create_commit};
+  use twig_test_utils::git::{GitRepoTestGuard, checkout_branch, create_branch, create_commit, ensure_main_branch};
 
   use super::*;
 
@@ -260,17 +259,6 @@ mod tests {
     assert_eq!(suggestion.child, "feature/oauth");
     assert_eq!(suggestion.parent, "feature/auth");
     assert_eq!(suggestion.confidence, 0.8);
-  }
-
-  fn ensure_main_branch(repo: &git2::Repository) -> Result<()> {
-    if repo.find_branch("main", BranchType::Local).is_ok() {
-      return checkout_branch(repo, "main");
-    }
-
-    let head_commit = repo.head()?.peel_to_commit()?;
-    repo.branch("main", &head_commit, false)?;
-    checkout_branch(repo, "main")?;
-    Ok(())
   }
 
   #[test]

@@ -769,11 +769,11 @@ fn display_prune_summary(summary: &PruneSummary) {
 #[cfg(test)]
 mod tests {
   use chrono::Utc;
-  use git2::BranchType;
   use serde_json::Value;
   use twig_core::RepoState;
   use twig_test_utils::{
     GitRepoTestGuard, checkout_branch, create_branch, create_commit, create_commit_with_time, days_ago,
+    ensure_main_branch,
   };
 
   use super::*;
@@ -1034,15 +1034,5 @@ mod tests {
 
     assert_eq!(enhanced.parent_branch.as_deref(), Some("feature/missing-parent"));
     assert!(enhanced.novel_commits.is_empty());
-  }
-
-  fn ensure_main_branch(repo: &git2::Repository) -> anyhow::Result<()> {
-    if repo.find_branch("main", BranchType::Local).is_ok() {
-      return checkout_branch(repo, "main");
-    }
-
-    let head_commit = repo.head()?.peel_to_commit()?;
-    repo.branch("main", &head_commit, false)?;
-    checkout_branch(repo, "main")
   }
 }
