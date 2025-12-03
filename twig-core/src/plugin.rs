@@ -129,7 +129,7 @@ fn branch_from_env_or_repo(repo_path: Option<&Path>) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-  use std::env;
+  use std::{env, fs};
 
   use git2::Repository as GitRepository;
   use tempfile::TempDir;
@@ -201,12 +201,13 @@ mod tests {
     let original_dir = env::current_dir().expect("cwd");
     env::set_current_dir(repo_dir.path()).expect("chdir");
 
+    let canonical_repo_path = fs::canonicalize(repo_dir.path()).expect("canonical repo path");
     let expected_dirs = get_config_dirs().expect("config dirs");
     let context = PluginContext::discover().expect("context");
 
     assert_eq!(context.config_dirs.config_dir(), expected_dirs.config_dir());
     assert_eq!(context.config_dirs.data_dir(), expected_dirs.data_dir());
-    assert_eq!(context.current_repo, Some(repo_dir.path().to_path_buf()));
+    assert_eq!(context.current_repo, Some(canonical_repo_path));
     assert_eq!(context.current_branch, Some(branch_name));
     assert_eq!(context.colors, ColorMode::Auto);
     assert_eq!(context.verbosity, 0);
