@@ -12,7 +12,9 @@ use std::fmt::{self, Write as FmtWrite};
 use console::measure_text_width;
 use thiserror::Error;
 
-use super::graph::{BranchAnnotationValue, BranchGraph, BranchName, BranchNode, BranchNodeMetadata, BranchStaleState};
+use super::graph::{
+  BranchAnnotationValue, BranchDivergence, BranchGraph, BranchName, BranchNode, BranchNodeMetadata, BranchStaleState,
+};
 
 const DEFAULT_NOTES_ANNOTATION_KEY: &str = "twig.notes";
 const DEFAULT_PR_ANNOTATION_KEY: &str = "twig.pr";
@@ -338,6 +340,10 @@ impl BranchTableRenderer {
     }
 
     value.push_str(node.name.as_str());
+    if let Some(divergence) = node.metadata.divergence.as_ref() {
+      value.push(' ');
+      value.push_str(&format_divergence(divergence));
+    }
     value
   }
 
@@ -430,6 +436,10 @@ fn notes_value(metadata: &BranchNodeMetadata) -> Option<String> {
   })
 }
 
+fn format_divergence(divergence: &BranchDivergence) -> String {
+  format!("(+{}/-{})", divergence.ahead, divergence.behind)
+}
+
 fn format_annotation_value(value: &BranchAnnotationValue) -> String {
   match value {
     BranchAnnotationValue::Text(text) => text.clone(),
@@ -456,7 +466,7 @@ mod tests {
   use git2::Oid;
   use insta::assert_snapshot;
 
-  use super::super::graph::{BranchHead, BranchKind, BranchTopology};
+  use super::super::graph::{BranchDivergence, BranchHead, BranchKind, BranchTopology};
   use super::*;
 
   const LIFECYCLE_KEY: &str = "twig.lifecycle";
@@ -556,7 +566,7 @@ mod tests {
     );
     feature_payment.metadata.stale_state = Some(BranchStaleState::Stale { age_in_days: 21 });
 
-    let feature_payment_api = branch_node("feature/payment-api");
+    let mut feature_payment_api = branch_node("feature/payment-api");
 
     let mut feature_payment_ui = branch_node("feature/payment-ui");
     feature_payment_ui.metadata.annotations.insert(
@@ -580,6 +590,12 @@ mod tests {
       .metadata
       .annotations
       .insert(LIFECYCLE_KEY.to_string(), BranchAnnotationValue::Text("ready".into()));
+
+    feature_auth.metadata.divergence = Some(BranchDivergence { ahead: 3, behind: 0 });
+    feature_auth_ui.metadata.divergence = Some(BranchDivergence { ahead: 1, behind: 1 });
+    feature_payment.metadata.divergence = Some(BranchDivergence { ahead: 0, behind: 2 });
+    feature_payment_api.metadata.divergence = Some(BranchDivergence { ahead: 1, behind: 0 });
+    feature_payment_ui.metadata.divergence = Some(BranchDivergence { ahead: 2, behind: 0 });
 
     let root = main.name.clone();
     let nodes = vec![

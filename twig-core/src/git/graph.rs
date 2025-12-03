@@ -7,7 +7,7 @@
 //! contextual metadata so that additional annotations can be layered on without
 //! duplicating graph construction.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::sync::Arc;
 
@@ -119,6 +119,8 @@ pub struct BranchNodeMetadata {
   pub is_current: bool,
   /// Indicates the branch is considered "stale" by analytics.
   pub stale_state: Option<BranchStaleState>,
+  /// Divergence relative to the branch's primary parent (if any).
+  pub divergence: Option<BranchDivergence>,
   /// Arbitrary labels that renderers can surface (e.g. Jira issue keys, PR
   /// numbers).
   pub labels: BTreeSet<String>,
@@ -146,6 +148,22 @@ pub enum BranchAnnotationValue {
   Numeric(i64),
   Timestamp(DateTime<Utc>),
   Flag(bool),
+}
+
+/// Ahead/behind counts for a branch relative to its parent.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BranchDivergence {
+  /// Commits present on the branch but not on its primary parent.
+  pub ahead: usize,
+  /// Commits present on the primary parent but missing on the branch.
+  pub behind: usize,
+}
+
+impl BranchDivergence {
+  /// Returns `true` when the branch is fully in sync with its parent.
+  pub fn is_zero(&self) -> bool {
+    self.ahead == 0 && self.behind == 0
+  }
 }
 
 /// Node within a branch graph containing topological information and metadata.
@@ -352,6 +370,8 @@ impl BranchGraphBuilder {
       Vec::new()
     };
 
+    self.apply_divergence(repo, &mut nodes)?;
+
     let root_candidates = self.resolve_root_candidates(&repo_state, &nodes, head_branch.as_deref());
     let current_branch = head_branch
       .as_ref()
@@ -503,6 +523,39 @@ impl BranchGraphBuilder {
     edges
   }
 
+  fn apply_divergence(
+    &self,
+    repo: &Repository,
+    nodes: &mut BTreeMap<String, BranchNode>,
+  ) -> Result<(), BranchGraphError> {
+    let mut cached_counts: HashMap<(Oid, Oid), (usize, usize)> = HashMap::new();
+    let head_by_name: BTreeMap<String, Oid> = nodes.iter().map(|(name, node)| (name.clone(), node.head.oid)).collect();
+
+    for node in nodes.values_mut() {
+      let Some(parent) = node.topology.primary_parent.clone() else {
+        continue;
+      };
+      let Some(parent_head) = head_by_name.get(parent.as_str()) else {
+        continue;
+      };
+
+      let child_head = node.head.oid;
+      let key = (child_head, *parent_head);
+      let (ahead, behind) = match cached_counts.get(&key) {
+        Some(counts) => *counts,
+        None => {
+          let counts = repo.graph_ahead_behind(child_head, *parent_head)?;
+          cached_counts.insert(key, counts);
+          counts
+        }
+      };
+
+      node.metadata.divergence = Some(BranchDivergence { ahead, behind });
+    }
+
+    Ok(())
+  }
+
   fn resolve_root_candidates(
     &self,
     repo_state: &RepoState,
@@ -537,7 +590,7 @@ impl BranchGraphBuilder {
 #[cfg(test)]
 mod tests {
   use chrono::Utc;
-  use twig_test_utils::git::{GitRepoTestGuard, create_commit};
+  use twig_test_utils::git::{GitRepoTestGuard, checkout_branch, create_branch, create_commit};
 
   use super::*;
   use crate::state::{BranchMetadata, RepoState};
@@ -580,5 +633,36 @@ mod tests {
       BranchAnnotationValue::Numeric(value) => assert_eq!(*value, 42),
       other => panic!("unexpected annotation value: {other:?}"),
     }
+  }
+
+  #[test]
+  fn records_divergence_against_primary_parent() {
+    let repo_guard = GitRepoTestGuard::new();
+    let repo = &repo_guard.repo;
+
+    create_commit(repo, "README.md", "hello", "initial").unwrap();
+    let main_branch = repo.head().unwrap().shorthand().unwrap().to_string();
+    create_branch(repo, "feature/delta", None).unwrap();
+
+    checkout_branch(repo, "feature/delta").unwrap();
+    create_commit(repo, "feature.txt", "content", "feature work").unwrap();
+
+    checkout_branch(repo, &main_branch).unwrap();
+    create_commit(repo, "main.txt", "more", "main work").unwrap();
+
+    let workdir = repo.workdir().unwrap();
+
+    let mut state = RepoState::default();
+    state
+      .add_dependency("feature/delta".into(), main_branch.clone())
+      .unwrap();
+    state.save(workdir).unwrap();
+
+    let graph = BranchGraphBuilder::new().build(repo).unwrap();
+    let branch = graph.get(&BranchName::from("feature/delta")).unwrap();
+    let divergence = branch.metadata.divergence.as_ref().expect("divergence recorded");
+
+    assert_eq!(divergence.ahead, 1);
+    assert_eq!(divergence.behind, 1);
   }
 }

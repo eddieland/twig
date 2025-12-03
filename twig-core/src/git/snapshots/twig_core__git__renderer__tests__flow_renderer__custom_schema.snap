@@ -2,10 +2,10 @@
 source: twig-core/src/git/renderer.rs
 expression: output
 ---
-Branch                          PR      Lifecycle    Notes       
-* main                          —       —            —           
-├─ feature/auth-refresh         —       active       —           
-│  └─ feature/auth-refresh-ui   #982    —            in-review   
-└─ feature/payment-refactor     draft   stale        stale 21d   
-   ├─ feature/payment-api       —       —            —           
-   └─ feature/payment-ui        —       ready        ready
+Branch                                  PR      Lifecycle    Notes       
+* main                                  —       —            —           
+├─ feature/auth-refresh (+3/-0)         —       active       —           
+│  └─ feature/auth-refresh-ui (+1/-1)   #982    —            in-review   
+└─ feature/payment-refactor (+0/-2)     draft   stale        stale 21d   
+   ├─ feature/payment-api (+1/-0)       —       —            —           
+   └─ feature/payment-ui (+2/-0)        —       ready        ready
