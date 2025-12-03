@@ -3,6 +3,7 @@
 //! Derive-based implementation of the sync command for automatically linking
 //! branches to Jira issues and GitHub PRs.
 
+use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
@@ -12,6 +13,8 @@ use git2::{BranchType, Repository as Git2Repository};
 use indicatif::{ProgressBar, ProgressStyle};
 use regex::Regex;
 use tokio::runtime::Runtime;
+use tokio::task::JoinSet;
+use tracing::warn;
 use twig_core::output::{print_info, print_success, print_warning};
 use twig_core::state::{BranchMetadata, RepoState};
 use twig_gh::{GitHubClient, create_github_client_from_netrc};
@@ -130,6 +133,52 @@ fn sync_branches(
   );
   pb.set_message("Scanning branches for Jira issues and GitHub PRs...");
 
+  let repo_info = github_client
+    .as_ref()
+    .and_then(|gh| resolve_repo_info_from_origin(repo_path, gh));
+
+  let github_pr_results = if let (Some(gh), Some((owner, repo_name))) = (github_client.clone(), repo_info.clone()) {
+    let branch_names = branch_names.clone();
+    pb.set_message("Fetching GitHub PRs for branches in parallel...");
+
+    let results = rt.block_on(async move {
+      let mut join_set = JoinSet::new();
+
+      for branch_name in branch_names {
+        let gh = gh.clone();
+        let owner = owner.clone();
+        let repo_name = repo_name.clone();
+
+        join_set.spawn(async move {
+          let pr = detect_github_pr_from_branch(&gh, &branch_name, &owner, &repo_name).await;
+          (branch_name, pr)
+        });
+      }
+
+      let mut results = HashMap::new();
+      while let Some(result) = join_set.join_next().await {
+        match result {
+          Ok((branch_name, pr)) => {
+            results.insert(branch_name, pr);
+          }
+          Err(error) => warn!("GitHub PR detection task failed: {error}"),
+        }
+      }
+
+      results
+    });
+
+    pb.set_message("Scanning branches for Jira issues and GitHub PRs...");
+
+    Some(results)
+  } else {
+    if github_client.is_some() && repo_info.is_none() {
+      warn!("Skipping GitHub PR detection because the origin remote URL is missing or invalid");
+    }
+
+    None
+  };
+
   for (index, branch_name) in branch_names.iter().enumerate() {
     pb.set_position(index as u64);
     pb.set_message(format!("Processing: {branch_name}"));
@@ -144,13 +193,11 @@ fn sync_branches(
       None
     };
 
-    let detected_pr = if let Some(ref gh) = github_client {
-      // Update message for GitHub API call
-      pb.set_message(format!("Processing: {branch_name} (checking GitHub API...)",));
-      rt.block_on(detect_github_pr_from_branch(gh, branch_name, repo_path))
-    } else {
-      None
-    };
+    let detected_pr = github_pr_results
+      .as_ref()
+      .and_then(|results| results.get(branch_name))
+      .copied()
+      .flatten();
 
     match (detected_jira, detected_pr, existing_association) {
       // No patterns detected
@@ -234,37 +281,27 @@ fn detect_jira_issue_from_branch(branch_name: &str) -> Option<String> {
   None
 }
 
+fn resolve_repo_info_from_origin(
+  repo_path: &std::path::Path,
+  github_client: &GitHubClient,
+) -> Option<(String, String)> {
+  let repo = Git2Repository::open(repo_path).ok()?;
+  let remote = repo.find_remote("origin").ok()?;
+  let remote_url = remote.url()?;
+
+  github_client.extract_repo_info_from_url(remote_url).ok()
+}
+
 /// Detect GitHub PR number from branch using GitHub API
 async fn detect_github_pr_from_branch(
   github_client: &GitHubClient,
   branch_name: &str,
-  repo_path: &std::path::Path,
+  owner: &str,
+  repo_name: &str,
 ) -> Option<u32> {
-  // Open the git repository to get remote info
-  let repo = match Git2Repository::open(repo_path) {
-    Ok(repo) => repo,
-    Err(_) => return None,
-  };
-
-  let remote = match repo.find_remote("origin") {
-    Ok(remote) => remote,
-    Err(_) => return None,
-  };
-
-  let remote_url = match remote.url() {
-    Some(url) => url,
-    None => return None,
-  };
-
-  // Extract owner and repo from remote URL
-  let (owner, repo_name) = match github_client.extract_repo_info_from_url(remote_url) {
-    Ok((owner, repo)) => (owner, repo),
-    Err(_) => return None,
-  };
-
   // Search for PRs with this branch as head
   match github_client
-    .find_pull_requests_by_head_branch(&owner, &repo_name, branch_name, None)
+    .find_pull_requests_by_head_branch(owner, repo_name, branch_name, None)
     .await
   {
     Ok(prs) => {
