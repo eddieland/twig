@@ -1,10 +1,10 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use anyhow::{Context, Result, anyhow};
 use git2::Repository;
 use twig_core::git::{
-  BranchGraph, BranchGraphBuilder, BranchGraphError, BranchName, BranchTableColorMode, BranchTableRenderer,
-  BranchTableSchema, BranchTableStyle, checkout_branch, get_repository,
+  BranchEdge, BranchGraph, BranchGraphBuilder, BranchGraphError, BranchName, BranchNode, BranchTableColorMode,
+  BranchTableRenderer, BranchTableSchema, BranchTableStyle, checkout_branch, get_repository,
 };
 use twig_core::output::{format_command, print_error, print_info, print_success, print_warning};
 use twig_core::state::RepoState;
@@ -33,7 +33,7 @@ pub fn run(cli: &Cli) -> Result<()> {
     print_success(&message);
   }
 
-  let graph = match BranchGraphBuilder::new().with_orphan_parenting(true).build(&repo) {
+  let graph = match BranchGraphBuilder::new().build(&repo) {
     Ok(graph) => graph,
     Err(err) => {
       handle_graph_error(err);
@@ -46,6 +46,10 @@ pub fn run(cli: &Cli) -> Result<()> {
     return Ok(());
   }
 
+  let orphaned = find_orphaned_branches(&graph, &repo_state);
+
+  let graph = attach_orphans_to_default_root(graph, &repo_state);
+
   let root = match determine_render_root(&graph, &repo_state, selection.render_root) {
     Some(root) => root,
     None => {
@@ -55,8 +59,6 @@ pub fn run(cli: &Cli) -> Result<()> {
   };
 
   render_table(&graph, &root)?;
-
-  let orphaned = find_orphaned_branches(&graph, &repo_state);
   if !orphaned.is_empty() {
     display_orphaned_branches(&orphaned);
   }
@@ -203,6 +205,64 @@ fn handle_graph_error(err: BranchGraphError) {
       print_error(&format!("Failed to build branch graph: {inner}"));
     }
   }
+}
+
+fn attach_orphans_to_default_root(graph: BranchGraph, repo_state: &RepoState) -> BranchGraph {
+  let Some(default_root) = default_root_branch(repo_state) else {
+    return graph;
+  };
+
+  let default_root_name = BranchName::from(default_root.as_str());
+
+  let mut nodes: BTreeMap<BranchName, BranchNode> =
+    graph.iter().map(|(name, node)| (name.clone(), node.clone())).collect();
+
+  let Some(root_node_name) = nodes.get(&default_root_name).map(|node| node.name.clone()) else {
+    return graph;
+  };
+
+  let configured_roots: BTreeSet<_> = repo_state.get_root_branches().into_iter().collect();
+  let orphan_names: Vec<BranchName> = nodes
+    .iter()
+    .filter_map(|(name, node)| {
+      if node.topology.primary_parent.is_none()
+        && name != &default_root_name
+        && !configured_roots.contains(name.as_str())
+      {
+        Some(name.clone())
+      } else {
+        None
+      }
+    })
+    .collect();
+
+  if orphan_names.is_empty() {
+    return graph;
+  }
+
+  let mut edges = graph.edges().to_vec();
+  let root_candidates = graph.root_candidates().to_vec();
+  let current_branch = graph.current_branch().cloned();
+
+  let mut child_names = Vec::new();
+  for orphan_name in &orphan_names {
+    if let Some(orphan_node) = nodes.get_mut(orphan_name) {
+      orphan_node.topology.primary_parent = Some(root_node_name.clone());
+      child_names.push(orphan_node.name.clone());
+    }
+  }
+
+  if let Some(root_node) = nodes.get_mut(&root_node_name) {
+    for child_name in &child_names {
+      if !root_node.topology.children.iter().any(|child| child == child_name) {
+        root_node.topology.children.push(child_name.clone());
+      }
+      edges.push(BranchEdge::new(root_node_name.clone(), child_name.clone()));
+    }
+    root_node.topology.children.sort();
+  }
+
+  BranchGraph::from_parts(nodes.into_values(), edges, root_candidates, current_branch)
 }
 
 fn find_orphaned_branches(graph: &BranchGraph, repo_state: &RepoState) -> Vec<String> {
