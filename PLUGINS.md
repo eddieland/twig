@@ -5,6 +5,7 @@ This guide explains how to create plugins for twig, extending its functionality 
 ## Overview
 
 Twig plugins follow a kubectl/Docker-inspired model where:
+
 - Plugins are executable files named `twig-<plugin-name>`
 - They are discovered via `$PATH` lookup
 - Built-in commands always take precedence over plugins
@@ -16,6 +17,7 @@ Twig plugins follow a kubectl/Docker-inspired model where:
 All plugins must be named `twig-<plugin-name>` where `<plugin-name>` is the command you want to add to twig.
 
 Examples:
+
 - `twig-deploy` → `twig deploy`
 - `twig-backup` → `twig backup`
 - `twig-lint` → `twig lint`
@@ -30,6 +32,7 @@ When twig executes a plugin, it sets the following environment variables:
 - `TWIG_CURRENT_BRANCH`: Current branch name (if in a repo)
 - `TWIG_VERSION`: Version of twig core that invoked the plugin
 - `TWIG_VERBOSITY`: Verbosity level (0-3) passed from twig's `-v` flags
+- `TWIG_COLORS`: Color preference (`yes`, `no`, `auto`) passed from twig
 
 ## Command Line Arguments
 
@@ -40,6 +43,7 @@ Example: `twig deploy --env prod --force` → plugin receives `["--env", "prod",
 ## Exit Codes
 
 Plugins should use standard exit codes:
+
 - `0`: Success
 - `1`: General error
 - `2`: Misuse of command (invalid arguments)
@@ -79,11 +83,13 @@ See the example plugins in `examples/plugins/` for concrete implementations.
 Plugins should manage their own state separately from twig's core state:
 
 ### Recommended State Locations
+
 - **Configuration**: `$TWIG_CONFIG_DIR/plugins/<plugin-name>/`
 - **Data/Cache**: `$TWIG_DATA_DIR/plugins/<plugin-name>/`
 - **Logs**: `$TWIG_DATA_DIR/plugins/<plugin-name>/logs/`
 
 ### State File Formats
+
 - Use JSON for simple configuration
 - Use TOML for complex configuration files
 - Use SQLite for structured data that needs querying
@@ -92,7 +98,9 @@ Plugins should manage their own state separately from twig's core state:
 
 ### Rust Plugins
 
-For Rust plugins, use the `twig-core` crate to access twig's configuration and utilities:
+For Rust plugins, use the `twig-core` crate to access twig's configuration and utilities. When running plugins directly
+in development (without the twig CLI), prefer `PluginContext::discover()` to reconstruct the expected environment
+automatically.
 
 ```toml
 [dependencies]
@@ -104,7 +112,7 @@ anyhow = "1.0"
 ```rust
 use anyhow::Result;
 use clap::Parser;
-use twig_core::{plugin, print_success, print_error};
+use twig_core::{PluginContext, plugin, print_success, print_error};
 
 #[derive(Parser)]
 #[command(name = "twig-deploy")]
@@ -115,10 +123,11 @@ struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    let context = PluginContext::discover()?;
 
-    // Get plugin directories
-    let config_dir = plugin::plugin_config_dir("deploy")?;
-    let data_dir = plugin::plugin_data_dir("deploy")?;
+    // Get plugin directories (honors TWIG_* env vars when present, auto-discovers otherwise)
+    let config_dir = context.plugin_config_dir("deploy");
+    let data_dir = context.plugin_data_dir("deploy");
 
     // Check if in git repository
     if !plugin::in_git_repository() {
@@ -127,11 +136,11 @@ fn main() -> Result<()> {
     }
 
     // Get current context
-    if let Some(repo) = plugin::current_working_repo()? {
+    if let Some(repo) = context.current_repo {
         println!("Repository: {}", repo.display());
     }
 
-    if let Some(branch) = plugin::current_branch()? {
+    if let Some(branch) = context.current_branch {
         println!("Branch: {}", branch);
     }
 
@@ -200,11 +209,13 @@ mkdir -p "$PLUGIN_DATA_DIR"
 To maintain a consistent user experience, follow these guidelines:
 
 ### Command Structure
+
 ```bash
 twig-<plugin-name> [GLOBAL_OPTIONS] <SUBCOMMAND> [SUBCOMMAND_OPTIONS] [ARGS]
 ```
 
 ### Global Options (Recommended)
+
 - `--help, -h`: Show help information
 - `--version, -V`: Show plugin version
 - `--verbose, -v`: Increase verbosity (can be repeated)
@@ -212,6 +223,7 @@ twig-<plugin-name> [GLOBAL_OPTIONS] <SUBCOMMAND> [SUBCOMMAND_OPTIONS] [ARGS]
 - `--color <WHEN>`: Control colored output (auto, always, never)
 
 ### Help Text Format
+
 ```
 <plugin-name> <version>
 <brief-description>
@@ -230,12 +242,14 @@ SUBCOMMANDS:
 ```
 
 ### Error Handling
+
 - Use consistent error message format: `Error: <description>`
 - Provide actionable error messages when possible
 - Use appropriate exit codes
 - Include suggestions for common mistakes
 
 ### Output Formatting
+
 - Use colors consistently with twig's color scheme
 - Respect the `--color` option and `NO_COLOR` environment variable
 - Use emojis sparingly and consistently with twig's style
@@ -272,6 +286,7 @@ Plugins are distributed independently of twig core:
 ## Examples
 
 See the `examples/plugins/` directory for complete examples:
+
 - `twig-deploy/`: Rust plugin using twig-core
 - `twig-backup`: Python plugin
 - `twig-sync`: Shell script plugin
