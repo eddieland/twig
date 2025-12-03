@@ -2,10 +2,9 @@
 source: twig-core/src/git/renderer.rs
 expression: output
 ---
-* main                         --        --      --       
-├─ feature/auth-refresh        PROJ-451  --      --       
-│  └─ feature/auth-refresh-ui  PROJ-451  #982    in-review
-└─ feature/payment-refactor    --        draft   stale 21d
-   ├─ feature/payment-api      --        --      --       
-   └─ feature/payment-ui       --        --      ready    
-
+* main                                 --        --      --       
+├─ feature/auth-refresh (+3/-0)        PROJ-451  --      --       
+│  └─ feature/auth-refresh-ui (+1/-1)  PROJ-451  #982    in-review
+└─ feature/payment-refactor (+0/-2)    --        draft   stale 21d
+   ├─ feature/payment-api (+1/-0)      --        --      --       
+   └─ feature/payment-ui (+2/-0)       --        --      ready

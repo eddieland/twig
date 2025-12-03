@@ -5,7 +5,7 @@ use assert_cmd::cargo::cargo_bin_cmd;
 use git2::Repository;
 use predicates::prelude::*;
 use twig_core::state::RepoState;
-use twig_test_utils::{GitRepoTestGuard, create_branch, create_commit};
+use twig_test_utils::{GitRepoTestGuard, checkout_branch, create_branch, create_commit};
 
 #[test]
 fn renders_branch_tree_output() -> Result<()> {
@@ -13,6 +13,14 @@ fn renders_branch_tree_output() -> Result<()> {
   create_commit(&guard.repo, "README.md", "hello", "initial commit")?;
   create_branch(&guard.repo, "feature/login", None)?;
   create_branch(&guard.repo, "feature/payment", None)?;
+
+  let main_branch = guard.repo.head()?.shorthand().unwrap().to_string();
+
+  checkout_branch(&guard.repo, "feature/login")?;
+  create_commit(&guard.repo, "login.txt", "wip", "login work")?;
+
+  checkout_branch(&guard.repo, &main_branch)?;
+  create_commit(&guard.repo, "main.txt", "progress", "main work")?;
 
   let head = guard.repo.head()?.shorthand().unwrap().to_string();
   let mut state = RepoState::default();
@@ -31,6 +39,7 @@ fn renders_branch_tree_output() -> Result<()> {
   assert!(stdout.contains("Branch"));
   assert!(stdout.contains("feature/login"));
   assert!(stdout.contains("feature/payment"));
+  assert!(stdout.contains("feature/login (+1/-1)"));
 
   Ok(())
 }
