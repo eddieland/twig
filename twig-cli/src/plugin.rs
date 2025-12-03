@@ -3,12 +3,16 @@
 //! Implements the plugin discovery system that allows twig to execute external
 //! plugins following the kubectl/Docker-inspired plugin model.
 
+mod platform;
+
 use std::collections::BTreeMap;
-use std::env;
+use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::{env, fs};
 
 use anyhow::{Context, Result};
+use platform::{candidate_filenames, is_executable};
 use tracing::{debug, instrument};
 use twig_core::output::ColorMode;
 
@@ -17,20 +21,21 @@ use twig_core::output::ColorMode;
 pub fn execute_plugin(plugin_name: &str, args: Vec<String>, verbosity: u8, colors: ColorMode) -> Result<()> {
   let plugin_binary = format!("twig-{plugin_name}");
 
-  // Check if plugin exists in PATH
-  if !plugin_exists(&plugin_binary)? {
-    return Err(anyhow::anyhow!(
+  let plugin_path = resolve_plugin_path(&plugin_binary)?.ok_or_else(|| {
+    anyhow::anyhow!(
       "Unknown command '{plugin_name}'. No plugin 'twig-{plugin_name}' found in PATH.\n\n\
              To install plugins, place executable files named 'twig-<command>' in your PATH."
-    ));
-  }
+    )
+  })?;
+
+  debug!("Executing plugin '{}' at {}", plugin_binary, plugin_path.display());
 
   // Set up environment variables
   let config_dirs = twig_core::get_config_dirs()?;
   let current_repo = twig_core::detect_repository();
   let current_branch = twig_core::current_branch().unwrap_or(None);
 
-  let mut cmd = Command::new(&plugin_binary);
+  let mut cmd = Command::new(&plugin_path);
   cmd
     .args(args)
     .env("TWIG_CONFIG_DIR", config_dirs.config_dir())
@@ -64,27 +69,7 @@ pub fn execute_plugin(plugin_name: &str, args: Vec<String>, verbosity: u8, color
 /// Determine if a plugin binary is available in the current PATH
 pub fn plugin_is_available(plugin_name: &str) -> Result<bool> {
   let plugin_binary = format!("twig-{plugin_name}");
-  plugin_exists(&plugin_binary)
-}
-
-/// Check if a plugin exists in PATH
-fn plugin_exists(plugin_name: &str) -> Result<bool> {
-  // Try 'which' command (Unix-like systems)
-  if let Ok(output) = Command::new("which").arg(plugin_name).output() {
-    return Ok(output.status.success());
-  }
-
-  // Try 'where' command (Windows)
-  if let Ok(output) = Command::new("where").arg(plugin_name).output() {
-    return Ok(output.status.success());
-  }
-
-  // Fallback: try to execute the command with --help
-  if let Ok(output) = Command::new(plugin_name).arg("--help").output() {
-    return Ok(output.status.success());
-  }
-
-  Ok(false)
+  Ok(resolve_plugin_path(&plugin_binary)?.is_some())
 }
 
 fn color_mode_env(mode: ColorMode) -> &'static str {
@@ -137,6 +122,9 @@ fn list_available_plugins_from_path(path_var: &str) -> Result<Vec<PluginInfo>> {
           };
 
           let entry_path = entry.path();
+          if !is_executable(&entry_path) {
+            continue;
+          }
           let plugin_paths = plugins.entry(plugin_name.to_string()).or_default();
 
           if !plugin_paths.contains(&entry_path) {
@@ -164,6 +152,40 @@ fn list_available_plugins_from_path(path_var: &str) -> Result<Vec<PluginInfo>> {
   }
 
   Ok(plugin_info)
+}
+
+/// Resolve a plugin binary path in PATH order, returning a canonical path when
+/// found.
+fn resolve_plugin_path(plugin_name: &str) -> Result<Option<PathBuf>> {
+  let path_var = env::var_os("PATH");
+  let Some(path_var) = path_var.as_deref() else {
+    return Ok(None);
+  };
+
+  resolve_plugin_path_from_paths(plugin_name, path_var)
+}
+
+fn resolve_plugin_path_from_paths(plugin_name: &str, path_var: &OsStr) -> Result<Option<PathBuf>> {
+  let candidate_names = candidate_filenames(plugin_name);
+
+  for directory in env::split_paths(path_var) {
+    if directory.as_os_str().is_empty() || !directory.exists() {
+      continue;
+    }
+
+    for candidate in &candidate_names {
+      let candidate_path = directory.join(candidate);
+      if is_executable(&candidate_path) {
+        return Ok(Some(canonicalize_or_original(candidate_path)));
+      }
+    }
+  }
+
+  Ok(None)
+}
+
+fn canonicalize_or_original(path: PathBuf) -> PathBuf {
+  fs::canonicalize(&path).unwrap_or(path)
 }
 
 /// Generate suggestions for unknown commands
@@ -277,6 +299,7 @@ fn levenshtein_distance(s1: &str, s2: &str) -> usize {
 #[cfg(test)]
 mod tests {
   use std::fs;
+  use std::path::Path;
 
   use tempfile::TempDir;
 
@@ -310,12 +333,15 @@ mod tests {
 
     let primary_plugin = first_dir.path().join("twig-example");
     fs::write(&primary_plugin, b"#!/bin/sh\necho primary\n").unwrap();
+    make_executable(&primary_plugin);
 
     let duplicate_plugin = second_dir.path().join("twig-example");
     fs::write(&duplicate_plugin, b"#!/bin/sh\necho duplicate\n").unwrap();
+    make_executable(&duplicate_plugin);
 
     let secondary_plugin = second_dir.path().join("twig-another");
     fs::write(&secondary_plugin, b"#!/bin/sh\necho another\n").unwrap();
+    make_executable(&secondary_plugin);
 
     let custom_path = std::env::join_paths([first_dir.path(), second_dir.path()])
       .expect("failed to construct custom PATH")
@@ -345,5 +371,55 @@ mod tests {
       another.size_in_bytes,
       fs::metadata(&secondary_plugin).ok().map(|metadata| metadata.len())
     );
+  }
+
+  #[test]
+  fn resolve_plugin_path_skips_non_files_and_respects_path_order() {
+    let first_dir = TempDir::new().expect("failed to create temp dir");
+    let second_dir = TempDir::new().expect("failed to create temp dir");
+
+    let non_file = first_dir.path().join("twig-example");
+    fs::create_dir_all(&non_file).expect("failed to create placeholder directory");
+
+    let real_plugin = second_dir.path().join("twig-example");
+    fs::write(&real_plugin, b"#!/bin/sh\necho real\n").unwrap();
+    make_executable(&real_plugin);
+
+    let custom_path = std::env::join_paths([first_dir.path(), second_dir.path()]).unwrap();
+
+    let resolved = resolve_plugin_path_from_paths("twig-example", &custom_path).expect("lookup should succeed");
+
+    assert_eq!(resolved, Some(fs::canonicalize(&real_plugin).unwrap()));
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn resolve_plugin_path_canonicalizes_symlinks() {
+    use std::os::unix::fs as unix_fs;
+
+    let target_dir = TempDir::new().expect("failed to create temp dir");
+    let binary = target_dir.path().join("twig-example");
+    fs::write(&binary, b"#!/bin/sh\necho linked\n").unwrap();
+    make_executable(&binary);
+
+    let symlink_dir = target_dir.path().join("symlink");
+    unix_fs::symlink(target_dir.path(), &symlink_dir).expect("failed to create symlink");
+
+    let custom_path = std::env::join_paths([symlink_dir]).unwrap();
+
+    let resolved = resolve_plugin_path_from_paths("twig-example", &custom_path).expect("lookup should succeed");
+
+    assert_eq!(resolved, Some(fs::canonicalize(&binary).unwrap()));
+  }
+
+  fn make_executable(path: &Path) {
+    #[cfg(unix)]
+    {
+      use std::os::unix::fs::PermissionsExt;
+
+      let mut permissions = fs::metadata(path).unwrap().permissions();
+      permissions.set_mode(0o755);
+      fs::set_permissions(path, permissions).unwrap();
+    }
   }
 }
