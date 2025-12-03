@@ -604,42 +604,55 @@ fn style_text(value: impl AsRef<str>, style: Style, colors_enabled: bool) -> Str
   }
 }
 
+/// Bright black styling for tree connector glyphs (the `│`, `├`, `└`
+/// characters) when dimming is enabled.
 fn connector_style() -> Style {
   Style::new().bright_black()
 }
 
+/// Normal-weight styling applied to non-current branch names.
 fn branch_name_style() -> Style {
-  Style::new().bold()
+  Style::new()
 }
 
+/// Bright green, bold styling applied to the current branch marker (`*`) and
+/// branch name.
 fn current_branch_style() -> Style {
   Style::new().bright_green().bold()
 }
 
+/// Green styling applied to the `+N` divergence count when a branch is ahead.
 fn divergence_ahead_style() -> Style {
   Style::new().green()
 }
 
+/// Red styling applied to the `-N` divergence count when a branch is behind.
 fn divergence_behind_style() -> Style {
   Style::new().red()
 }
 
+/// Cyan styling applied to label cells (e.g., Jira keys) in the table.
 fn label_style() -> Style {
   Style::new().cyan()
 }
 
+/// Yellow styling applied to PR annotations in the table.
 fn pr_style() -> Style {
   Style::new().yellow()
 }
 
+/// Magenta styling applied to non-PR annotation cells.
 fn annotation_style() -> Style {
   Style::new().magenta()
 }
 
+/// Dim bright-black styling applied to placeholder values (e.g., missing
+/// metadata).
 fn placeholder_style() -> Style {
   Style::new().bright_black()
 }
 
+/// Bright white, bold styling applied to table headers.
 fn header_style() -> Style {
   Style::new().bright_white().bold()
 }
