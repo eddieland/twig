@@ -4,6 +4,7 @@
 //! including subcommands for branch management, Git operations, and
 //! integrations.
 
+mod adopt;
 mod branch;
 pub mod cascade;
 mod commit;
@@ -90,6 +91,14 @@ pub struct Cli {
 /// Subcommands for the twig tool
 #[derive(Subcommand)]
 pub enum Commands {
+  /// Re-parent orphaned branches
+  #[command(long_about = "Automatically re-parent orphaned branches.\n\n\
+            This command previews an adoption plan for branches without parents,\
+            then asks for confirmation before updating user-defined dependencies.\
+            Modes: automatic dependency resolution (default), adopt to the default\
+            root, or adopt to a specific branch.")]
+  Adopt(adopt::AdoptArgs),
+
   /// Curate a custom branch dependency map
   #[command(long_about = "Manage custom branch dependencies and root branches.\n\n\
             This command group allows you to define custom parent-child relationships\n\
@@ -267,6 +276,7 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
 
   match cli.command {
     Some(command) => match command {
+      Commands::Adopt(adopt) => adopt::handle_adopt_command(adopt),
       Commands::Branch(branch) => branch::handle_branch_command(branch),
       Commands::Cascade(cascade) => cascade::handle_cascade_command(cascade),
       Commands::Commit(args) => commit::handle_commit_command(args),
