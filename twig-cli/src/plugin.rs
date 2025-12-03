@@ -9,9 +9,11 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result};
+use tracing::{debug, instrument};
 use twig_core::output::ColorMode;
 
 /// Execute a plugin with the given name and arguments
+#[instrument(level = "debug", skip(verbosity, colors))]
 pub fn execute_plugin(plugin_name: &str, args: Vec<String>, verbosity: u8, colors: ColorMode) -> Result<()> {
   let plugin_binary = format!("twig-{plugin_name}");
 
@@ -51,6 +53,10 @@ pub fn execute_plugin(plugin_name: &str, args: Vec<String>, verbosity: u8, color
   let status = cmd
     .status()
     .with_context(|| format!("Failed to execute plugin '{plugin_binary}'"))?;
+  debug!(
+    "Plugin '{plugin_binary}' exited with status: {}",
+    status.code().unwrap_or(-1)
+  );
 
   std::process::exit(status.code().unwrap_or(1));
 }

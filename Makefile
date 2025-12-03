@@ -27,6 +27,7 @@ lint-all: ## Run clippy with all features
 .PHONY: test
 test: build ## Run tests
 	cargo nextest run --workspace
+	cd plugins/twig-flow && cargo nextest run
 
 .PHONY: test-all
 test-all: ## Run tests with all features
@@ -96,6 +97,7 @@ coverage-report: ## Generate LCOV report
 .PHONY: build
 build: ## Build the project
 	cargo build --workspace
+	cd plugins/twig-flow && cargo build
 
 .PHONY: release
 release: ## Build release version
