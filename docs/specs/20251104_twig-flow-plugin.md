@@ -168,28 +168,39 @@
 | PR     | `Annotation { key }` | `twig.pr` annotation (text/number).                                   | `--`        |
 | Notes  | `Notes`              | Prefers `twig.notes` annotation, falls back to `BranchStaleState`.    | `--`        |
 
+Colorization & styling (implemented):
+
+- Palette: tree connectors dimmed by default; headers bold; current branch marker/name bright green; other branch names bold. Ahead counts render green (dimmed when zero) and behind counts red (dimmed when zero).
+- Column accents: Story (first label) cyan; PR yellow; arbitrary annotations magenta; placeholders gray/dim; notes use heuristics (ready/fresh → green, review → yellow, stale/draft/blocked → yellow) plus `BranchStaleState` mappings (fresh/unknown/stale) so semantic overlays stay legible.
+- `BranchTableStyle` + `BranchTableColorMode::{Auto, Always, Never}` control whether colors render; width calculations strip ANSI codes to preserve alignment. Snapshots cover both the colorized defaults and a forced no-color fallback.
+
 Hidden configuration will reuse `BranchTableSchema` builders: callers can clone the default schema, swap/insert columns, adjust spacing, or suppress the header before passing it into the renderer. These overrides stay internal for now (toggled via config files under `.twig/`), but the data model fully supports surfacing them later without rewiring the renderer.
 
 ```rust
-use twig_core::git::{BranchGraph, BranchName, BranchTableRenderer, BranchTableSchema};
+use twig_core::git::{
+  BranchGraph, BranchName, BranchTableColorMode, BranchTableRenderer, BranchTableSchema, BranchTableStyle,
+};
 
 fn render_flow(graph: &BranchGraph, root: &BranchName) -> anyhow::Result<String> {
   let schema = BranchTableSchema::default()
     .with_placeholder("—")
     .with_column_spacing(3);
+  let style = BranchTableStyle::new(BranchTableColorMode::Auto);
   let mut output = String::new();
-  BranchTableRenderer::new(schema).render(&mut output, graph, root)?;
+  BranchTableRenderer::new(schema)
+    .with_style(style)
+    .render(&mut output, graph, root)?;
   Ok(output)
 }
 ```
 
-_Module skeleton:_ `twig-core/src/git/renderer.rs` defines all structs/enums listed above, re-exports them via `twig_core::git`, and provides TODO stubs for future styling hooks (color, Unicode vs ASCII connectors). An empty schema now triggers a dedicated error so downstream callers receive actionable feedback during early integration work.
+_Module skeleton:_ `twig-core/src/git/renderer.rs` defines all structs/enums listed above, re-exports them via `twig_core::git`, and now ships with ANSI-aware color styling defaults (Unicode vs ASCII connector toggles remain TODO). An empty schema now triggers a dedicated error so downstream callers receive actionable feedback during early integration work.
 
 ## CLI UX Mockups
 
 - Tree visualization uses ASCII connectors (`├─`, `└─`, `│`) within the `Branch` column and prefixes the currently checked-out branch with `*`.
 - A header row introduces the default columns (`Branch`, `Story`, `PR`, `Notes`) and each branch row keeps metadata horizontally aligned under the header. Missing metadata renders as `—` to preserve alignment.
-- Branch annotations migrate out of inline square brackets and into the dedicated columns; colorization still leverages `twig_core::output`.
+- Branch annotations migrate out of inline square brackets and into the dedicated columns; colorization comes from `BranchTableStyle` (palette + auto/disabled modes).
 - `--root` and `--parent` trigger an explicit checkout before rendering; conflicting selections short-circuit with a Clap error prior to Git mutations. Detached-head or empty repository scenarios surface a warning followed by only the header row.
 
 ```text
@@ -272,6 +283,7 @@ error: the argument '--root' cannot be used with '--parent'
 | P0       | Add end-to-end plugin tests.                                               | Integration tests cover visualization (snapshot) and switching scenarios using `twig-test-utils`.                         | Lives under `plugins/twig-flow/tests`; exercises both modes and error cases.         | ✅ Completed – integration coverage lives in `plugins/twig-flow/tests/integration.rs` (renders tree, creates/moves branches).                                   |
 | P0       | Add unit & snapshot tests for renderer.                                    | Cover width calculations, connectors, and schema overrides using `insta` fixtures.                                        | Lives under `twig-core` tests; uses synthetic graphs.                                | ✅ Completed – see `twig-core/src/git/renderer.rs` tests + new snapshots (`flow_renderer__no_header`, `flow_renderer__custom_schema`). |
 | P0       | Handle multi-parent `--parent` edge case.                                  | Error messaging and parent listings defined; renderer call short-circuits when multiple parents.                          | Future interactive selection tracked separately.                                     | ✅ Completed – plugin now surfaces explicit error/output when multiple parents exist (`plugins/twig-flow/src/tree.rs`).                |
+| P0       | Add colorized/embellished output for readability.                          | Renderer and plugin apply color/formatting (with color-disabled fallback) to highlight current branch, metadata, and statuses without breaking alignment. | Define palette + ANSI handling, update snapshots/fixtures accordingly, and ensure non-color terminals degrade gracefully. | ✅ Completed – palette + `BranchTableStyle`/`BranchTableColorMode` live in `twig-core/src/git/renderer.rs`; snapshots cover colorized defaults and a no-color fallback. |
 | P1       | Draft CLI UX for tree visualization (mock outputs).                        | Example outputs stored in spec or doc, capturing formatting rules.                                                        | Hybrid tree/table layout with default `Branch/Story/PR/Notes` columns.               | ✅ Completed – see "CLI UX Mockups" section                                                                                            |
 | P1       | Define internal column schema configuration.                               | Document data model + default columns for renderer with hidden config override.                                           | Enables future customization without public CLI surface.                             | ⏳ Pending – unblocked by renderer API; implementation will hook config files into schema overrides.                                   |
 | P1       | Plan integration tests & fixtures.                                         | List of test scenarios with coverage goals.                                                                               | Include tree rendering snapshots, switching success/error cases.                     | ✅ Completed – scenarios exercised in `plugins/twig-flow/tests/integration.rs`; additional cases can extend this file.                                                      |
@@ -328,8 +340,8 @@ error: the argument '--root' cannot be used with '--parent'
 ## Status Tracking (to be updated by subagent)
 
 - **Current focus:** _Define internal column schema configuration + hidden overrides_
-- **Latest completed task:** _Surface branch commit deltas in visualization_
-- **Next up:** _Explore interactive parent selection UX_
+- **Latest completed task:** _Colorized branch table output with ANSI-safe alignment and fallback modes_
+- **Next up:** _Explore interactive parent selection UX (building on the multi-parent error handling groundwork)_
 
 ## Lessons Learned (ongoing)
 

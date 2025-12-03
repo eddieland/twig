@@ -9,9 +9,10 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result};
+use twig_core::output::ColorMode;
 
 /// Execute a plugin with the given name and arguments
-pub fn execute_plugin(plugin_name: &str, args: Vec<String>, verbosity: u8) -> Result<()> {
+pub fn execute_plugin(plugin_name: &str, args: Vec<String>, verbosity: u8, colors: ColorMode) -> Result<()> {
   let plugin_binary = format!("twig-{plugin_name}");
 
   // Check if plugin exists in PATH
@@ -32,6 +33,7 @@ pub fn execute_plugin(plugin_name: &str, args: Vec<String>, verbosity: u8) -> Re
     .args(args)
     .env("TWIG_CONFIG_DIR", config_dirs.config_dir())
     .env("TWIG_DATA_DIR", config_dirs.data_dir())
+    .env("TWIG_COLORS", color_mode_env(colors))
     .env("TWIG_VERSION", env!("CARGO_PKG_VERSION"))
     .env("TWIG_VERBOSITY", verbosity.to_string())
     .stdin(Stdio::inherit())
@@ -77,6 +79,14 @@ fn plugin_exists(plugin_name: &str) -> Result<bool> {
   }
 
   Ok(false)
+}
+
+fn color_mode_env(mode: ColorMode) -> &'static str {
+  match mode {
+    ColorMode::Yes => "yes",
+    ColorMode::No => "no",
+    ColorMode::Auto => "auto",
+  }
 }
 
 /// Metadata describing a discovered plugin binary.

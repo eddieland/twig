@@ -2,10 +2,10 @@
 source: twig-core/src/git/renderer.rs
 expression: output
 ---
-Branch                                  PR      Lifecycle    Notes       
-* main                                  —       —            —           
-├─ feature/auth-refresh (+3/-0)         —       active       —           
-│  └─ feature/auth-refresh-ui (+1/-1)   #982    —            in-review   
-└─ feature/payment-refactor (+0/-2)     draft   stale        stale 21d   
-   ├─ feature/payment-api (+1/-0)       —       —            —           
-   └─ feature/payment-ui (+2/-0)        —       ready        ready
+[97;1mBranch[0m                                  [97;1mPR[0m      [97;1mLifecycle[0m    [97;1mNotes[0m       
+[92;1m*[0m [92;1mmain[0m                                  [90m—[0m       [90m—[0m            [90m—[0m           
+[90m├─ [0m[1mfeature/auth-refresh[0m ([32m+3[0m/[90m-0[0m)         [90m—[0m       [35mactive[0m       [90m—[0m           
+[90m│  └─ [0m[1mfeature/auth-refresh-ui[0m ([32m+1[0m/[31m-1[0m)   [33m#982[0m    [90m—[0m            [33min-review[0m   
+[90m└─ [0m[1mfeature/payment-refactor[0m ([90m+0[0m/[31m-2[0m)     [33mdraft[0m   [35mstale[0m        [33mstale 21d[0m   
+[90m   ├─ [0m[1mfeature/payment-api[0m ([32m+1[0m/[90m-0[0m)       [90m—[0m       [90m—[0m            [90m—[0m           
+[90m   └─ [0m[1mfeature/payment-ui[0m ([32m+2[0m/[90m-0[0m)        [90m—[0m       [35mready[0m        [32;1mready[0m

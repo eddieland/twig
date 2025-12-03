@@ -17,7 +17,8 @@ pub use graph::{
   BranchKind, BranchName, BranchNode, BranchNodeMetadata, BranchStaleState, BranchTopology,
 };
 pub use renderer::{
-  BranchTableColumn, BranchTableColumnKind, BranchTableRenderError, BranchTableRenderer, BranchTableSchema,
+  BranchTableColorMode, BranchTableColumn, BranchTableColumnKind, BranchTableRenderError, BranchTableRenderer,
+  BranchTableSchema, BranchTableStyle,
 };
 pub use repository::{get_repository, get_repository_from_path};
 pub use switch::{

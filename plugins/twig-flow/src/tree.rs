@@ -1,8 +1,8 @@
 use anyhow::{Context, Result, anyhow};
 use git2::Repository;
 use twig_core::git::{
-  BranchGraph, BranchGraphBuilder, BranchGraphError, BranchName, BranchTableRenderer, BranchTableSchema,
-  checkout_branch, get_repository,
+  BranchGraph, BranchGraphBuilder, BranchGraphError, BranchName, BranchTableColorMode, BranchTableRenderer,
+  BranchTableSchema, BranchTableStyle, checkout_branch, get_repository,
 };
 use twig_core::output::{print_error, print_success, print_warning};
 use twig_core::state::RepoState;
@@ -164,10 +164,21 @@ fn determine_render_root(
 
 fn render_table(graph: &BranchGraph, root: &BranchName) -> Result<()> {
   let schema = BranchTableSchema::default().with_placeholder("—");
+  let style = BranchTableStyle::new(resolve_color_mode());
   let mut buffer = String::new();
-  BranchTableRenderer::new(schema).render(&mut buffer, graph, root)?;
+  BranchTableRenderer::new(schema)
+    .with_style(style)
+    .render(&mut buffer, graph, root)?;
   print!("{buffer}");
   Ok(())
+}
+
+fn resolve_color_mode() -> BranchTableColorMode {
+  match std::env::var("TWIG_COLORS").as_deref() {
+    Ok("yes") => BranchTableColorMode::Always,
+    Ok("no") => BranchTableColorMode::Never,
+    _ => BranchTableColorMode::Auto,
+  }
 }
 
 fn handle_graph_error(err: BranchGraphError) {
