@@ -79,26 +79,7 @@ fn sync_branches(
   let repo = Git2Repository::open(repo_path)
     .with_context(|| format!("Failed to open git repository at {}", repo_path.display()))?;
 
-  // Get all local branches
-  let branches = repo
-    .branches(Some(BranchType::Local))
-    .context("Failed to get branches")?;
-
-  // Collect branch names to get total count for progress bar
-  let branch_names: Vec<String> = branches
-    .filter_map(|branch_result| {
-      if let Ok((branch, _)) = branch_result
-        && let Ok(Some(name)) = branch.name()
-      {
-        // Skip detached HEAD and remote tracking branches
-        if name != "HEAD" && !name.contains("origin/") {
-          return Some(name.to_string());
-        }
-      }
-      None
-    })
-    .collect();
-
+  let branch_names = collect_local_branch_names(&repo)?;
   let total_branches = branch_names.len();
 
   if total_branches == 0 {
@@ -137,47 +118,9 @@ fn sync_branches(
     .as_ref()
     .and_then(|gh| resolve_repo_info_from_origin(repo_path, gh));
 
-  let github_pr_results = if let (Some(gh), Some((owner, repo_name))) = (github_client.clone(), repo_info.clone()) {
-    let branch_names = branch_names.clone();
-    pb.set_message("Fetching GitHub PRs for branches in parallel...");
-
-    let results = rt.block_on(async move {
-      let mut join_set = JoinSet::new();
-
-      for branch_name in branch_names {
-        let gh = gh.clone();
-        let owner = owner.clone();
-        let repo_name = repo_name.clone();
-
-        join_set.spawn(async move {
-          let pr = detect_github_pr_from_branch(&gh, &branch_name, &owner, &repo_name).await;
-          (branch_name, pr)
-        });
-      }
-
-      let mut results = HashMap::new();
-      while let Some(result) = join_set.join_next().await {
-        match result {
-          Ok((branch_name, pr)) => {
-            results.insert(branch_name, pr);
-          }
-          Err(error) => warn!("GitHub PR detection task failed: {error}"),
-        }
-      }
-
-      results
-    });
-
-    pb.set_message("Scanning branches for Jira issues and GitHub PRs...");
-
-    Some(results)
-  } else {
-    if github_client.is_some() && repo_info.is_none() {
-      warn!("Skipping GitHub PR detection because the origin remote URL is missing or invalid");
-    }
-
-    None
-  };
+  let jira_by_branch = detect_jira_issues_for_branches(&branch_names, no_jira);
+  let github_pr_results =
+    detect_github_prs_for_branches(&branch_names, github_client.as_ref(), repo_info.as_ref(), &rt, &pb);
 
   for (index, branch_name) in branch_names.iter().enumerate() {
     pb.set_position(index as u64);
@@ -187,11 +130,7 @@ fn sync_branches(
     let existing_association = repo_state.get_branch_metadata(branch_name);
 
     // Detect patterns in branch name
-    let detected_jira = if !no_jira {
-      detect_jira_issue_from_branch(branch_name)
-    } else {
-      None
-    };
+    let detected_jira = jira_by_branch.get(branch_name).cloned().flatten();
 
     let detected_pr = github_pr_results
       .as_ref()
@@ -262,6 +201,102 @@ fn sync_branches(
   Ok(())
 }
 
+/// Collect names of all local branches in the repository
+fn collect_local_branch_names(repo: &Git2Repository) -> Result<Vec<String>> {
+  // Get all local branches
+  let branches = repo
+    .branches(Some(BranchType::Local))
+    .context("Failed to get branches")?;
+
+  // Collect branch names to get total count for progress bar
+  Ok(
+    branches
+      .filter_map(|branch_result| {
+        if let Ok((branch, _)) = branch_result
+          && let Ok(Some(name)) = branch.name()
+        {
+          // Skip detached HEAD and remote tracking branches
+          if name != "HEAD" && !name.contains("origin/") {
+            return Some(name.to_string());
+          }
+        }
+        None
+      })
+      .collect(),
+  )
+}
+
+/// Detect Jira issues for a list of branch names
+fn detect_jira_issues_for_branches(branch_names: &[String], no_jira: bool) -> HashMap<String, Option<String>> {
+  branch_names
+    .iter()
+    .map(|branch| {
+      let jira = if no_jira {
+        None
+      } else {
+        detect_jira_issue_from_branch(branch)
+      };
+      (branch.clone(), jira)
+    })
+    .collect()
+}
+
+/// Detect GitHub PRs for a list of branch names
+fn detect_github_prs_for_branches(
+  branch_names: &[String],
+  github_client: Option<&GitHubClient>,
+  repo_info: Option<&(String, String)>,
+  runtime: &Runtime,
+  progress: &ProgressBar,
+) -> Option<HashMap<String, Option<u32>>> {
+  let (github_client, repo_info) = match (github_client, repo_info) {
+    (Some(client), Some(info)) => (client, info),
+    (Some(_), None) => {
+      warn!("Skipping GitHub PR detection because the origin remote URL is missing or invalid");
+      return None;
+    }
+    _ => return None,
+  };
+
+  progress.set_message("Fetching GitHub PRs for branches in parallel...");
+
+  let gh_client = github_client.clone();
+  let owner = repo_info.0.clone();
+  let repo_name = repo_info.1.clone();
+  let branch_names = branch_names.to_vec();
+
+  let results = runtime.block_on(async move {
+    let mut join_set = JoinSet::new();
+
+    for branch_name in branch_names {
+      let gh = gh_client.clone();
+      let owner = owner.clone();
+      let repo_name = repo_name.clone();
+
+      join_set.spawn(async move {
+        let pr = detect_github_pr_from_branch(&gh, &branch_name, &owner, &repo_name).await;
+        (branch_name, pr)
+      });
+    }
+
+    let mut results = HashMap::new();
+    while let Some(result) = join_set.join_next().await {
+      match result {
+        Ok((branch_name, pr)) => {
+          results.insert(branch_name, pr);
+        }
+        Err(error) => warn!("GitHub PR detection task failed: {error}"),
+      }
+    }
+
+    results
+  });
+
+  progress.set_message("Scanning branches for Jira issues and GitHub PRs...");
+
+  Some(results)
+}
+
 /// Detect Jira issue key from branch name
 fn detect_jira_issue_from_branch(branch_name: &str) -> Option<String> {
   // Patterns to match:
@@ -281,6 +316,13 @@ fn detect_jira_issue_from_branch(branch_name: &str) -> Option<String> {
   None
 }
 
+/// Resolve GitHub repository owner and name from origin remote URL
+///
+/// This function looks at the URL structure of the `origin` git remote to
+/// extract the repository owner and name, which are then used for API calls.
+///
+/// NOTE: This assumes that the `origin` remote points to a GitHub repository
+/// and that it is their primary / representative remote.
 fn resolve_repo_info_from_origin(
   repo_path: &std::path::Path,
   github_client: &GitHubClient,
