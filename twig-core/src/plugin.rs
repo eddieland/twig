@@ -207,7 +207,12 @@ mod tests {
 
     assert_eq!(context.config_dirs.config_dir(), expected_dirs.config_dir());
     assert_eq!(context.config_dirs.data_dir(), expected_dirs.data_dir());
-    assert_eq!(context.current_repo, Some(canonical_repo_path));
+
+    let Some(current_repo) = &context.current_repo else {
+      panic!("expected a discovered repository path");
+    };
+    let canonical_current_repo = fs::canonicalize(current_repo).expect("canonical current repo path");
+    assert_eq!(canonical_current_repo, canonical_repo_path);
     assert_eq!(context.current_branch, Some(branch_name));
     assert_eq!(context.colors, ColorMode::Auto);
     assert_eq!(context.verbosity, 0);
