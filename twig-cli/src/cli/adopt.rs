@@ -81,7 +81,8 @@ pub(crate) fn handle_adopt_command(args: AdoptArgs) -> Result<()> {
   let repo =
     Git2Repository::open(&repo_path).context(format!("Failed to open git repository at {}", repo_path.display()))?;
 
-  let mut repo_state = RepoState::load(&repo_path).unwrap_or_default();
+  let mut repo_state = RepoState::load(&repo_path)
+    .with_context(|| format!("Failed to load repo state at {}", repo_path.display()))?;
 
   let user_resolver = UserDefinedDependencyResolver;
   let branch_nodes = user_resolver.resolve_user_dependencies_without_default_root(&repo, &repo_state)?;
