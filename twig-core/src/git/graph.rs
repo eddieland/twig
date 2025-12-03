@@ -307,6 +307,7 @@ pub struct BranchGraphBuilder {
   include_remote_branches: bool,
   include_declared_dependencies: bool,
   eager_labels: BTreeSet<String>,
+  attach_orphans_to_default_root: bool,
 }
 
 impl Default for BranchGraphBuilder {
@@ -315,6 +316,7 @@ impl Default for BranchGraphBuilder {
       include_remote_branches: false,
       include_declared_dependencies: true,
       eager_labels: BTreeSet::new(),
+      attach_orphans_to_default_root: false,
     }
   }
 }
@@ -349,6 +351,12 @@ impl BranchGraphBuilder {
     self
   }
 
+  /// Treat orphaned branches as children of the default root when rendering.
+  pub fn with_orphan_parenting(mut self, attach: bool) -> Self {
+    self.attach_orphans_to_default_root = attach;
+    self
+  }
+
   /// Produce a branch graph for the provided repository.
   pub fn build(self, repo: &Repository) -> Result<BranchGraph, BranchGraphError> {
     let workdir = repo.workdir().ok_or(BranchGraphError::MissingWorkdir)?;
@@ -364,11 +372,15 @@ impl BranchGraphBuilder {
       return Ok(BranchGraph::new());
     }
 
-    let edges = if self.include_declared_dependencies {
+    let mut edges = if self.include_declared_dependencies {
       self.apply_dependencies(&repo_state, &mut nodes)
     } else {
       Vec::new()
     };
+
+    if self.attach_orphans_to_default_root {
+      edges.extend(self.attach_orphans_to_default_root(&repo_state, &mut nodes));
+    }
 
     self.apply_divergence(repo, &mut nodes)?;
 
@@ -523,6 +535,59 @@ impl BranchGraphBuilder {
     edges
   }
 
+  fn attach_orphans_to_default_root(
+    &self,
+    repo_state: &RepoState,
+    nodes: &mut BTreeMap<String, BranchNode>,
+  ) -> Vec<BranchEdge> {
+    let default_root = repo_state
+      .get_default_root()
+      .map(str::to_string)
+      .or_else(|| repo_state.get_root_branches().first().cloned());
+
+    let Some(default_root) = default_root else {
+      return Vec::new();
+    };
+
+    let Some(root_node_name) = nodes.get(&default_root).map(|node| node.name.clone()) else {
+      return Vec::new();
+    };
+
+    let configured_roots: BTreeSet<String> = repo_state.get_root_branches().into_iter().collect();
+    let orphan_names: Vec<String> = nodes
+      .iter()
+      .filter(|(name, node)| {
+        node.topology.primary_parent.is_none() && *name != &default_root && !configured_roots.contains(*name)
+      })
+      .map(|(name, _)| name.clone())
+      .collect();
+
+    if orphan_names.is_empty() {
+      return Vec::new();
+    }
+
+    let mut child_names = Vec::new();
+    for orphan_name in &orphan_names {
+      if let Some(orphan_node) = nodes.get_mut(orphan_name) {
+        orphan_node.topology.primary_parent = Some(root_node_name.clone());
+        child_names.push(orphan_node.name.clone());
+      }
+    }
+
+    let mut edges = Vec::new();
+    if let Some(root_node) = nodes.get_mut(&default_root) {
+      for child_name in &child_names {
+        if !root_node.topology.children.iter().any(|child| child == child_name) {
+          root_node.topology.children.push(child_name.clone());
+        }
+        edges.push(BranchEdge::new(root_node_name.clone(), child_name.clone()));
+      }
+      root_node.topology.children.sort();
+    }
+
+    edges
+  }
+
   fn apply_divergence(
     &self,
     repo: &Repository,
@@ -664,5 +729,47 @@ mod tests {
 
     assert_eq!(divergence.ahead, 1);
     assert_eq!(divergence.behind, 1);
+  }
+
+  #[test]
+  fn attaches_orphans_to_default_root_when_enabled() {
+    let repo_guard = GitRepoTestGuard::new();
+    let repo = &repo_guard.repo;
+
+    create_commit(repo, "README.md", "hello", "initial").unwrap();
+    let main_branch = repo.head().unwrap().shorthand().unwrap().to_string();
+    create_branch(repo, "feature/stray", None).unwrap();
+
+    let workdir = repo.workdir().unwrap();
+    let mut state = RepoState::default();
+    state.add_root(main_branch.clone(), true).unwrap();
+    state.save(workdir).unwrap();
+
+    let graph = BranchGraphBuilder::new()
+      .with_orphan_parenting(true)
+      .build(repo)
+      .unwrap();
+
+    let root = graph.get(&BranchName::from(main_branch.as_str())).unwrap();
+    assert!(
+      root
+        .topology
+        .children
+        .iter()
+        .any(|child| child.as_str() == "feature/stray")
+    );
+
+    let orphan = graph.get(&BranchName::from("feature/stray")).unwrap();
+    assert_eq!(
+      orphan.topology.primary_parent.as_ref().map(BranchName::as_str),
+      Some(main_branch.as_str())
+    );
+
+    assert!(
+      graph
+        .edges()
+        .iter()
+        .any(|edge| edge.from.as_str() == main_branch && edge.to.as_str() == "feature/stray")
+    );
   }
 }

@@ -31,7 +31,7 @@ pub fn run(cli: &Cli) -> Result<()> {
     print_success(&message);
   }
 
-  let graph = match BranchGraphBuilder::new().build(&repo) {
+  let graph = match BranchGraphBuilder::new().with_orphan_parenting(true).build(&repo) {
     Ok(graph) => graph,
     Err(err) => {
       handle_graph_error(err);
