@@ -24,7 +24,7 @@
 
 1. **Branch Tree Visualization (`twig flow`)**
 
-   - Render the current repository's branch graph (local branches) using a hybrid tree-and-table layout: the first line prints column headers (e.g., `Branch`, `Story`, `PR`, `Notes`) while each branch row retains tree connectors inside the `Branch` column and keeps the additional metadata columns horizontally aligned.
+   - Render the current repository's branch graph (local branches) using a hybrid tree-and-table layout: the first line prints column headers (e.g., `Branch`, `Story`, `PR`) while each branch row retains tree connectors inside the `Branch` column and keeps the additional metadata columns horizontally aligned. The notes column is intentionally out-of-scope until we define a real data source and UX for it.
    - The renderer must live in `twig-core` so it can be reused by the CLI, plugins, and future tooling; `twig flow` consumes this shared component rather than owning bespoke formatting code.
 
    - Provide boolean flags (`--root`, `--parent`) that perform an automatic checkout before rendering: `--root` moves the user to the configured root branch for the graph, while `--parent` switches to the current branch's primary parent. The visualization still renders the full tree, simply highlighting the new current branch. These tree-selection flags are mutually exclusive and the CLI should surface a clear error when multiple are supplied.
@@ -122,7 +122,7 @@
 - `--show-remotes`: future extension; note in backlog.
 - `--format json`: optional future; not in initial scope unless easy to provide.
 - Output should highlight current branch (e.g., `* main`) while preserving column alignment under a shared header row.
-- Header row defaults to `Branch`, `Story`, `PR`, `Notes`; renderer reads from a configurable (internal) schema so layout changes do not require code rewrites.
+- Header row defaults to `Branch`, `Story`, `PR`; renderer reads from a configurable (internal) schema so layout changes do not require code rewrites.
 - Should handle no branches scenario (empty repo) gracefully.
 
 ### `twig flow <target>`
@@ -135,13 +135,13 @@
 
 - Location: `twig-core/src/git/renderer.rs` (new module re-exported via `twig_core::git`), exposing a `BranchTableRenderer` struct that accepts a `BranchGraph`, column schema, and style configuration.
 - API surface:
-  - `BranchTableColumn` enum describing built-in columns (`Branch`, `Story`, `PR`, `Notes`) plus extensibility via custom metadata keys.
+  - `BranchTableColumn` enum describing built-in columns (`Branch`, `Story`, `PR`) plus extensibility via custom metadata keys.
   - `BranchTableSchema` to configure column order, width behavior, and fallback placeholders.
   - `BranchTableRenderer::render(&self, graph: &BranchGraph, root: &BranchName, writer: impl Write)` returning `Result<()>`.
   - Optional helpers for width measurement, column alignment (leveraging `console::strip_ansi_codes` / internal width utilities).
 - Responsibilities:
   - Compose tree connectors within the `Branch` column using `BranchGraph` topology (children, parents, current branch).
-  - Populate additional columns from `BranchNodeMetadata` annotations/labels (e.g., Jira ticket, PR number, stale state).
+  - Populate additional columns from `BranchNodeMetadata` annotations/labels (e.g., Jira ticket or PR number).
   - Provide deterministic spacing suitable for snapshot testing; avoid terminal-dependent width detection.
   - Support internal configuration toggles (e.g., hidden feature flag to swap columns) without exposing user-facing CLI flags yet.
 - Testing strategy (lives under `twig-core/src/git/renderer/tests` or `tests/renderer.rs`):
@@ -155,9 +155,9 @@
 
 | Type                     | Responsibility                                                                                             | Notes                                                                                                                                                                                    |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BranchTableColumnKind`  | Encodes how a cell is populated (`Branch`, `FirstLabel`, `Annotation { key }`, `Notes`).                   | Annotation columns point at arbitrary metadata keys so future columns can be added without touching the renderer core.                                                                   |
-| `BranchTableColumn`      | Couples a human-readable title with a `kind` and `min_width`.                                              | Convenience constructors (`branch()`, `story()`, `pull_request()`, `notes()`) seed the default schema; `with_min_width` lets internal callers tune width guarantees per column.          |
-| `BranchTableSchema`      | Ordered list of columns plus presentation toggles (placeholder text, column spacing, header visibility).   | Defaults to `Branch/Story/PR/Notes`, placeholder `--`, spacing of two spaces, header enabled. Schema builders will live in `twig-core` so plugins/CLI can tweak layout before rendering. |
+| `BranchTableColumnKind`  | Encodes how a cell is populated (`Branch`, `FirstLabel`, `Annotation { key }`).                            | Annotation columns point at arbitrary metadata keys so future columns can be added without touching the renderer core.                                                                   |
+| `BranchTableColumn`      | Couples a human-readable title with a `kind` and `min_width`.                                              | Convenience constructors (`branch()`, `story()`, `pull_request()`) seed the default schema; `with_min_width` lets internal callers tune width guarantees per column.                     |
+| `BranchTableSchema`      | Ordered list of columns plus presentation toggles (placeholder text, column spacing, header visibility).   | Defaults to `Branch/Story/PR`, placeholder `--`, spacing of two spaces, header enabled. Schema builders will live in `twig-core` so plugins/CLI can tweak layout before rendering.      |
 | `BranchTableRenderError` | Error enum for empty schemas, branch-column validation, unknown branches, and `fmt::Error` passthrough.    | Keeps rendering failures distinct from Git/IO errors so callers can handle them deterministically (e.g., fall back to plain `twig tree`).                                                |
 | `BranchTableRenderer`    | Stateful renderer that owns a `BranchTableSchema` and knows how to format a `BranchGraph` into any writer. | Entry point: `render(&mut writer, &graph, &BranchName)`; returns `Result<(), BranchTableRenderError>`.                                                                                   |
 
@@ -168,12 +168,13 @@
 | Branch | `Branch`             | Graph topology + metadata (`is_current`) to add `*`, tree connectors. | n/a         |
 | Story  | `FirstLabel`         | First label from `BranchNodeMetadata.labels`.                         | `--`        |
 | PR     | `Annotation { key }` | `twig.pr` annotation (text/number).                                   | `--`        |
-| Notes  | `Notes`              | Prefers `twig.notes` annotation, falls back to `BranchStaleState`.    | `--`        |
+
+The notes column is currently omitted from the default schema until UX, API, and data sources are defined; callers can still add custom annotation columns as needed.
 
 Colorization & styling (implemented):
 
 - Palette: tree connectors dimmed by default; headers bold; current branch marker/name bright green; other branch names bold. Ahead counts render green (dimmed when zero) and behind counts red (dimmed when zero).
-- Column accents: Story (first label) cyan; PR yellow; arbitrary annotations magenta; placeholders gray/dim; notes use heuristics (ready/fresh → green, review → yellow, stale/draft/blocked → yellow) plus `BranchStaleState` mappings (fresh/unknown/stale) so semantic overlays stay legible.
+- Column accents: Story (first label) cyan; PR yellow; arbitrary annotations magenta; placeholders gray/dim.
 - `BranchTableStyle` + `BranchTableColorMode::{Auto, Always, Never}` control whether colors render; width calculations strip ANSI codes to preserve alignment. Snapshots cover both the colorized defaults and a forced no-color fallback.
 
 Hidden configuration will reuse `BranchTableSchema` builders: callers can clone the default schema, swap/insert columns, adjust spacing, or suppress the header before passing it into the renderer. These overrides stay internal for now (toggled via config files under `.twig/`), but the data model fully supports surfacing them later without rewiring the renderer.
@@ -201,38 +202,38 @@ _Module skeleton:_ `twig-core/src/git/renderer.rs` defines all structs/enums lis
 ## CLI UX Mockups
 
 - Tree visualization uses ASCII connectors (`├─`, `└─`, `│`) within the `Branch` column and prefixes the currently checked-out branch with `*`.
-- A header row introduces the default columns (`Branch`, `Story`, `PR`, `Notes`) and each branch row keeps metadata horizontally aligned under the header. Missing metadata renders as `—` to preserve alignment.
+- A header row introduces the default columns (`Branch`, `Story`, `PR`) and each branch row keeps metadata horizontally aligned under the header. Missing metadata renders as `—` to preserve alignment.
 - Branch annotations migrate out of inline square brackets and into the dedicated columns; colorization comes from `BranchTableStyle` (palette + auto/disabled modes).
 - `--root` and `--parent` trigger an explicit checkout before rendering; conflicting selections short-circuit with a Clap error prior to Git mutations. Detached-head or empty repository scenarios surface a warning followed by only the header row.
 
 ```text
 $ twig flow
-Branch                         Story        PR       Notes
-* main                         —            —        —
-├─ feature/auth-refresh        PROJ-451     —        active
-│  └─ feature/auth-refresh-ui  PROJ-451     #982     in-review
-├─ feature/payment-refactor    —            draft    stale 21d
-│  ├─ feature/payment-api      —            —        —
-│  └─ feature/payment-ui       —            —        —
-└─ chore/cicd-cleanup          —            —        —
-   └─ fix/gha-cache            —            —        stale 45d
+Branch                         Story        PR
+* main                         —            —
+├─ feature/auth-refresh        PROJ-451     —
+│  └─ feature/auth-refresh-ui  PROJ-451     #982
+├─ feature/payment-refactor    —            draft
+│  ├─ feature/payment-api      —            —
+│  └─ feature/payment-ui       —            —
+└─ chore/cicd-cleanup          —            —
+   └─ fix/gha-cache            —            —
 ```
 
 ```text
 $ twig flow --root
 Switched to branch "feature/payment-refactor" (root)
-Branch                         Story        PR       Notes
-* feature/payment-refactor     —            draft    —
-├─ feature/payment-api         —            —        —
-└─ feature/payment-ui          —            —        —
+Branch                         Story        PR
+* feature/payment-refactor     —            draft
+├─ feature/payment-api         —            —
+└─ feature/payment-ui          —            —
 ```
 
 ```text
 $ twig flow --parent
 Switched to parent branch "feature/auth-refresh"
-Branch                         Story        PR       Notes
-* feature/auth-refresh         PROJ-451     —        —
-└─ feature/auth-refresh-ui     PROJ-451     #982     in-review
+Branch                         Story        PR
+* feature/auth-refresh         PROJ-451     —
+└─ feature/auth-refresh-ui     PROJ-451     #982
 ```
 
 ```text
@@ -286,7 +287,7 @@ error: the argument '--root' cannot be used with '--parent'
 | P0       | Add unit & snapshot tests for renderer.                                    | Cover width calculations, connectors, and schema overrides using `insta` fixtures.                                        | Lives under `twig-core` tests; uses synthetic graphs.                                | ✅ Completed – see `twig-core/src/git/renderer.rs` tests + new snapshots (`flow_renderer__no_header`, `flow_renderer__custom_schema`). |
 | P0       | Handle multi-parent `--parent` edge case.                                  | Error messaging and parent listings defined; renderer call short-circuits when multiple parents.                          | Future interactive selection tracked separately.                                     | ✅ Completed – plugin now surfaces explicit error/output when multiple parents exist (`plugins/twig-flow/src/tree.rs`).                |
 | P0       | Add colorized/embellished output for readability.                          | Renderer and plugin apply color/formatting (with color-disabled fallback) to highlight current branch, metadata, and statuses without breaking alignment. | Define palette + ANSI handling, update snapshots/fixtures accordingly, and ensure non-color terminals degrade gracefully. | ✅ Completed – palette + `BranchTableStyle`/`BranchTableColorMode` live in `twig-core/src/git/renderer.rs`; snapshots cover colorized defaults and a no-color fallback. |
-| P1       | Draft CLI UX for tree visualization (mock outputs).                        | Example outputs stored in spec or doc, capturing formatting rules.                                                        | Hybrid tree/table layout with default `Branch/Story/PR/Notes` columns.               | ✅ Completed – see "CLI UX Mockups" section                                                                                            |
+| P1       | Draft CLI UX for tree visualization (mock outputs).                        | Example outputs stored in spec or doc, capturing formatting rules.                                                        | Hybrid tree/table layout with default `Branch/Story/PR` columns.                     | ✅ Completed – see "CLI UX Mockups" section                                                                                            |
 | P1       | Plan integration tests & fixtures.                                         | List of test scenarios with coverage goals.                                                                               | Include tree rendering snapshots, switching success/error cases.                     | ✅ Completed – scenarios exercised in `plugins/twig-flow/tests/integration.rs`; additional cases can extend this file.                                                      |
 | P1       | Surface branch commit deltas in visualization.                             | Renderer outputs `+<n>` for commits unique to the branch and `-<n>` for commits missing relative to parent.                 | Adds parent comparison overlay to tree/table output so users can see divergence at a glance.                               | ✅ Completed – renderer now appends ahead/behind counts beside branch names using commit graph comparisons.                          |
 | P1       | Outline documentation deliverables.                                        | ToC for plugin README/tutorial.                                                                                           | Ensure canonical example requirement met.                                            | ✅ Completed – see "Documentation Deliverables Outline" section                                                                        |
