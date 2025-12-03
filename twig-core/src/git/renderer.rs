@@ -13,11 +13,8 @@ use console::{colors_enabled, measure_text_width, strip_ansi_codes};
 use owo_colors::{OwoColorize, Style};
 use thiserror::Error;
 
-use super::graph::{
-  BranchAnnotationValue, BranchDivergence, BranchGraph, BranchName, BranchNode, BranchNodeMetadata, BranchStaleState,
-};
+use super::graph::{BranchAnnotationValue, BranchDivergence, BranchGraph, BranchName, BranchNode, BranchNodeMetadata};
 
-const DEFAULT_NOTES_ANNOTATION_KEY: &str = "twig.notes";
 const DEFAULT_PR_ANNOTATION_KEY: &str = "twig.pr";
 
 /// Describes the kind of value rendered within a table column.
@@ -32,8 +29,6 @@ pub enum BranchTableColumnKind {
     /// Annotation key (e.g. `jira.story`, `github.pr`).
     key: String,
   },
-  /// Displays workflow notes inferred from metadata (stale state, annotations).
-  Notes,
 }
 
 /// Definition of a single column within the branch table.
@@ -72,11 +67,6 @@ impl BranchTableColumn {
         key: DEFAULT_PR_ANNOTATION_KEY.to_string(),
       },
     )
-  }
-
-  /// Convenience helper for the default "Notes" column.
-  pub fn notes() -> Self {
-    Self::new("Notes", BranchTableColumnKind::Notes)
   }
 
   /// Minimum width (in columns) reserved for the current field.
@@ -172,7 +162,6 @@ impl Default for BranchTableSchema {
       BranchTableColumn::branch().with_min_width(8),
       BranchTableColumn::story().with_min_width(8),
       BranchTableColumn::pull_request().with_min_width(6),
-      BranchTableColumn::notes().with_min_width(8),
     ])
   }
 }
@@ -413,7 +402,6 @@ impl BranchTableRenderer {
         BranchTableColumnKind::Annotation { key } => {
           self.style_annotation(annotation_value(&node.metadata, key), key, colors_enabled)
         }
-        BranchTableColumnKind::Notes => self.style_notes(notes_value(&node.metadata), colors_enabled),
       };
 
       cells.push(value);
@@ -476,14 +464,6 @@ impl BranchTableRenderer {
         };
         style_text(value, style, colors_enabled)
       }
-      None => self.placeholder(colors_enabled),
-    }
-  }
-
-  fn style_notes(&self, value: Option<NotesValue>, colors_enabled: bool) -> String {
-    match value {
-      Some(NotesValue::Annotation(note)) => style_note_text(note, colors_enabled),
-      Some(NotesValue::Stale(state)) => style_stale_state(state, colors_enabled),
       None => self.placeholder(colors_enabled),
     }
   }
@@ -570,20 +550,6 @@ fn annotation_value(metadata: &BranchNodeMetadata, key: &str) -> Option<String> 
   metadata.annotations.get(key).map(format_annotation_value)
 }
 
-#[derive(Debug, Clone)]
-enum NotesValue {
-  Annotation(String),
-  Stale(BranchStaleState),
-}
-
-fn notes_value(metadata: &BranchNodeMetadata) -> Option<NotesValue> {
-  if let Some(note) = metadata.annotations.get(DEFAULT_NOTES_ANNOTATION_KEY) {
-    return Some(NotesValue::Annotation(format_annotation_value(note)));
-  }
-
-  metadata.stale_state.clone().map(NotesValue::Stale)
-}
-
 fn format_divergence(divergence: &BranchDivergence, colors_enabled: bool) -> String {
   let ahead = if colors_enabled {
     let style = if divergence.ahead == 0 {
@@ -638,33 +604,6 @@ fn style_text(value: impl AsRef<str>, style: Style, colors_enabled: bool) -> Str
   }
 }
 
-fn style_note_text(note: String, colors_enabled: bool) -> String {
-  if !colors_enabled {
-    return note;
-  }
-
-  let normalized = note.to_ascii_lowercase();
-  if normalized.contains("ready") || normalized.contains("fresh") {
-    style_text(note, ready_style(), true)
-  } else if normalized.contains("review") {
-    style_text(note, review_style(), true)
-  } else if normalized.contains("stale") || normalized.contains("draft") || normalized.contains("blocked") {
-    style_text(note, stale_style(), true)
-  } else {
-    note
-  }
-}
-
-fn style_stale_state(state: BranchStaleState, colors_enabled: bool) -> String {
-  match state {
-    BranchStaleState::Fresh => style_text("fresh", ready_style(), colors_enabled),
-    BranchStaleState::Stale { age_in_days } => {
-      style_text(format!("stale {age_in_days}d"), stale_style(), colors_enabled)
-    }
-    BranchStaleState::Unknown => style_text("unknown", unknown_style(), colors_enabled),
-  }
-}
-
 fn connector_style() -> Style {
   Style::new().bright_black()
 }
@@ -703,22 +642,6 @@ fn placeholder_style() -> Style {
 
 fn header_style() -> Style {
   Style::new().bright_white().bold()
-}
-
-fn ready_style() -> Style {
-  Style::new().green().bold()
-}
-
-fn review_style() -> Style {
-  Style::new().yellow()
-}
-
-fn stale_style() -> Style {
-  Style::new().yellow()
-}
-
-fn unknown_style() -> Style {
-  Style::new().bright_black()
 }
 
 fn visible_width(value: &str) -> usize {
@@ -788,6 +711,7 @@ mod tests {
     let (graph, root) = sample_graph();
     let schema = BranchTableSchema::new(vec![
       BranchTableColumn::branch().with_min_width(10),
+      BranchTableColumn::story(),
       BranchTableColumn::pull_request(),
       BranchTableColumn::new(
         "Lifecycle",
@@ -796,7 +720,6 @@ mod tests {
         },
       )
       .with_min_width(10),
-      BranchTableColumn::notes().with_min_width(12),
     ])
     .with_placeholder("—")
     .with_column_spacing(3);
@@ -835,25 +758,16 @@ mod tests {
       DEFAULT_PR_ANNOTATION_KEY.to_string(),
       BranchAnnotationValue::Text("#982".into()),
     );
-    feature_auth_ui.metadata.annotations.insert(
-      DEFAULT_NOTES_ANNOTATION_KEY.to_string(),
-      BranchAnnotationValue::Text("in-review".into()),
-    );
 
     let mut feature_payment = branch_node("feature/payment-refactor");
     feature_payment.metadata.annotations.insert(
       DEFAULT_PR_ANNOTATION_KEY.to_string(),
       BranchAnnotationValue::Text("draft".into()),
     );
-    feature_payment.metadata.stale_state = Some(BranchStaleState::Stale { age_in_days: 21 });
 
     let mut feature_payment_api = branch_node("feature/payment-api");
 
     let mut feature_payment_ui = branch_node("feature/payment-ui");
-    feature_payment_ui.metadata.annotations.insert(
-      DEFAULT_NOTES_ANNOTATION_KEY.to_string(),
-      BranchAnnotationValue::Text("ready".into()),
-    );
 
     main.topology.children = vec![feature_auth.name.clone(), feature_payment.name.clone()];
     feature_auth.topology.children = vec![feature_auth_ui.name.clone()];
