@@ -17,9 +17,10 @@ pub struct Cli {
   #[arg(long)]
   pub parent: bool,
 
-  /// Filter branches by name (ancestors stay visible for context).
+  /// Include branches whose names contain this pattern (case-insensitive;
+  /// glob/regex may be added later).
   #[arg(long, value_name = "PATTERN")]
-  pub filter: Option<String>,
+  pub include: Option<String>,
 
   /// Optional branch or ticket target for switching mode.
   #[arg(value_name = "TARGET")]

@@ -53,14 +53,14 @@ pub fn run(cli: &Cli) -> Result<()> {
   let graph = annotate_orphaned_branches(graph, &orphaned);
   let mut highlighted = BTreeSet::new();
 
-  let graph = if let Some(pattern) = cli.filter.as_deref() {
+  let graph = if let Some(pattern) = cli.include.as_deref() {
     match filter_branch_graph(&graph, pattern) {
       Some((filtered, matches)) => {
         highlighted = matches;
         filtered
       }
       None => {
-        print_warning(&format!("No branches matched filter \"{pattern}\"."));
+        print_warning(&format!("No branches matched pattern \"{pattern}\"."));
         return Ok(());
       }
     }

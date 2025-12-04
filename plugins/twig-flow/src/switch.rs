@@ -96,7 +96,7 @@ mod tests {
     let cli = Cli {
       root: false,
       parent: false,
-      filter: None,
+      include: None,
       target: Some("feature/existing".into()),
     };
 
@@ -117,7 +117,7 @@ mod tests {
     let cli = Cli {
       root: false,
       parent: false,
-      filter: None,
+      include: None,
       target: Some("feature/new".into()),
     };
 
@@ -150,7 +150,7 @@ mod tests {
     let cli = Cli {
       root: false,
       parent: false,
-      filter: None,
+      include: None,
       target: Some("PROJ-123".into()),
     };
 
@@ -170,7 +170,7 @@ mod tests {
     let cli = Cli {
       root: false,
       parent: false,
-      filter: None,
+      include: None,
       target: Some("PROJ-999".into()),
     };
 
