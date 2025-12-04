@@ -102,11 +102,16 @@ jobs:
         run: cargo build --workspace
       - name: Run tests
         run: cargo nextest run --workspace
-      - name: Upload artifact
+      - name: Upload twig artifact
         uses: actions/upload-artifact@v5
         with:
           name: twig-${{ matrix.os }}
           path: target/debug/twig
+      - name: Upload twig-flow artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: twig-flow-${{ matrix.os }}
+          path: target/debug/twig-flow
 
       - name: Publish job summary
         if: always()
@@ -143,14 +148,19 @@ jobs:
         with:
           tool: cargo-nextest
       - name: Build
-        run: cargo build --profile ci-windows --bin twig
+        run: cargo build --profile ci-windows --bin twig --bin twig-flow
       - name: Run tests
         run: cargo nextest run --workspace --cargo-profile ci-windows
-      - name: Upload artifact
+      - name: Upload twig artifact
         uses: actions/upload-artifact@v5
         with:
           name: twig-windows
           path: target/ci-windows/twig.exe
+      - name: Upload twig-flow artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: twig-flow-windows
+          path: target/ci-windows/twig-flow.exe
 
       - name: Publish job summary
         if: always()

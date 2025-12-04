@@ -4,7 +4,9 @@
 
 ## Download and Install
 
-### Ubuntu/Linux
+### Twig CLI
+
+#### Ubuntu/Linux
 
 ```bash
 # Download the release
@@ -23,7 +25,7 @@ sudo chmod +x /usr/local/bin/twig
 rm twig-linux-x86_64.tar.gz twig
 ```
 
-### macOS
+#### macOS
 
 ```bash
 # Download the release
@@ -42,18 +44,74 @@ sudo chmod +x /usr/local/bin/twig
 rm twig-macos-x86_64.tar.gz twig
 ```
 
+### Twig Flow Plugin
+
+#### Ubuntu/Linux
+
+```bash
+# Download the plugin release
+curl -L -o twig-flow-linux-x86_64.tar.gz https://github.com/eddieland/twig/releases/download/v${VERSION}/twig-flow-linux-x86_64-v${VERSION}.tar.gz
+
+# Extract the archive
+tar -xzf twig-flow-linux-x86_64.tar.gz
+
+# Install to /usr/local/bin (requires sudo)
+sudo cp twig-flow /usr/local/bin/
+
+# Make executable (if not already)
+sudo chmod +x /usr/local/bin/twig-flow
+
+# Clean up downloaded files
+rm twig-flow-linux-x86_64.tar.gz twig-flow
+```
+
+#### macOS
+
+```bash
+# Download the plugin release
+curl -L -o twig-flow-macos-x86_64.tar.gz https://github.com/eddieland/twig/releases/download/v${VERSION}/twig-flow-macos-x86_64-v${VERSION}.tar.gz
+
+# Extract the archive
+tar -xzf twig-flow-macos-x86_64.tar.gz
+
+# Install to /usr/local/bin (requires sudo)
+sudo cp twig-flow /usr/local/bin/
+
+# Make executable (if not already)
+sudo chmod +x /usr/local/bin/twig-flow
+
+# Clean up downloaded files
+rm twig-flow-macos-x86_64.tar.gz twig-flow
+```
+
 ## Quick Install
 
-### Ubuntu/Linux
+### Twig CLI
+
+#### Ubuntu/Linux
 
 ```bash
 curl -L https://github.com/eddieland/twig/releases/download/v${VERSION}/twig-linux-x86_64-v${VERSION}.tar.gz | tar -xz && sudo cp twig /usr/local/bin/ && sudo chmod +x /usr/local/bin/twig && rm twig
 ```
 
-### macOS
+#### macOS
 
 ```bash
 curl -L https://github.com/eddieland/twig/releases/download/v${VERSION}/twig-macos-x86_64-v${VERSION}.tar.gz | tar -xz && sudo cp twig /usr/local/bin/ && sudo chmod +x /usr/local/bin/twig && rm twig
+```
+
+### Twig Flow Plugin
+
+#### Ubuntu/Linux
+
+```bash
+curl -L https://github.com/eddieland/twig/releases/download/v${VERSION}/twig-flow-linux-x86_64-v${VERSION}.tar.gz | tar -xz && sudo cp twig-flow /usr/local/bin/ && sudo chmod +x /usr/local/bin/twig-flow && rm twig-flow
+```
+
+#### macOS
+
+```bash
+curl -L https://github.com/eddieland/twig/releases/download/v${VERSION}/twig-flow-macos-x86_64-v${VERSION}.tar.gz | tar -xz && sudo cp twig-flow /usr/local/bin/ && sudo chmod +x /usr/local/bin/twig-flow && rm twig-flow
 ```
 
 ## Verify Installation
@@ -61,7 +119,10 @@ curl -L https://github.com/eddieland/twig/releases/download/v${VERSION}/twig-mac
 ```bash
 # Check if twig is installed and accessible
 which twig
+# Check if twig-flow is installed and accessible
+which twig-flow
 
 # Check version
 twig --version
+twig-flow --help
 ```
