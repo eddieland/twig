@@ -374,11 +374,11 @@ fn evaluate_association_update(
   let jira_conflict = detected_jira
     .as_ref()
     .zip(existing.jira_issue.as_ref())
-    .map_or(false, |(detected, existing_jira)| detected != existing_jira);
+    .is_some_and(|(detected, existing_jira)| detected != existing_jira);
 
   let pr_conflict = detected_pr
     .zip(existing.github_pr)
-    .map_or(false, |(detected, existing_pr)| detected != existing_pr);
+    .is_some_and(|(detected, existing_pr)| detected != existing_pr);
 
   let has_new_information =
     existing.jira_issue.is_none() && detected_jira.is_some() || existing.github_pr.is_none() && detected_pr.is_some();
