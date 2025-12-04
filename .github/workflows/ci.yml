@@ -99,7 +99,7 @@ jobs:
         with:
           tool: cargo-nextest
       - name: Build
-        run: cargo build --workspace
+        run: cargo build -p twig -p twig-flow --bins
       - name: Run tests
         run: cargo nextest run --workspace
       - name: Upload twig artifact
