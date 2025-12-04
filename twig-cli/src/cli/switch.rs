@@ -416,9 +416,10 @@ fn create_branch_from_github_pr(
     let remote_url = remote
       .url()
       .ok_or_else(|| anyhow::anyhow!("Failed to get remote URL"))?;
+    let api_url = remote.pushurl().unwrap_or(remote_url);
 
     // Extract owner and repo from remote URL
-    let (owner, repo_name) = extract_github_repo_from_url(remote_url)?;
+    let (owner, repo_name) = extract_github_repo_from_url(api_url)?;
 
     // Get the PR details
     let pr = match github_client.get_pull_request(&owner, &repo_name, pr_number).await {
@@ -800,6 +801,9 @@ mod tests {
     let repo_guard = GitRepoTestGuard::new();
     let repo = &repo_guard.repo;
     repo.remote("origin", remote_repo_path.to_str().unwrap())?;
+    repo.remote_set_pushurl("origin", Some("https://github.com/example/repo.git"))?;
+    let mut repo_config = repo.config()?;
+    repo_config.set_str("remote.origin.pushurl", "https://github.com/example/repo.git")?;
 
     let runtime = Runtime::new()?;
     let mock_server = runtime.block_on(MockServer::start());
@@ -821,8 +825,8 @@ mod tests {
             "sha": pr_head_oid.to_string(),
             "repo": {
               "full_name": "example/repo",
-              "clone_url": "https://github.com/example/repo.git",
-              "ssh_url": "git@github.com:example/repo.git",
+              "clone_url": remote_repo_path.to_str().unwrap(),
+              "ssh_url": remote_repo_path.to_str().unwrap(),
               "owner": { "login": "octocat", "id": 1, "name": "Octocat" }
             }
           },
@@ -918,6 +922,16 @@ mod tests {
     let repo_guard = GitRepoTestGuard::new();
     let repo = &repo_guard.repo;
     repo.remote("origin", origin_repo_path.to_str().unwrap())?;
+    repo.remote_set_pushurl("origin", Some("https://github.com/example/repo.git"))?;
+    let mut repo_config = repo.config()?;
+    repo_config.set_str("remote.origin.pushurl", "https://github.com/example/repo.git")?;
+
+    // Redirect GitHub-style URLs to the local fixture repositories so fetches stay
+    // local.
+    let mut config = repo.config()?;
+    let fork_file_url = format!("file://{}", fork_repo_path.to_str().unwrap());
+    let fork_remote_url = "https://github.com/forker/repo.git";
+    config.set_str(&format!("url.{fork_file_url}.insteadOf"), fork_remote_url)?;
 
     let runtime = Runtime::new()?;
     let mock_server = runtime.block_on(MockServer::start());
@@ -939,8 +953,8 @@ mod tests {
             "sha": fork_head_oid.to_string(),
             "repo": {
               "full_name": "forker/repo",
-              "clone_url": fork_repo_path.to_str().unwrap(),
-              "ssh_url": fork_repo_path.to_str().unwrap(),
+              "clone_url": "https://github.com/forker/repo.git",
+              "ssh_url": "git@github.com:forker/repo.git",
               "owner": { "login": "forker", "id": 2, "name": "Forker" }
             }
           },
@@ -979,7 +993,11 @@ mod tests {
     assert_eq!(upstream.name().unwrap(), Some("fork-forker/feature/cool"));
 
     let fork_remote = repo.find_remote("fork-forker")?;
-    assert_eq!(fork_remote.url(), Some(fork_repo_path.to_str().unwrap()));
+    let fork_remote_url = fork_remote.url().unwrap_or_default();
+    assert_eq!(
+      fork_remote_url.trim_start_matches("file://"),
+      fork_repo_path.to_str().unwrap()
+    );
 
     let repo_state = RepoState::load(repo_guard.path())?;
     let metadata = repo_state

@@ -322,6 +322,7 @@ pub fn extract_pr_number_from_url(url: &str) -> Result<u32> {
   let pr_str = parts
     .pr_number
     .ok_or_else(|| anyhow!("Could not extract PR number from URL: {url}"))?;
+  let pr_str = pr_str.split(['?', '#']).next().unwrap_or("");
 
   let pr_number = pr_str
     .parse::<u32>()
