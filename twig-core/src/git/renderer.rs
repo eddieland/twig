@@ -259,6 +259,7 @@ pub enum BranchTableRenderError {
 pub struct BranchTableRenderer {
   schema: BranchTableSchema,
   style: BranchTableStyle,
+  highlighted_branches: BTreeSet<BranchName>,
 }
 
 impl Default for BranchTableRenderer {
@@ -273,12 +274,22 @@ impl BranchTableRenderer {
     Self {
       schema,
       style: BranchTableStyle::default(),
+      highlighted_branches: BTreeSet::new(),
     }
   }
 
   /// Apply additional styling options before rendering.
   pub fn with_style(mut self, style: BranchTableStyle) -> Self {
     self.style = style;
+    self
+  }
+
+  /// Provide a set of branch names that should be visually emphasised.
+  pub fn with_highlighted_branches<I>(mut self, branches: I) -> Self
+  where
+    I: IntoIterator<Item = BranchName>,
+  {
+    self.highlighted_branches = branches.into_iter().collect();
     self
   }
 
@@ -429,6 +440,8 @@ impl BranchTableRenderer {
         .map(|current| current == &node.name)
         .unwrap_or(false);
 
+    let is_highlighted = self.highlighted_branches.contains(&node.name);
+
     if is_current {
       let marker = style_text("*", current_branch_style(), colors_enabled);
       value.push_str(&marker);
@@ -437,6 +450,8 @@ impl BranchTableRenderer {
 
     let branch_style = if is_current {
       current_branch_style()
+    } else if is_highlighted {
+      highlighted_branch_style()
     } else {
       branch_name_style()
     };
@@ -632,6 +647,11 @@ fn branch_name_style() -> Style {
   Style::new()
 }
 
+/// Bold yellow styling used to emphasise filtered branches.
+fn highlighted_branch_style() -> Style {
+  Style::new().yellow().bold()
+}
+
 /// Yellow styling applied to orphan markers appended to branch names.
 fn orphan_marker_style() -> Style {
   Style::new().yellow()
@@ -706,6 +726,19 @@ mod tests {
       .unwrap();
 
     assert_snapshot!("flow_renderer__default_schema", output);
+  }
+
+  #[test]
+  fn highlights_selected_branches() {
+    let (graph, root) = sample_graph();
+    let mut output = String::new();
+    BranchTableRenderer::default()
+      .with_style(BranchTableStyle::new(BranchTableColorMode::Always))
+      .with_highlighted_branches([BranchName::from("feature/payment-ui")])
+      .render(&mut output, &graph, &root)
+      .unwrap();
+
+    assert!(output.contains("\u{1b}[33;1mfeature/payment-ui\u{1b}[0m"));
   }
 
   #[test]

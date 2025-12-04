@@ -51,6 +51,22 @@ pub fn run(cli: &Cli) -> Result<()> {
 
   let graph = attach_orphans_to_default_root(graph, &repo_state);
   let graph = annotate_orphaned_branches(graph, &orphaned);
+  let mut highlighted = BTreeSet::new();
+
+  let graph = if let Some(pattern) = cli.filter.as_deref() {
+    match filter_branch_graph(&graph, pattern) {
+      Some((filtered, matches)) => {
+        highlighted = matches;
+        filtered
+      }
+      None => {
+        print_warning(&format!("No branches matched filter \"{pattern}\"."));
+        return Ok(());
+      }
+    }
+  } else {
+    graph
+  };
 
   let root = match determine_render_root(&graph, &repo_state, selection.render_root) {
     Some(root) => root,
@@ -60,7 +76,7 @@ pub fn run(cli: &Cli) -> Result<()> {
     }
   };
 
-  render_table(&graph, &root)?;
+  render_table(&graph, &root, &highlighted)?;
   display_orphan_note(&orphaned);
 
   Ok(())
@@ -171,12 +187,13 @@ fn determine_render_root(
   graph.iter().next().map(|(_, node)| node.name.clone())
 }
 
-fn render_table(graph: &BranchGraph, root: &BranchName) -> Result<()> {
+fn render_table(graph: &BranchGraph, root: &BranchName, highlighted: &BTreeSet<BranchName>) -> Result<()> {
   let schema = BranchTableSchema::default().with_placeholder("—");
   let style = BranchTableStyle::new(resolve_color_mode());
   let mut buffer = String::new();
   BranchTableRenderer::new(schema)
     .with_style(style)
+    .with_highlighted_branches(highlighted.iter().cloned())
     .render(&mut buffer, graph, root)?;
   print!("{buffer}");
   Ok(())
@@ -321,4 +338,135 @@ fn display_orphan_note(orphaned: &BTreeSet<BranchName>) {
     "† indicates an orphaned branch (no dependencies defined). Re-parent with {}.",
     format_command("twig adopt")
   ));
+}
+
+fn filter_branch_graph(graph: &BranchGraph, pattern: &str) -> Option<(BranchGraph, BTreeSet<BranchName>)> {
+  let needle = pattern.to_lowercase();
+  let mut matches = BTreeSet::new();
+
+  for (name, _) in graph.iter() {
+    if name.as_str().to_lowercase().contains(&needle) {
+      matches.insert(name.clone());
+    }
+  }
+
+  if matches.is_empty() {
+    return None;
+  }
+
+  let mut allowed = matches.clone();
+  let mut stack: Vec<BranchName> = matches.iter().cloned().collect();
+
+  while let Some(current) = stack.pop() {
+    if let Some(node) = graph.get(&current)
+      && let Some(parent) = node.topology.primary_parent.as_ref()
+      && allowed.insert(parent.clone())
+    {
+      stack.push(parent.clone());
+    }
+  }
+
+  let mut nodes = BTreeMap::new();
+  for (name, node) in graph.iter() {
+    if allowed.contains(name) {
+      let mut filtered_node = node.clone();
+      filtered_node.topology.children.retain(|child| allowed.contains(child));
+      nodes.insert(name.clone(), filtered_node);
+    }
+  }
+
+  let edges = graph
+    .edges()
+    .iter()
+    .filter(|edge| allowed.contains(&edge.from) && allowed.contains(&edge.to))
+    .cloned()
+    .collect::<Vec<BranchEdge>>();
+
+  let root_candidates = graph
+    .root_candidates()
+    .iter()
+    .filter(|candidate| allowed.contains(candidate))
+    .cloned()
+    .collect::<Vec<BranchName>>();
+
+  let current_branch = graph.current_branch().filter(|name| allowed.contains(name)).cloned();
+
+  Some((
+    BranchGraph::from_parts(nodes.into_values(), edges, root_candidates, current_branch),
+    matches,
+  ))
+}
+
+#[cfg(test)]
+mod tests {
+  use git2::Oid;
+  use twig_core::git::{BranchHead, BranchKind, BranchTopology};
+
+  use super::*;
+
+  #[test]
+  fn filter_keeps_matching_branches_and_ancestors() {
+    let mut root = branch_node("main");
+    let mut feature = branch_node("feature/payment");
+    feature.topology.primary_parent = Some(root.name.clone());
+    root.topology.children.push(feature.name.clone());
+
+    let mut api = branch_node("feature/payment-api");
+    api.topology.primary_parent = Some(feature.name.clone());
+    feature.topology.children.push(api.name.clone());
+
+    let mut ui = branch_node("feature/payment-ui");
+    ui.topology.primary_parent = Some(feature.name.clone());
+    feature.topology.children.push(ui.name.clone());
+
+    let mut other = branch_node("feature/other");
+    other.topology.primary_parent = Some(root.name.clone());
+    root.topology.children.push(other.name.clone());
+
+    let edges = vec![
+      BranchEdge::new(root.name.clone(), feature.name.clone()),
+      BranchEdge::new(feature.name.clone(), api.name.clone()),
+      BranchEdge::new(feature.name.clone(), ui.name.clone()),
+      BranchEdge::new(root.name.clone(), other.name.clone()),
+    ];
+
+    let graph = BranchGraph::from_parts(
+      vec![root.clone(), feature.clone(), api.clone(), ui.clone(), other.clone()],
+      edges,
+      vec![root.name.clone()],
+      Some(root.name.clone()),
+    );
+
+    let (filtered, matches) = filter_branch_graph(&graph, "api").expect("expected matches");
+
+    assert!(matches.contains(&api.name));
+    assert_eq!(matches.len(), 1);
+    assert!(filtered.get(&api.name).is_some());
+    assert!(filtered.get(&feature.name).is_some());
+    assert!(filtered.get(&root.name).is_some());
+    assert!(filtered.get(&ui.name).is_none());
+    assert!(filtered.get(&other.name).is_none());
+
+    let parent = filtered
+      .get(&api.name)
+      .and_then(|node| node.topology.primary_parent.as_ref())
+      .expect("parent retained");
+    assert_eq!(parent, &feature.name);
+  }
+
+  fn branch_node(name: &str) -> BranchNode {
+    BranchNode {
+      name: BranchName::from(name),
+      kind: BranchKind::Local,
+      head: BranchHead {
+        oid: Oid::from_str("0123456789abcdef0123456789abcdef01234567").unwrap(),
+        summary: Some(format!("Summary for {name}")),
+        author: Some("Twig Bot".to_string()),
+        committed_at: None,
+      },
+      upstream: None,
+      topology: BranchTopology::default(),
+      metadata: Default::default(),
+    }
+  }
 }
