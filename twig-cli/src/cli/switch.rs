@@ -10,6 +10,7 @@ use clap::Args;
 use directories::BaseDirs;
 use git2::Repository as Git2Repository;
 use tokio::runtime::Runtime;
+use twig_core::git::extract_github_repo_from_url;
 use twig_core::git::switch::{
   BranchBaseResolution, SwitchInput, detect_switch_input, resolve_branch_base, store_github_pr_association,
   store_jira_association, try_checkout_remote_branch,
@@ -417,7 +418,7 @@ fn create_branch_from_github_pr(
       .ok_or_else(|| anyhow::anyhow!("Failed to get remote URL"))?;
 
     // Extract owner and repo from remote URL
-    let (owner, repo_name) = github_client.extract_repo_info_from_url(remote_url)?;
+    let (owner, repo_name) = extract_github_repo_from_url(remote_url)?;
 
     // Get the PR details
     let pr = match github_client.get_pull_request(&owner, &repo_name, pr_number).await {
