@@ -3,18 +3,9 @@
 //! Helper functions for GitHub URL parsing, repository information extraction,
 //! and other common GitHub-related operations.
 
-use std::sync::LazyLock;
-
 use anyhow::{Context, Result};
-use regex::Regex;
 
 use crate::client::GitHubClient;
-
-static GITHUB_REPO_REGEX: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"github\.com[/:]([^/]+)/([^/\.]+)").expect("Failed to compile GitHub repo regex"));
-
-static GITHUB_PR_REGEX: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"github\.com/[^/]+/[^/]+/pull/(\d+)").expect("Failed to compile GitHub PR regex"));
 
 impl GitHubClient {
   /// Extract owner and repo from a GitHub URL
@@ -23,28 +14,15 @@ impl GitHubClient {
     // https://github.com/owner/repo
     // https://github.com/owner/repo.git
     // https://github.com/owner/repo/pull/123
-    if let Some(captures) = GITHUB_REPO_REGEX.captures(url) {
-      let owner = captures.get(1).unwrap().as_str().to_string();
-      let repo = captures.get(2).unwrap().as_str().to_string();
-      Ok((owner, repo))
-    } else {
-      Err(anyhow::anyhow!("Could not extract owner and repo from URL: {url}"))
-    }
+    twig_core::git::extract_github_repo_from_url(url)
   }
 
   /// Extract PR number from a GitHub PR URL
   pub fn extract_pr_number_from_url(&self, url: &str) -> Result<u32> {
     // Match patterns like:
     // https://github.com/owner/repo/pull/123
-    if let Some(captures) = GITHUB_PR_REGEX.captures(url) {
-      let pr_str = captures.get(1).unwrap().as_str();
-      let pr_number = pr_str
-        .parse::<u32>()
-        .with_context(|| format!("Failed to parse PR number '{pr_str}' as a valid integer"))?;
-      Ok(pr_number)
-    } else {
-      Err(anyhow::anyhow!("Could not extract PR number from URL: {url}"))
-    }
+    twig_core::git::extract_pr_number_from_url(url)
+      .with_context(|| format!("Could not extract PR number from URL: {url}"))
   }
 }
 

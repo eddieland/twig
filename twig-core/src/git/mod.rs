@@ -25,9 +25,10 @@ pub use switch::{
   BranchBase, BranchBaseResolution, BranchBaseSource, BranchCreationBase, BranchCreationPolicy, BranchParentReference,
   BranchParentRequest, BranchStateMutations, BranchSwitchAction, BranchSwitchContext, BranchSwitchOutcome,
   BranchSwitchRequest, BranchSwitchService, BranchSwitchTarget, GitHubPullRequestReference, IssueAssociation,
-  IssueReference, PullRequestHead, SwitchInput, detect_switch_input, extract_jira_issue_from_url,
-  extract_pr_number_from_url, lookup_branch_tip, parse_jira_issue_key, resolve_branch_base,
-  store_github_pr_association, store_jira_association, switch_or_create_local_branch, try_checkout_remote_branch,
+  IssueReference, PullRequestHead, SwitchInput, detect_switch_input, extract_github_repo_from_url,
+  extract_jira_issue_from_url, extract_pr_number_from_url, lookup_branch_tip, parse_jira_issue_key,
+  resolve_branch_base, store_github_pr_association, store_jira_association, switch_or_create_local_branch,
+  try_checkout_remote_branch,
 };
 
 /// Get commits ahead/behind between two branches

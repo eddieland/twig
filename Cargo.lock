@@ -2675,7 +2675,6 @@ name = "twig-gh"
 version = "0.5.1"
 dependencies = [
  "anyhow",
- "regex",
  "reqwest",
  "serde",
  "serde_json",

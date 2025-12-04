@@ -5,7 +5,7 @@ use git2::Repository;
 use twig_core::git::{
   BranchAnnotationValue, BranchEdge, BranchGraph, BranchGraphBuilder, BranchGraphError, BranchName, BranchNode,
   BranchTableColorMode, BranchTableLinkMode, BranchTableLinks, BranchTableRenderer, BranchTableSchema,
-  BranchTableStyle, ORPHAN_BRANCH_ANNOTATION_KEY, checkout_branch, get_repository,
+  BranchTableStyle, ORPHAN_BRANCH_ANNOTATION_KEY, checkout_branch, extract_github_repo_from_url, get_repository,
 };
 use twig_core::output::{format_command, print_error, print_success, print_warning};
 use twig_core::state::RepoState;
@@ -246,38 +246,7 @@ fn resolve_jira_base_url() -> Option<String> {
 fn resolve_github_repo(repo: &Repository) -> Option<(String, String)> {
   let remote = repo.find_remote("origin").ok()?;
   let url = remote.url()?;
-  parse_github_repo(url)
-}
-
-fn parse_github_repo(url: &str) -> Option<(String, String)> {
-  let without_scheme = url
-    .strip_prefix("ssh://")
-    .or_else(|| url.strip_prefix("https://"))
-    .or_else(|| url.strip_prefix("http://"))
-    .unwrap_or(url);
-
-  let host_split = without_scheme.split_once("github.com")?;
-  let path = host_split.1.trim_start_matches([':', '/']);
-
-  let mut segments = path.split('/');
-  let first = segments.next()?;
-
-  // Handle ssh URLs with explicit ports (e.g.,
-  // ssh://git@github.com:22/owner/repo.git).
-  let (owner, repo_part) = if first.chars().all(|c| c.is_ascii_digit()) {
-    let owner = segments.next()?;
-    let repo = segments.next().unwrap_or_default();
-    (owner, repo)
-  } else {
-    (first, segments.next().unwrap_or_default())
-  };
-
-  if owner.is_empty() || repo_part.is_empty() {
-    return None;
-  }
-
-  let repo = repo_part.trim_end_matches(".git");
-  Some((owner.to_string(), repo.to_string()))
+  extract_github_repo_from_url(url).ok()
 }
 
 fn handle_graph_error(err: BranchGraphError) {

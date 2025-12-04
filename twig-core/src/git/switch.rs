@@ -266,6 +266,41 @@ pub fn parse_jira_issue_key(parser: &JiraTicketParser, input: &str) -> Option<St
   parser.parse(input).ok()
 }
 
+/// Extract the GitHub owner/repo tuple from a remote or PR URL.
+///
+/// Supports common HTTPS and SSH forms, including SSH URLs that specify an
+/// explicit port (e.g., `ssh://git@github.com:22/owner/repo.git`).
+pub fn extract_github_repo_from_url(url: &str) -> Result<(String, String)> {
+  let without_scheme = url
+    .strip_prefix("ssh://")
+    .or_else(|| url.strip_prefix("https://"))
+    .or_else(|| url.strip_prefix("http://"))
+    .unwrap_or(url);
+
+  let Some((_, path)) = without_scheme.split_once("github.com") else {
+    return Err(anyhow::anyhow!("Could not find github.com host in URL: {url}"));
+  };
+
+  let path = path.trim_start_matches([':', '/']);
+  let mut segments = path.split('/');
+  let first = segments.next().unwrap_or_default();
+
+  // Handle SSH URLs with explicit ports (e.g.,
+  // ssh://git@github.com:22/owner/repo.git).
+  let (owner, repo_part) = if first.chars().all(|c| c.is_ascii_digit()) {
+    (segments.next().unwrap_or_default(), segments.next().unwrap_or_default())
+  } else {
+    (first, segments.next().unwrap_or_default())
+  };
+
+  if owner.is_empty() || repo_part.is_empty() {
+    return Err(anyhow::anyhow!("Could not extract owner and repo from URL: {url}"));
+  }
+
+  let repo = repo_part.trim_end_matches(".git");
+  Ok((owner.to_string(), repo.to_string()))
+}
+
 /// Extract PR number from a GitHub pull request URL.
 pub fn extract_pr_number_from_url(url: &str) -> Result<u32> {
   if let Some(captures) = GITHUB_PR_URL_REGEX.captures(url) {
@@ -936,6 +971,24 @@ mod tests {
       123
     );
     assert!(extract_pr_number_from_url("https://github.com/owner/repo").is_err());
+  }
+
+  #[test]
+  fn extracts_github_repo_from_urls() {
+    assert_eq!(
+      extract_github_repo_from_url("https://github.com/owner/repo").unwrap(),
+      ("owner".to_string(), "repo".to_string())
+    );
+    assert_eq!(
+      extract_github_repo_from_url("git@github.com:owner/repo.git").unwrap(),
+      ("owner".to_string(), "repo".to_string())
+    );
+    assert_eq!(
+      extract_github_repo_from_url("ssh://git@github.com:22/owner/repo.git").unwrap(),
+      ("owner".to_string(), "repo".to_string())
+    );
+    assert!(extract_github_repo_from_url("https://example.com/not-github").is_err());
+    assert!(extract_github_repo_from_url("https://github.com/only-owner").is_err());
   }
 
   #[test]
