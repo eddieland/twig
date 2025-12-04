@@ -929,7 +929,11 @@ mod tests {
     // Redirect GitHub-style URLs to the local fixture repositories so fetches stay
     // local.
     let mut config = repo.config()?;
-    let fork_file_url = format!("file://{}", fork_repo_path.to_str().unwrap());
+    let fork_file_url = {
+      let forward_slash_path = fork_repo_path.to_string_lossy().replace('\\', "/");
+      // Ensure Windows paths get a leading slash after the scheme (file:///C:/path)
+      format!("file:///{}", forward_slash_path.trim_start_matches('/'))
+    };
     let fork_remote_url = "https://github.com/forker/repo.git";
     config.set_str(&format!("url.{fork_file_url}.insteadOf"), fork_remote_url)?;
 
