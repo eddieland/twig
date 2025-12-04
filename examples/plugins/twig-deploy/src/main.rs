@@ -7,7 +7,7 @@ use std::env;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use twig_core::{plugin, print_error, print_info, print_success};
+use twig_core::{detect_repository, plugin, print_error, print_info, print_success};
 
 #[derive(Parser)]
 #[command(name = "twig-deploy")]
@@ -86,7 +86,7 @@ fn main() -> Result<()> {
   }
 
   // Get current repository and branch
-  if let Some(repo) = plugin::current_working_repo()? {
+  if let Some(repo) = detect_repository() {
     print_info(&format!("Repository: {}", repo.display()));
   }
 
