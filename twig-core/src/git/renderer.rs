@@ -15,6 +15,7 @@ use thiserror::Error;
 
 use super::graph::{BranchAnnotationValue, BranchDivergence, BranchGraph, BranchName, BranchNode, BranchNodeMetadata};
 
+pub const ORPHAN_BRANCH_ANNOTATION_KEY: &str = "twig.orphan";
 const DEFAULT_PR_ANNOTATION_KEY: &str = "twig.pr";
 
 /// Describes the kind of value rendered within a table column.
@@ -441,6 +442,22 @@ impl BranchTableRenderer {
     };
 
     value.push_str(&style_text(node.name.as_str(), branch_style, colors_enabled));
+
+    let is_orphan = node
+      .metadata
+      .annotations
+      .get(ORPHAN_BRANCH_ANNOTATION_KEY)
+      .and_then(|value| match value {
+        BranchAnnotationValue::Flag(flag) => Some(*flag),
+        _ => None,
+      })
+      .unwrap_or(false);
+
+    if is_orphan {
+      value.push(' ');
+      value.push_str(&style_text("†", orphan_marker_style(), colors_enabled));
+    }
+
     if let Some(divergence) = node.metadata.divergence.as_ref() {
       value.push(' ');
       value.push_str(&format_divergence(divergence, colors_enabled));
@@ -615,6 +632,11 @@ fn branch_name_style() -> Style {
   Style::new()
 }
 
+/// Yellow styling applied to orphan markers appended to branch names.
+fn orphan_marker_style() -> Style {
+  Style::new().yellow()
+}
+
 /// Bright green, bold styling applied to the current branch marker (`*`) and
 /// branch name.
 fn current_branch_style() -> Style {
@@ -667,7 +689,9 @@ mod tests {
   use git2::Oid;
   use insta::assert_snapshot;
 
-  use super::super::graph::{BranchDivergence, BranchHead, BranchKind, BranchTopology};
+  use super::super::graph::{
+    BranchAnnotationValue, BranchDivergence, BranchEdge, BranchHead, BranchKind, BranchTopology,
+  };
   use super::*;
 
   const LIFECYCLE_KEY: &str = "twig.lifecycle";
@@ -756,6 +780,34 @@ mod tests {
       .unwrap();
 
     assert_snapshot!("flow_renderer__default_schema_no_color", output);
+  }
+
+  #[test]
+  fn annotates_orphaned_branch_inline() {
+    let mut root = branch_node("main");
+    let mut orphan = branch_node("feature/orphaned");
+    root.topology.children.push(orphan.name.clone());
+    orphan.metadata.annotations.insert(
+      ORPHAN_BRANCH_ANNOTATION_KEY.to_string(),
+      BranchAnnotationValue::Flag(true),
+    );
+
+    let root_name = root.name.clone();
+    let orphan_name = orphan.name.clone();
+    let graph = BranchGraph::from_parts(
+      vec![root, orphan],
+      vec![BranchEdge::new(root_name.clone(), orphan_name.clone())],
+      vec![root_name.clone()],
+      Some(root_name.clone()),
+    );
+
+    let mut output = String::new();
+    BranchTableRenderer::default()
+      .with_style(BranchTableStyle::new(BranchTableColorMode::Never))
+      .render(&mut output, &graph, &root_name)
+      .unwrap();
+
+    assert!(output.contains(&format!("{} †", orphan_name)));
   }
 
   fn sample_graph() -> (BranchGraph, BranchName) {

@@ -3,10 +3,11 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use anyhow::{Context, Result, anyhow};
 use git2::Repository;
 use twig_core::git::{
-  BranchEdge, BranchGraph, BranchGraphBuilder, BranchGraphError, BranchName, BranchNode, BranchTableColorMode,
-  BranchTableRenderer, BranchTableSchema, BranchTableStyle, checkout_branch, get_repository,
+  BranchAnnotationValue, BranchEdge, BranchGraph, BranchGraphBuilder, BranchGraphError, BranchName, BranchNode,
+  BranchTableColorMode, BranchTableRenderer, BranchTableSchema, BranchTableStyle, ORPHAN_BRANCH_ANNOTATION_KEY,
+  checkout_branch, get_repository,
 };
-use twig_core::output::{format_command, print_error, print_info, print_success, print_warning};
+use twig_core::output::{format_command, print_error, print_success, print_warning};
 use twig_core::state::RepoState;
 
 use crate::Cli;
@@ -49,6 +50,7 @@ pub fn run(cli: &Cli) -> Result<()> {
   let orphaned = find_orphaned_branches(&graph, &repo_state);
 
   let graph = attach_orphans_to_default_root(graph, &repo_state);
+  let graph = annotate_orphaned_branches(graph, &orphaned);
 
   let root = match determine_render_root(&graph, &repo_state, selection.render_root) {
     Some(root) => root,
@@ -59,9 +61,7 @@ pub fn run(cli: &Cli) -> Result<()> {
   };
 
   render_table(&graph, &root)?;
-  if !orphaned.is_empty() {
-    display_orphaned_branches(&orphaned);
-  }
+  display_orphan_note(&orphaned);
 
   Ok(())
 }
@@ -265,10 +265,37 @@ fn attach_orphans_to_default_root(graph: BranchGraph, repo_state: &RepoState) ->
   BranchGraph::from_parts(nodes.into_values(), edges, root_candidates, current_branch)
 }
 
-fn find_orphaned_branches(graph: &BranchGraph, repo_state: &RepoState) -> Vec<String> {
+fn annotate_orphaned_branches(graph: BranchGraph, orphaned: &BTreeSet<BranchName>) -> BranchGraph {
+  if orphaned.is_empty() {
+    return graph;
+  }
+
+  let nodes: BTreeMap<BranchName, BranchNode> = graph
+    .iter()
+    .map(|(name, node)| {
+      let mut node = node.clone();
+      if orphaned.contains(name) {
+        node.metadata.annotations.insert(
+          ORPHAN_BRANCH_ANNOTATION_KEY.to_string(),
+          BranchAnnotationValue::Flag(true),
+        );
+      }
+      (name.clone(), node)
+    })
+    .collect();
+
+  BranchGraph::from_parts(
+    nodes.into_values(),
+    graph.edges().to_vec(),
+    graph.root_candidates().to_vec(),
+    graph.current_branch().cloned(),
+  )
+}
+
+fn find_orphaned_branches(graph: &BranchGraph, repo_state: &RepoState) -> BTreeSet<BranchName> {
   let configured_roots: HashSet<_> = repo_state.get_root_branches().into_iter().collect();
 
-  let mut orphaned: Vec<String> = graph
+  let orphaned: BTreeSet<BranchName> = graph
     .iter()
     .filter_map(|(name, _)| {
       let branch = name.as_str();
@@ -276,28 +303,22 @@ fn find_orphaned_branches(graph: &BranchGraph, repo_state: &RepoState) -> Vec<St
       if has_parent || configured_roots.contains(branch) {
         None
       } else {
-        Some(branch.to_string())
+        Some(name.clone())
       }
     })
     .collect();
 
-  orphaned.sort();
-  orphaned.dedup();
   orphaned
 }
 
-fn display_orphaned_branches(orphaned: &[String]) {
-  println!();
-  print_warning("Orphaned branches (no dependencies defined):");
-  for branch in orphaned {
-    println!("  • {branch}");
+fn display_orphan_note(orphaned: &BTreeSet<BranchName>) {
+  if orphaned.is_empty() {
+    return;
   }
 
-  let label = if orphaned.len() == 1 { "branch" } else { "branches" };
   println!();
-  print_info(&format!(
-    "Found {} orphaned {label}. Re-parent them with {}.",
-    orphaned.len(),
+  print_warning(&format!(
+    "† indicates an orphaned branch (no dependencies defined). Re-parent with {}.",
     format_command("twig adopt")
   ));
 }
