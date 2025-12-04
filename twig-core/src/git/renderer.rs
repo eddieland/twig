@@ -443,6 +443,11 @@ impl BranchTableRenderer {
     Ok(())
   }
 
+  /// Depth-first traversal that records each reachable branch and its tree
+  /// prefix so column renderers can attach metadata in order.
+  ///
+  /// The traversal stops revisiting previously seen nodes to avoid cycles and
+  /// mirrors the connector stack to keep indentation stable.
   fn collect_rows(
     &self,
     graph: &BranchGraph,
@@ -480,6 +485,8 @@ impl BranchTableRenderer {
     Ok(())
   }
 
+  /// Materialises formatted cell values for every row according to the
+  /// configured schema and styling.
   fn render_rows(
     &self,
     graph: &BranchGraph,
@@ -494,6 +501,8 @@ impl BranchTableRenderer {
     Ok(rendered)
   }
 
+  /// Builds the rendered cells for a single row, handling styling and
+  /// hyperlink wrapping for each column.
   fn render_row(
     &self,
     graph: &BranchGraph,
@@ -526,6 +535,8 @@ impl BranchTableRenderer {
     Ok(cells)
   }
 
+  /// Formats the branch column with connectors, current/highlight markers,
+  /// orphan annotations, and divergence markers.
   fn branch_value(&self, graph: &BranchGraph, node: &BranchNode, prefix: &str, colors_enabled: bool) -> String {
     let mut value = String::new();
 
@@ -584,6 +595,8 @@ impl BranchTableRenderer {
     value
   }
 
+  /// Renders the first label, falling back to the schema placeholder when
+  /// absent and wrapping with a Jira hyperlink when configured.
   fn style_label(&self, value: Option<String>, colors_enabled: bool, links_enabled: bool) -> String {
     value
       .map(|label| {
@@ -594,6 +607,8 @@ impl BranchTableRenderer {
       .unwrap_or_else(|| self.placeholder(colors_enabled))
   }
 
+  /// Styles an annotation cell and applies PR or generic annotation colours,
+  /// hyperlinking when link metadata is available.
   fn style_annotation(
     &self,
     value: Option<&BranchAnnotationValue>,
@@ -621,6 +636,8 @@ impl BranchTableRenderer {
     }
   }
 
+  /// Returns the schema placeholder, optionally dimmed based on the configured
+  /// style and color availability.
   fn placeholder(&self, colors_enabled: bool) -> String {
     let placeholder = self.schema.placeholder().to_string();
     if colors_enabled && self.style.dim_placeholders {
@@ -630,6 +647,8 @@ impl BranchTableRenderer {
     }
   }
 
+  /// Wraps cell content with a hyperlink escape sequence when links are
+  /// enabled and a target URL is available.
   fn wrap_link(&self, value: String, url: Option<String>, links_enabled: bool, colors_enabled: bool) -> String {
     if !links_enabled {
       return value;
@@ -641,6 +660,8 @@ impl BranchTableRenderer {
     }
   }
 
+  /// Calculates display widths for each column based on headers, minimums, and
+  /// rendered cell contents (ignoring ANSI and hyperlink escapes).
   fn compute_column_widths(&self, rows: &[Vec<String>]) -> Vec<usize> {
     let mut widths: Vec<usize> = self.schema.columns().iter().map(|column| column.min_width()).collect();
 
@@ -657,6 +678,8 @@ impl BranchTableRenderer {
     widths
   }
 
+  /// Emits a single padded row into the provided writer, inserting configured
+  /// spacing between columns.
   fn write_row<W: FmtWrite>(
     &self,
     writer: &mut W,
