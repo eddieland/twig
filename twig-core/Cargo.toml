@@ -22,6 +22,7 @@ git2.workspace = true
 open.workspace = true
 regex.workspace = true
 thiserror.workspace = true
+gix-url.workspace = true
 url.workspace = true
 uuid.workspace = true
 

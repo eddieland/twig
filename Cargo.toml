@@ -87,6 +87,7 @@ tokio = { version = "1.48", features = ["rt", "rt-multi-thread", "time", "macros
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "0.9"
+gix-url = "0.33.2"
 url = "2.5"
 
 # Testing utilities
