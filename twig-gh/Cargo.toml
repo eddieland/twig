@@ -9,7 +9,6 @@ authors.workspace = true
 [dependencies]
 # Core dependencies
 anyhow.workspace = true
-regex.workspace = true
 
 # Async and networking
 reqwest.workspace = true

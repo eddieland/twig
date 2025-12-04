@@ -14,6 +14,8 @@ use owo_colors::{OwoColorize, Style};
 use thiserror::Error;
 
 use super::graph::{BranchAnnotationValue, BranchDivergence, BranchGraph, BranchName, BranchNode, BranchNodeMetadata};
+use crate::output::ColorMode;
+use crate::text::hyperlink;
 
 pub const ORPHAN_BRANCH_ANNOTATION_KEY: &str = "twig.orphan";
 const DEFAULT_PR_ANNOTATION_KEY: &str = "twig.pr";
@@ -178,6 +180,88 @@ pub enum BranchTableColorMode {
   Never,
 }
 
+/// Hyperlink rendering strategy for branch tables.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BranchTableLinkMode {
+  /// Enable hyperlinks when colors are enabled.
+  Auto,
+  /// Disable hyperlinks entirely.
+  Never,
+}
+
+#[derive(Debug, Clone)]
+struct GitHubRepoLink {
+  owner: String,
+  name: String,
+}
+
+/// Optional hyperlink targets applied to rendered table cells.
+#[derive(Debug, Clone)]
+pub struct BranchTableLinks {
+  mode: BranchTableLinkMode,
+  jira_base_url: Option<String>,
+  github_repo: Option<GitHubRepoLink>,
+}
+
+impl BranchTableLinks {
+  /// Create a new hyperlink configuration.
+  pub fn new(mode: BranchTableLinkMode) -> Self {
+    Self {
+      mode,
+      jira_base_url: None,
+      github_repo: None,
+    }
+  }
+
+  /// Set the base Jira URL (e.g. "https://company.atlassian.net").
+  pub fn with_jira_base_url(mut self, base_url: impl Into<String>) -> Self {
+    self.jira_base_url = Some(base_url.into());
+    self
+  }
+
+  /// Set the GitHub repository coordinates used for PR links.
+  pub fn with_github_repo(mut self, owner: impl Into<String>, name: impl Into<String>) -> Self {
+    self.github_repo = Some(GitHubRepoLink {
+      owner: owner.into(),
+      name: name.into(),
+    });
+    self
+  }
+
+  fn links_enabled(&self, colors_enabled: bool) -> bool {
+    colors_enabled && self.mode != BranchTableLinkMode::Never
+  }
+
+  fn jira_url(&self, ticket: &str) -> Option<String> {
+    self
+      .jira_base_url
+      .as_ref()
+      .map(|base| format!("{base}/browse/{ticket}"))
+  }
+
+  fn pr_url(&self, annotation: &BranchAnnotationValue) -> Option<String> {
+    let repo = self.github_repo.as_ref()?;
+    let pr_number = match annotation {
+      BranchAnnotationValue::Numeric(value) if *value >= 0 => Some(*value as u32),
+      BranchAnnotationValue::Text(text) => text.trim_start_matches('#').parse::<u32>().ok(),
+      _ => None,
+    }?;
+
+    Some(format!(
+      "https://github.com/{}/{}/pull/{pr_number}",
+      repo.owner, repo.name
+    ))
+  }
+
+  fn wrap_if_enabled(&self, value: String, url: Option<String>, colors_enabled: bool) -> String {
+    if let (Some(url), true) = (url, self.links_enabled(colors_enabled)) {
+      hyperlink(&value, &url, color_mode_from_bool(colors_enabled)).to_string()
+    } else {
+      value
+    }
+  }
+}
+
 /// Presentation settings applied to the branch table.
 #[derive(Debug, Clone, Copy)]
 pub struct BranchTableStyle {
@@ -260,6 +344,7 @@ pub struct BranchTableRenderer {
   schema: BranchTableSchema,
   style: BranchTableStyle,
   highlighted_branches: BTreeSet<BranchName>,
+  links: Option<BranchTableLinks>,
 }
 
 impl Default for BranchTableRenderer {
@@ -275,12 +360,19 @@ impl BranchTableRenderer {
       schema,
       style: BranchTableStyle::default(),
       highlighted_branches: BTreeSet::new(),
+      links: None,
     }
   }
 
   /// Apply additional styling options before rendering.
   pub fn with_style(mut self, style: BranchTableStyle) -> Self {
     self.style = style;
+    self
+  }
+
+  /// Provide hyperlink targets for rendered cells.
+  pub fn with_links(mut self, links: BranchTableLinks) -> Self {
+    self.links = Some(links);
     self
   }
 
@@ -312,6 +404,11 @@ impl BranchTableRenderer {
     }
 
     let colors_enabled = self.style.colors_enabled();
+    let links_enabled = self
+      .links
+      .as_ref()
+      .map(|links| links.links_enabled(colors_enabled))
+      .unwrap_or(false);
 
     // Collect rows in depth-first order so we can generate values for each column.
     let mut stack = Vec::new();
@@ -319,7 +416,7 @@ impl BranchTableRenderer {
     let mut rows = Vec::new();
     self.collect_rows(graph, branch, &mut stack, &mut visited, &mut rows)?;
 
-    let rendered_rows = self.render_rows(graph, &rows, colors_enabled)?;
+    let rendered_rows = self.render_rows(graph, &rows, colors_enabled, links_enabled)?;
     let column_widths = self.compute_column_widths(&rendered_rows);
     let spacing = " ".repeat(self.schema.column_spacing());
 
@@ -346,6 +443,11 @@ impl BranchTableRenderer {
     Ok(())
   }
 
+  /// Depth-first traversal that records each reachable branch and its tree
+  /// prefix so column renderers can attach metadata in order.
+  ///
+  /// The traversal stops revisiting previously seen nodes to avoid cycles and
+  /// mirrors the connector stack to keep indentation stable.
   fn collect_rows(
     &self,
     graph: &BranchGraph,
@@ -383,24 +485,30 @@ impl BranchTableRenderer {
     Ok(())
   }
 
+  /// Materialises formatted cell values for every row according to the
+  /// configured schema and styling.
   fn render_rows(
     &self,
     graph: &BranchGraph,
     rows: &[TreeRow],
     colors_enabled: bool,
+    links_enabled: bool,
   ) -> Result<Vec<Vec<String>>, BranchTableRenderError> {
     let mut rendered = Vec::with_capacity(rows.len());
     for row in rows {
-      rendered.push(self.render_row(graph, row, colors_enabled)?);
+      rendered.push(self.render_row(graph, row, colors_enabled, links_enabled)?);
     }
     Ok(rendered)
   }
 
+  /// Builds the rendered cells for a single row, handling styling and
+  /// hyperlink wrapping for each column.
   fn render_row(
     &self,
     graph: &BranchGraph,
     row: &TreeRow,
     colors_enabled: bool,
+    links_enabled: bool,
   ) -> Result<Vec<String>, BranchTableRenderError> {
     let node = graph
       .get(&row.branch)
@@ -410,10 +518,15 @@ impl BranchTableRenderer {
     for column in self.schema.columns() {
       let value = match column.kind() {
         BranchTableColumnKind::Branch => self.branch_value(graph, node, &row.tree_prefix, colors_enabled),
-        BranchTableColumnKind::FirstLabel => self.style_label(first_label(&node.metadata), colors_enabled),
-        BranchTableColumnKind::Annotation { key } => {
-          self.style_annotation(annotation_value(&node.metadata, key), key, colors_enabled)
+        BranchTableColumnKind::FirstLabel => {
+          self.style_label(first_label(&node.metadata), colors_enabled, links_enabled)
         }
+        BranchTableColumnKind::Annotation { key } => self.style_annotation(
+          annotation_value_ref(&node.metadata, key),
+          key,
+          colors_enabled,
+          links_enabled,
+        ),
       };
 
       cells.push(value);
@@ -422,6 +535,8 @@ impl BranchTableRenderer {
     Ok(cells)
   }
 
+  /// Formats the branch column with connectors, current/highlight markers,
+  /// orphan annotations, and divergence markers.
   fn branch_value(&self, graph: &BranchGraph, node: &BranchNode, prefix: &str, colors_enabled: bool) -> String {
     let mut value = String::new();
 
@@ -480,13 +595,27 @@ impl BranchTableRenderer {
     value
   }
 
-  fn style_label(&self, value: Option<String>, colors_enabled: bool) -> String {
+  /// Renders the first label, falling back to the schema placeholder when
+  /// absent and wrapping with a Jira hyperlink when configured.
+  fn style_label(&self, value: Option<String>, colors_enabled: bool, links_enabled: bool) -> String {
     value
-      .map(|label| style_text(label, label_style(), colors_enabled))
+      .map(|label| {
+        let url = self.links.as_ref().and_then(|links| links.jira_url(&label));
+        let styled = style_text(label, label_style(), colors_enabled);
+        self.wrap_link(styled, url, links_enabled, colors_enabled)
+      })
       .unwrap_or_else(|| self.placeholder(colors_enabled))
   }
 
-  fn style_annotation(&self, value: Option<String>, key: &str, colors_enabled: bool) -> String {
+  /// Styles an annotation cell and applies PR or generic annotation colours,
+  /// hyperlinking when link metadata is available.
+  fn style_annotation(
+    &self,
+    value: Option<&BranchAnnotationValue>,
+    key: &str,
+    colors_enabled: bool,
+    links_enabled: bool,
+  ) -> String {
     match value {
       Some(value) => {
         let style = if key == DEFAULT_PR_ANNOTATION_KEY {
@@ -494,12 +623,21 @@ impl BranchTableRenderer {
         } else {
           annotation_style()
         };
-        style_text(value, style, colors_enabled)
+        let formatted = format_annotation_value(value);
+        let styled = style_text(formatted, style, colors_enabled);
+        let url = if key == DEFAULT_PR_ANNOTATION_KEY {
+          self.links.as_ref().and_then(|links| links.pr_url(value))
+        } else {
+          None
+        };
+        self.wrap_link(styled, url, links_enabled, colors_enabled)
       }
       None => self.placeholder(colors_enabled),
     }
   }
 
+  /// Returns the schema placeholder, optionally dimmed based on the configured
+  /// style and color availability.
   fn placeholder(&self, colors_enabled: bool) -> String {
     let placeholder = self.schema.placeholder().to_string();
     if colors_enabled && self.style.dim_placeholders {
@@ -509,6 +647,21 @@ impl BranchTableRenderer {
     }
   }
 
+  /// Wraps cell content with a hyperlink escape sequence when links are
+  /// enabled and a target URL is available.
+  fn wrap_link(&self, value: String, url: Option<String>, links_enabled: bool, colors_enabled: bool) -> String {
+    if !links_enabled {
+      return value;
+    }
+
+    match &self.links {
+      Some(links) => links.wrap_if_enabled(value, url, colors_enabled),
+      None => value,
+    }
+  }
+
+  /// Calculates display widths for each column based on headers, minimums, and
+  /// rendered cell contents (ignoring ANSI and hyperlink escapes).
   fn compute_column_widths(&self, rows: &[Vec<String>]) -> Vec<usize> {
     let mut widths: Vec<usize> = self.schema.columns().iter().map(|column| column.min_width()).collect();
 
@@ -525,6 +678,8 @@ impl BranchTableRenderer {
     widths
   }
 
+  /// Emits a single padded row into the provided writer, inserting configured
+  /// spacing between columns.
   fn write_row<W: FmtWrite>(
     &self,
     writer: &mut W,
@@ -578,8 +733,8 @@ fn first_label(metadata: &BranchNodeMetadata) -> Option<String> {
   metadata.labels.iter().next().cloned()
 }
 
-fn annotation_value(metadata: &BranchNodeMetadata, key: &str) -> Option<String> {
-  metadata.annotations.get(key).map(format_annotation_value)
+fn annotation_value_ref<'a>(metadata: &'a BranchNodeMetadata, key: &str) -> Option<&'a BranchAnnotationValue> {
+  metadata.annotations.get(key)
 }
 
 fn format_divergence(divergence: &BranchDivergence, colors_enabled: bool) -> String {
@@ -700,7 +855,51 @@ fn header_style() -> Style {
 }
 
 fn visible_width(value: &str) -> usize {
-  measure_text_width(&strip_ansi_codes(value))
+  let without_links = strip_hyperlinks(value);
+  measure_text_width(&strip_ansi_codes(&without_links))
+}
+
+fn strip_hyperlinks(value: &str) -> std::borrow::Cow<'_, str> {
+  const START: &str = "\x1b]8;;";
+  const END: &str = "\x1b]8;;\x07";
+
+  let mut output = String::new();
+  let mut cursor = 0;
+  let mut changed = false;
+
+  while let Some(start_idx) = value[cursor..].find(START) {
+    let absolute_start = cursor + start_idx;
+    output.push_str(&value[cursor..absolute_start]);
+
+    let url_start = absolute_start + START.len();
+    let Some(label_start_rel) = value[url_start..].find('\x07') else {
+      break;
+    };
+    let label_start = url_start + label_start_rel + 1;
+
+    if let Some(end_idx_rel) = value[label_start..].find(END) {
+      let label_end = label_start + end_idx_rel;
+      output.push_str(&value[label_start..label_end]);
+      cursor = label_end + END.len();
+      changed = true;
+    } else {
+      break;
+    }
+  }
+
+  if cursor < value.len() {
+    output.push_str(&value[cursor..]);
+  }
+
+  if changed {
+    std::borrow::Cow::Owned(output)
+  } else {
+    std::borrow::Cow::Borrowed(value)
+  }
+}
+
+fn color_mode_from_bool(enabled: bool) -> ColorMode {
+  if enabled { ColorMode::Yes } else { ColorMode::No }
 }
 
 #[cfg(test)]
@@ -813,6 +1012,42 @@ mod tests {
       .unwrap();
 
     assert_snapshot!("flow_renderer__default_schema_no_color", output);
+  }
+
+  #[test]
+  fn renders_hyperlinks_when_enabled() {
+    let (graph, root) = sample_graph();
+    let mut output = String::new();
+    let links = BranchTableLinks::new(BranchTableLinkMode::Auto)
+      .with_jira_base_url("https://jira.example")
+      .with_github_repo("omenien", "twig");
+
+    BranchTableRenderer::default()
+      .with_style(BranchTableStyle::new(BranchTableColorMode::Always))
+      .with_links(links)
+      .render(&mut output, &graph, &root)
+      .unwrap();
+
+    assert!(output.contains("\u{1b}]8;;https://jira.example/browse/PROJ-451\u{7}"));
+    assert!(output.contains("\u{1b}]8;;https://github.com/omenien/twig/pull/982\u{7}"));
+  }
+
+  #[test]
+  fn disables_hyperlinks_when_requested() {
+    let (graph, root) = sample_graph();
+    let mut output = String::new();
+    let links = BranchTableLinks::new(BranchTableLinkMode::Never)
+      .with_jira_base_url("https://jira.example")
+      .with_github_repo("omenien", "twig");
+
+    BranchTableRenderer::default()
+      .with_style(BranchTableStyle::new(BranchTableColorMode::Always))
+      .with_links(links)
+      .render(&mut output, &graph, &root)
+      .unwrap();
+
+    assert!(!output.contains("\u{1b}]8;;https://jira.example/browse/PROJ-451\u{7}"));
+    assert!(!output.contains("\u{1b}]8;;https://github.com/omenien/twig/pull/982\u{7}"));
   }
 
   #[test]

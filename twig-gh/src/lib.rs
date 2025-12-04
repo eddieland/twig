@@ -9,7 +9,6 @@ pub mod client;
 pub mod consts;
 pub mod endpoints;
 pub mod models;
-pub mod utils;
 
 // Re-export the client
 pub use auth::{

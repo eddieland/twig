@@ -84,6 +84,7 @@ reqwest = { version = "0.12.24", features = ["json", "native-tls", "blocking"], 
 tokio = { version = "1.48", features = ["rt", "rt-multi-thread", "time", "macros"] }
 
 # Serialization
+gix-url = "0.33.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "0.9"
@@ -91,10 +92,10 @@ url = "2.5"
 
 # Testing utilities
 assert_cmd = "2.0"
-predicates = "3.1"
-uuid = { version = "1.18", features = ["v4", "serde"] }
 flate2 = "1.1.5"
+predicates = "3.1"
 tar = "0.4"
+uuid = { version = "1.18", features = ["v4", "serde"] }
 zip = { version = "6.0.0", default-features = false, features = ["deflate"] }
 
 # Windows-specific dependencies

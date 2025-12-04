@@ -12,6 +12,7 @@ use serde::Serialize;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
+use twig_core::git::extract_github_repo_from_url;
 use twig_core::output::{print_error, print_warning};
 use twig_core::state::RepoState;
 use twig_gh::{GitHubPullRequest, create_github_client, get_github_credentials};
@@ -187,7 +188,7 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
       // Get GitHub credentials from .netrc
       if let Ok(creds) = get_github_credentials(base_dirs.home_dir()) {
         let gh = create_github_client(&creds.username, &creds.password);
-        if let Ok((owner, repo_name)) = gh.extract_repo_info_from_url(remote_url) {
+        if let Ok((owner, repo_name)) = extract_github_repo_from_url(remote_url) {
           match rt.block_on(gh.list_pull_requests(&owner, &repo_name, Some("open"), None)) {
             Ok(prs) => {
               for pr in prs {

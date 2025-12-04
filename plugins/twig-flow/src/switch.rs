@@ -97,6 +97,7 @@ mod tests {
       root: false,
       parent: false,
       include: None,
+      no_links: false,
       target: Some("feature/existing".into()),
     };
 
@@ -118,6 +119,7 @@ mod tests {
       root: false,
       parent: false,
       include: None,
+      no_links: false,
       target: Some("feature/new".into()),
     };
 
@@ -151,6 +153,7 @@ mod tests {
       root: false,
       parent: false,
       include: None,
+      no_links: false,
       target: Some("PROJ-123".into()),
     };
 
@@ -171,6 +174,7 @@ mod tests {
       root: false,
       parent: false,
       include: None,
+      no_links: false,
       target: Some("PROJ-999".into()),
     };
 

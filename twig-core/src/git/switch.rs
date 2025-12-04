@@ -9,8 +9,9 @@
 use std::path::Path;
 use std::sync::LazyLock;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use git2::{BranchType, Oid, Repository};
+use gix_url::Url;
 use regex::Regex;
 
 use crate::git::checkout_branch;
@@ -18,9 +19,6 @@ use crate::git::graph::BranchName;
 use crate::jira_parser::JiraTicketParser;
 use crate::output::print_info;
 use crate::state::{BranchMetadata, RepoState};
-
-static GITHUB_PR_URL_REGEX: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"github\.com/[^/]+/[^/]+/pull/(\d+)").expect("Failed to compile GitHub PR URL regex"));
 
 static JIRA_ISSUE_URL_REGEX: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r"/browse/([A-Z]{2,}-\d+)").expect("Failed to compile Jira issue URL regex"));
@@ -266,17 +264,70 @@ pub fn parse_jira_issue_key(parser: &JiraTicketParser, input: &str) -> Option<St
   parser.parse(input).ok()
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct GitHubUrlParts {
+  owner: String,
+  repo: String,
+  pr_number: Option<String>,
+}
+
+fn parse_github_url_parts(url: &str) -> Result<GitHubUrlParts> {
+  let parsed = Url::try_from(url).with_context(|| format!("Failed to parse URL: {url}"))?;
+  let host = parsed.host.as_deref().unwrap_or("");
+  if !host.eq_ignore_ascii_case("github.com") {
+    return Err(anyhow!("Could not find github.com host in URL: {url}"));
+  }
+
+  let mut segments = parsed
+    .path
+    .as_slice()
+    .split(|b: &u8| *b == b'/')
+    .filter(|segment| !segment.is_empty())
+    .map(|segment| {
+      std::str::from_utf8(segment)
+        .context("GitHub URL path segment is not valid UTF-8")
+        .map(str::to_string)
+    });
+
+  let owner = segments
+    .next()
+    .transpose()?
+    .ok_or_else(|| anyhow!("Could not extract owner and repo from URL: {url}"))?;
+  let repo = segments
+    .next()
+    .transpose()?
+    .ok_or_else(|| anyhow!("Could not extract owner and repo from URL: {url}"))?
+    .trim_end_matches(".git")
+    .to_string();
+  let pr_number = match (segments.next().transpose()?, segments.next().transpose()?) {
+    (Some(kind), Some(pr)) if kind.eq_ignore_ascii_case("pull") => Some(pr),
+    _ => None,
+  };
+
+  Ok(GitHubUrlParts { owner, repo, pr_number })
+}
+
+/// Extract the GitHub owner/repo tuple from a remote or PR URL.
+///
+/// Supports common HTTPS and SSH forms, including SSH URLs that specify an
+/// explicit port (e.g., `ssh://git@github.com:22/owner/repo.git`).
+pub fn extract_github_repo_from_url(url: &str) -> Result<(String, String)> {
+  let parts = parse_github_url_parts(url)?;
+  Ok((parts.owner, parts.repo))
+}
+
 /// Extract PR number from a GitHub pull request URL.
 pub fn extract_pr_number_from_url(url: &str) -> Result<u32> {
-  if let Some(captures) = GITHUB_PR_URL_REGEX.captures(url) {
-    let pr_str = captures.get(1).unwrap().as_str();
-    let pr_number = pr_str
-      .parse::<u32>()
-      .with_context(|| format!("Failed to parse PR number '{pr_str}' as a valid integer"))?;
-    Ok(pr_number)
-  } else {
-    Err(anyhow::anyhow!("Could not extract PR number from URL: {url}"))
-  }
+  let parts = parse_github_url_parts(url)?;
+  let pr_str = parts
+    .pr_number
+    .ok_or_else(|| anyhow!("Could not extract PR number from URL: {url}"))?;
+  let pr_str = pr_str.split(['?', '#']).next().unwrap_or("");
+
+  let pr_number = pr_str
+    .parse::<u32>()
+    .with_context(|| format!("Failed to parse PR number '{pr_str}' as a valid integer"))?;
+  Ok(pr_number)
 }
 
 /// Extract a Jira issue key from a Jira URL.
@@ -935,7 +986,37 @@ mod tests {
       extract_pr_number_from_url("https://github.com/owner/repo/pull/123").unwrap(),
       123
     );
+    assert_eq!(
+      extract_pr_number_from_url("https://github.com/owner/repo/pull/456/files").unwrap(),
+      456
+    );
+    assert_eq!(
+      extract_pr_number_from_url("https://github.com/owner/repo/pull/789?some=query").unwrap(),
+      789
+    );
     assert!(extract_pr_number_from_url("https://github.com/owner/repo").is_err());
+  }
+
+  #[test]
+  fn extracts_github_repo_from_urls() {
+    assert_eq!(
+      extract_github_repo_from_url("https://github.com/owner/repo").unwrap(),
+      ("owner".to_string(), "repo".to_string())
+    );
+    assert_eq!(
+      extract_github_repo_from_url("git@github.com:owner/repo.git").unwrap(),
+      ("owner".to_string(), "repo".to_string())
+    );
+    assert_eq!(
+      extract_github_repo_from_url("ssh://git@github.com:22/owner/repo.git").unwrap(),
+      ("owner".to_string(), "repo".to_string())
+    );
+    assert_eq!(
+      extract_github_repo_from_url("https://github.com/owner/repo/pull/123").unwrap(),
+      ("owner".to_string(), "repo".to_string())
+    );
+    assert!(extract_github_repo_from_url("https://example.com/not-github").is_err());
+    assert!(extract_github_repo_from_url("https://github.com/only-owner").is_err());
   }
 
   #[test]

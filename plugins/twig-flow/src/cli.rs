@@ -22,6 +22,10 @@ pub struct Cli {
   #[arg(long, value_name = "PATTERN")]
   pub include: Option<String>,
 
+  /// Disable OSC 8 hyperlinks in the rendered table.
+  #[arg(long)]
+  pub no_links: bool,
+
   /// Optional branch or ticket target for switching mode.
   #[arg(value_name = "TARGET")]
   pub target: Option<String>,
