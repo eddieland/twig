@@ -12,6 +12,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use anyhow::Result;
 use git2::{BranchType, Repository as Git2Repository};
+use tracing::debug;
 use twig_core::RepoState;
 use twig_core::tree_renderer::BranchNode;
 
@@ -32,9 +33,11 @@ impl AutoDependencyDiscovery {
     repo: &Git2Repository,
     repo_state: &RepoState,
   ) -> Result<HashMap<String, BranchNode>> {
+    debug!("Starting git dependency discovery");
     let mut branch_nodes = HashMap::new();
     let mut branch_info = HashMap::new();
     let mut root_branches = HashSet::new();
+    let mut branch_count = 0usize;
 
     // Get all local branches
     let branches = repo.branches(Some(BranchType::Local))?;
@@ -43,6 +46,7 @@ impl AutoDependencyDiscovery {
     for branch_result in branches {
       let (branch, _) = branch_result?;
       if let Some(name) = branch.name()? {
+        branch_count += 1;
         let is_current = branch.is_head();
         let metadata = repo_state.get_branch_metadata(name).cloned();
 
@@ -67,6 +71,7 @@ impl AutoDependencyDiscovery {
         root_branches.insert(name.to_string());
       }
     }
+    debug!(branch_count, "Collected branch information for dependency discovery");
 
     // Second pass: determine parent-child relationships based on Git history
     self.analyze_commit_ancestry(&mut branch_nodes, &branch_info, &mut root_branches, repo)?;
@@ -82,7 +87,18 @@ impl AutoDependencyDiscovery {
     root_branches: &mut HashSet<String>,
     repo: &Git2Repository,
   ) -> Result<()> {
-    for (branch_name, (commit_id, _)) in branch_info {
+    let total = branch_info.len();
+    debug!(total, "Starting commit ancestry analysis");
+    for (idx, (branch_name, (commit_id, _))) in branch_info.iter().enumerate() {
+      if idx % 25 == 0 || idx + 1 == total {
+        debug!(
+          processed = idx + 1,
+          total,
+          branch = branch_name,
+          "Analyzing branch ancestry"
+        );
+      }
+
       // For each branch, find its parent branches
       let branch_commit = repo.find_commit(*commit_id)?;
 
@@ -161,6 +177,7 @@ impl AutoDependencyDiscovery {
       }
     }
 
+    debug!(root_count = root_branches.len(), "Finished commit ancestry analysis");
     Ok(())
   }
 
@@ -192,6 +209,11 @@ impl AutoDependencyDiscovery {
       }
     }
 
+    debug!(
+      branch_count = branch_nodes.len(),
+      suggestion_count = suggestions.len(),
+      "Dependency suggestions computed"
+    );
     Ok(suggestions)
   }
 
