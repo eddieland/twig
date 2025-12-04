@@ -45,7 +45,7 @@ jobs:
         with:
           shared-key: rust-ubuntu-${{ hashFiles('**/Cargo.lock') }}
       - name: Build release
-        run: cargo build --release --bin twig --bin twig-flow
+        run: cargo build --release -p twig -p twig-flow --bins
       - name: Strip binary
         run: strip target/release/twig target/release/twig-flow
       - name: Extract version
@@ -99,7 +99,7 @@ jobs:
         with:
           shared-key: rust-macos-latest-${{ hashFiles('**/Cargo.lock') }}
       - name: Build release
-        run: cargo build --release --bin twig --bin twig-flow
+        run: cargo build --release -p twig -p twig-flow --bins
       - name: Strip binary
         run: strip target/release/twig target/release/twig-flow
       - name: Extract version
@@ -153,7 +153,7 @@ jobs:
         with:
           shared-key: rust-windows-latest-${{ hashFiles('**/Cargo.lock') }}
       - name: Build release
-        run: cargo build --profile release-windows --bin twig --bin twig-flow
+        run: cargo build --profile release-windows -p twig -p twig-flow --bins
       - name: Extract version
         id: version
         shell: bash

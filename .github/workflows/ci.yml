@@ -148,7 +148,7 @@ jobs:
         with:
           tool: cargo-nextest
       - name: Build
-        run: cargo build --profile ci-windows --bin twig --bin twig-flow
+        run: cargo build --profile ci-windows -p twig -p twig-flow --bins
       - name: Run tests
         run: cargo nextest run --workspace --cargo-profile ci-windows
       - name: Upload twig artifact
