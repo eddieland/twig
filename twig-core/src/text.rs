@@ -121,4 +121,33 @@ mod tests {
     let rendered = format!("{}", hyperlink(&label, "https://example.com", ColorMode::No));
     assert_eq!(rendered, "twig (https://example.com)");
   }
+
+  #[test]
+  fn hyperlink_respects_auto_as_enabled() {
+    let rendered = format!("{}", hyperlink(&"link", "https://auto.example", ColorMode::Auto));
+    assert!(rendered.starts_with("\x1b]8;;https://auto.example\x07"));
+    assert!(rendered.ends_with("\x1b]8;;\x07"));
+  }
+
+  #[test]
+  fn hyperlink_extension_trait_matches_free_function() {
+    let via_trait = format!("{}", "label".hyperlink("https://trait.example", ColorMode::Yes));
+    let via_fn = format!("{}", hyperlink(&"label", "https://trait.example", ColorMode::Yes));
+    assert_eq!(via_trait, via_fn);
+  }
+
+  #[test]
+  fn hyperlink_override_enabled_flag() {
+    let rendered = format!(
+      "{}",
+      hyperlink(&"forced-off", "https://example.com", ColorMode::Yes).with_enabled(false)
+    );
+    assert_eq!(rendered, "forced-off (https://example.com)");
+  }
+
+  #[test]
+  fn hyperlink_handles_empty_url() {
+    let rendered = format!("{}", hyperlink(&"label", "", ColorMode::Yes));
+    assert_eq!(rendered, "\x1b]8;;\x07label\x1b]8;;\x07");
+  }
 }
