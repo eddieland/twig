@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, anyhow};
 use clap::{Args, ValueEnum};
 use git2::Repository as Git2Repository;
+use tracing::debug;
 use tree_renderer::TreeRenderer;
 use twig_core::output::{print_info, print_success, print_warning};
 use twig_core::{RepoState, detect_repository, tree_renderer};
@@ -78,15 +79,30 @@ pub(crate) fn handle_adopt_command(args: AdoptArgs) -> Result<()> {
     detect_repository().context("Not in a git repository")?
   };
 
+  debug!(?repo_path, "Starting twig adopt command");
+
   let repo =
     Git2Repository::open(&repo_path).context(format!("Failed to open git repository at {}", repo_path.display()))?;
 
   let mut repo_state =
     RepoState::load(&repo_path).with_context(|| format!("Failed to load repo state at {}", repo_path.display()))?;
 
+  debug!(
+    branch_metadata_count = repo_state.branches.len(),
+    dependency_count = repo_state.dependencies.len(),
+    root_branch_count = repo_state.root_branches.len(),
+    "Loaded repository state"
+  );
+
   let user_resolver = UserDefinedDependencyResolver;
   let branch_nodes = user_resolver.resolve_user_dependencies_without_default_root(&repo, &repo_state)?;
   let (_, orphaned) = user_resolver.build_tree_from_user_dependencies(&branch_nodes, &repo_state);
+
+  debug!(
+    branch_node_count = branch_nodes.len(),
+    orphaned_count = orphaned.len(),
+    "Resolved user-defined dependencies"
+  );
 
   if orphaned.is_empty() {
     print_info("No orphaned branches found. Nothing to adopt.");
@@ -102,7 +118,9 @@ pub(crate) fn handle_adopt_command(args: AdoptArgs) -> Result<()> {
     return Err(anyhow!("--parent must be provided when using --mode branch"));
   }
 
+  debug!(?mode, parent = ?args.parent, "Building adoption plan");
   let plan = build_adoption_plan(mode, &args.parent, &orphaned, &repo_state, &branch_nodes, &repo)?;
+  debug!(plan_count = plan.len(), "Finished building adoption plan");
 
   if plan.is_empty() {
     print_warning("No adoption suggestions could be generated for the orphaned branches.");
@@ -121,6 +139,7 @@ pub(crate) fn handle_adopt_command(args: AdoptArgs) -> Result<()> {
     return Ok(());
   }
 
+  debug!(plan_count = plan.len(), "Applying adoption plan to repository state");
   apply_plan(&mut repo_state, &plan)?;
   repo_state.save(&repo_path)?;
 
@@ -194,8 +213,19 @@ fn adopt_with_auto_resolver(
   branch_nodes: &HashMap<String, tree_renderer::BranchNode>,
   repo: &Git2Repository,
 ) -> Result<Vec<AdoptionPlan>> {
+  debug!(
+    orphaned_count = orphaned.len(),
+    branch_node_count = branch_nodes.len(),
+    dependency_count = repo_state.dependencies.len(),
+    "Running auto dependency resolver for adoption"
+  );
+
   let discovery = AutoDependencyDiscovery;
   let suggestions = discovery.suggest_dependencies(repo, repo_state)?;
+  debug!(
+    suggestion_count = suggestions.len(),
+    "Auto dependency suggestions generated"
+  );
 
   let mut best_suggestions: HashMap<&str, &crate::auto_dependency_discovery::DependencySuggestion> = HashMap::new();
   for suggestion in &suggestions {
