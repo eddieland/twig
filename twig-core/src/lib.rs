@@ -12,6 +12,7 @@ pub mod jira_parser;
 pub mod output;
 pub mod plugin;
 pub mod state;
+pub mod text;
 pub mod tree_renderer;
 pub mod utils;
 
@@ -35,4 +36,5 @@ pub use plugin::{PluginContext, plugin_config_dir, plugin_data_dir};
 pub use state::{
   BranchDependency, BranchMetadata as StateBranchMetadata, Registry, RepoState, Repository, RootBranch, create_worktree,
 };
+pub use text::{Hyperlink, HyperlinkExt, hyperlink};
 pub use utils::{get_current_branch_github_pr, get_current_branch_jira_issue, open_url_in_browser};
