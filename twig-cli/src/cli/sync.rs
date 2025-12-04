@@ -159,20 +159,16 @@ fn sync_branches(
       }
       // Existing association - check for conflicts or updates
       (jira, pr, Some(existing)) => {
-        let needs_update =
-          (jira != existing.jira_issue && jira.is_some()) || (pr != existing.github_pr && pr.is_some());
+        let detected_jira = jira.clone();
+        let detected_pr = pr;
 
-        if needs_update {
-          if force {
-            let updated_association = BranchMetadata {
-              branch: branch_name.to_string(),
-              jira_issue: jira.or_else(|| existing.jira_issue.clone()),
-              github_pr: pr.or(existing.github_pr),
-              created_at: existing.created_at.clone(),
-            };
-            updated_associations.push((existing.clone(), updated_association));
+        if let Some((updated_association, has_conflict)) =
+          evaluate_association_update(existing, detected_jira.clone(), detected_pr)
+        {
+          if has_conflict && !force {
+            conflicting_associations.push((branch_name.to_string(), existing.clone(), detected_jira, detected_pr));
           } else {
-            conflicting_associations.push((branch_name.to_string(), existing.clone(), jira, pr));
+            updated_associations.push((existing.clone(), updated_association));
           }
         }
       }
@@ -359,6 +355,50 @@ async fn detect_github_pr_from_branch(
   }
 }
 
+/// Determine if an existing branch association should be updated and whether
+/// that update represents a conflict.
+///
+/// Returns an updated [`BranchMetadata`] when there is either new information
+/// to fill in (e.g. missing PR number) or a conflict between detected data and
+/// the stored association. The boolean indicates whether the update requires
+/// user confirmation (`--force`) because it overwrites an existing value.
+fn evaluate_association_update(
+  existing: &BranchMetadata,
+  detected_jira: Option<String>,
+  detected_pr: Option<u32>,
+) -> Option<(BranchMetadata, bool)> {
+  if detected_jira.is_none() && detected_pr.is_none() {
+    return None;
+  }
+
+  let jira_conflict = detected_jira
+    .as_ref()
+    .zip(existing.jira_issue.as_ref())
+    .is_some_and(|(detected, existing_jira)| detected != existing_jira);
+
+  let pr_conflict = detected_pr
+    .zip(existing.github_pr)
+    .is_some_and(|(detected, existing_pr)| detected != existing_pr);
+
+  let has_new_information =
+    existing.jira_issue.is_none() && detected_jira.is_some() || existing.github_pr.is_none() && detected_pr.is_some();
+
+  let has_conflict = jira_conflict || pr_conflict;
+
+  if !has_conflict && !has_new_information {
+    return None;
+  }
+
+  let updated_association = BranchMetadata {
+    branch: existing.branch.clone(),
+    jira_issue: detected_jira.or_else(|| existing.jira_issue.clone()),
+    github_pr: detected_pr.or(existing.github_pr),
+    created_at: existing.created_at.clone(),
+  };
+
+  Some((updated_association, has_conflict))
+}
+
 /// Print summary of sync findings
 fn print_sync_summary(
   detected: &[BranchMetadata],
@@ -519,5 +559,38 @@ mod tests {
     assert_eq!(detect_jira_issue_from_branch("main"), None);
     assert_eq!(detect_jira_issue_from_branch("proj-123"), None); // lowercase
     assert_eq!(detect_jira_issue_from_branch("P-123"), None); // too short prefix
+  }
+
+  #[test]
+  fn updates_missing_association_without_conflict() {
+    let existing = BranchMetadata {
+      branch: "feature/ME-123".to_string(),
+      jira_issue: Some("ME-123".to_string()),
+      github_pr: None,
+      created_at: "timestamp".to_string(),
+    };
+
+    let (updated, has_conflict) = evaluate_association_update(&existing, None, Some(42)).expect("should update");
+
+    assert!(!has_conflict, "missing data should not be treated as a conflict");
+    assert_eq!(updated.github_pr, Some(42));
+    assert_eq!(updated.jira_issue, existing.jira_issue);
+  }
+
+  #[test]
+  fn flags_conflicting_detected_value() {
+    let existing = BranchMetadata {
+      branch: "feature/ME-123".to_string(),
+      jira_issue: Some("ME-123".to_string()),
+      github_pr: Some(7),
+      created_at: "timestamp".to_string(),
+    };
+
+    let (updated, has_conflict) = evaluate_association_update(&existing, Some("ME-124".to_string()), Some(8))
+      .expect("should update conflicting values");
+
+    assert!(has_conflict, "overwriting existing data should be marked as conflict");
+    assert_eq!(updated.jira_issue.as_deref(), Some("ME-124"));
+    assert_eq!(updated.github_pr, Some(8));
   }
 }
