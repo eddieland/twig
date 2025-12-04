@@ -17,8 +17,8 @@ pub use graph::{
   BranchKind, BranchName, BranchNode, BranchNodeMetadata, BranchStaleState, BranchTopology,
 };
 pub use renderer::{
-  BranchTableColorMode, BranchTableColumn, BranchTableColumnKind, BranchTableRenderError, BranchTableRenderer,
-  BranchTableSchema, BranchTableStyle, ORPHAN_BRANCH_ANNOTATION_KEY,
+  BranchTableColorMode, BranchTableColumn, BranchTableColumnKind, BranchTableLinkMode, BranchTableLinks,
+  BranchTableRenderError, BranchTableRenderer, BranchTableSchema, BranchTableStyle, ORPHAN_BRANCH_ANNOTATION_KEY,
 };
 pub use repository::{get_repository, get_repository_from_path};
 pub use switch::{

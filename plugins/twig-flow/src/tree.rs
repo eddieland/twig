@@ -4,8 +4,8 @@ use anyhow::{Context, Result, anyhow};
 use git2::Repository;
 use twig_core::git::{
   BranchAnnotationValue, BranchEdge, BranchGraph, BranchGraphBuilder, BranchGraphError, BranchName, BranchNode,
-  BranchTableColorMode, BranchTableRenderer, BranchTableSchema, BranchTableStyle, ORPHAN_BRANCH_ANNOTATION_KEY,
-  checkout_branch, get_repository,
+  BranchTableColorMode, BranchTableLinkMode, BranchTableLinks, BranchTableRenderer, BranchTableSchema,
+  BranchTableStyle, ORPHAN_BRANCH_ANNOTATION_KEY, checkout_branch, get_repository,
 };
 use twig_core::output::{format_command, print_error, print_success, print_warning};
 use twig_core::state::RepoState;
@@ -76,7 +76,9 @@ pub fn run(cli: &Cli) -> Result<()> {
     }
   };
 
-  render_table(&graph, &root, &highlighted)?;
+  let links = build_links(&repo, cli.no_links);
+
+  render_table(&graph, &root, &highlighted, links)?;
   display_orphan_note(&orphaned);
 
   Ok(())
@@ -187,12 +189,18 @@ fn determine_render_root(
   graph.iter().next().map(|(_, node)| node.name.clone())
 }
 
-fn render_table(graph: &BranchGraph, root: &BranchName, highlighted: &BTreeSet<BranchName>) -> Result<()> {
+fn render_table(
+  graph: &BranchGraph,
+  root: &BranchName,
+  highlighted: &BTreeSet<BranchName>,
+  links: BranchTableLinks,
+) -> Result<()> {
   let schema = BranchTableSchema::default().with_placeholder("—");
   let style = BranchTableStyle::new(resolve_color_mode());
   let mut buffer = String::new();
   BranchTableRenderer::new(schema)
     .with_style(style)
+    .with_links(links)
     .with_highlighted_branches(highlighted.iter().cloned())
     .render(&mut buffer, graph, root)?;
   print!("{buffer}");
@@ -205,6 +213,71 @@ fn resolve_color_mode() -> BranchTableColorMode {
     Ok("no") => BranchTableColorMode::Never,
     _ => BranchTableColorMode::Auto,
   }
+}
+
+fn build_links(repo: &Repository, disable_links: bool) -> BranchTableLinks {
+  let mut links = BranchTableLinks::new(if disable_links {
+    BranchTableLinkMode::Never
+  } else {
+    BranchTableLinkMode::Auto
+  });
+
+  if let Some(jira_base) = resolve_jira_base_url() {
+    links = links.with_jira_base_url(jira_base);
+  }
+
+  if let Some((owner, repo_name)) = resolve_github_repo(repo) {
+    links = links.with_github_repo(owner, repo_name);
+  }
+
+  links
+}
+
+fn resolve_jira_base_url() -> Option<String> {
+  let host = std::env::var("JIRA_HOST").ok()?;
+  let trimmed = host.trim_end_matches('/');
+  if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+    Some(trimmed.to_string())
+  } else {
+    Some(format!("https://{trimmed}"))
+  }
+}
+
+fn resolve_github_repo(repo: &Repository) -> Option<(String, String)> {
+  let remote = repo.find_remote("origin").ok()?;
+  let url = remote.url()?;
+  parse_github_repo(url)
+}
+
+fn parse_github_repo(url: &str) -> Option<(String, String)> {
+  let without_scheme = url
+    .strip_prefix("ssh://")
+    .or_else(|| url.strip_prefix("https://"))
+    .or_else(|| url.strip_prefix("http://"))
+    .unwrap_or(url);
+
+  let host_split = without_scheme.split_once("github.com")?;
+  let path = host_split.1.trim_start_matches([':', '/']);
+
+  let mut segments = path.split('/');
+  let first = segments.next()?;
+
+  // Handle ssh URLs with explicit ports (e.g.,
+  // ssh://git@github.com:22/owner/repo.git).
+  let (owner, repo_part) = if first.chars().all(|c| c.is_ascii_digit()) {
+    let owner = segments.next()?;
+    let repo = segments.next().unwrap_or_default();
+    (owner, repo)
+  } else {
+    (first, segments.next().unwrap_or_default())
+  };
+
+  if owner.is_empty() || repo_part.is_empty() {
+    return None;
+  }
+
+  let repo = repo_part.trim_end_matches(".git");
+  Some((owner.to_string(), repo.to_string()))
 }
 
 fn handle_graph_error(err: BranchGraphError) {
