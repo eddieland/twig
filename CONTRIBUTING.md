@@ -532,3 +532,19 @@ When adding Windows-specific functionality, ensure:
 2. Platform-specific optimizations or implementations are properly isolated
 3. Tests are added for both the common interface and platform-specific implementations
 4. Documentation clearly indicates any platform-specific behavior
+
+### Windows Cross-Compilation from Linux
+
+You can cross-compile and run the Windows test suite from Linux using `scripts/windows-cross-test.sh`. The script invokes `cargo nextest run` with the `ci-windows` profile for `x86_64-pc-windows-gnu` and executes tests via `wine`.
+
+Prerequisites:
+
+- rustup target `x86_64-pc-windows-gnu` (the script will install it if missing)
+- `mingw-w64` toolchain for linking Windows binaries
+- `cargo-nextest` installed and available on `PATH`
+- `wine` available on `PATH`
+
+Examples:
+
+- `./scripts/windows-cross-test.sh` — build the full workspace and run all tests under wine with nextest
+- `./scripts/windows-cross-test.sh -p twig-core -- --ignored` — focus on a single crate and forward flags to the test binaries
