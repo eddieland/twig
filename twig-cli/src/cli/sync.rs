@@ -17,7 +17,7 @@ use tokio::task::JoinSet;
 use tracing::warn;
 use twig_core::output::{print_info, print_success, print_warning};
 use twig_core::state::{BranchMetadata, RepoState};
-use twig_gh::{GitHubClient, create_github_client_from_netrc};
+use twig_gh::{GitHubClient, create_github_client_from_netrc, extract_repo_info_from_url};
 
 static JIRA_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
   vec![
@@ -114,9 +114,11 @@ fn sync_branches(
   );
   pb.set_message("Scanning branches for Jira issues and GitHub PRs...");
 
-  let repo_info = github_client
-    .as_ref()
-    .and_then(|gh| resolve_repo_info_from_origin(repo_path, gh));
+  let repo_info = if github_client.is_some() {
+    resolve_repo_info_from_origin(repo_path)
+  } else {
+    None
+  };
 
   let jira_by_branch = detect_jira_issues_for_branches(&branch_names, no_jira);
   let github_pr_results =
@@ -319,15 +321,12 @@ fn detect_jira_issue_from_branch(branch_name: &str) -> Option<String> {
 ///
 /// NOTE: This assumes that the `origin` remote points to a GitHub repository
 /// and that it is their primary / representative remote.
-fn resolve_repo_info_from_origin(
-  repo_path: &std::path::Path,
-  github_client: &GitHubClient,
-) -> Option<(String, String)> {
+fn resolve_repo_info_from_origin(repo_path: &std::path::Path) -> Option<(String, String)> {
   let repo = Git2Repository::open(repo_path).ok()?;
   let remote = repo.find_remote("origin").ok()?;
   let remote_url = remote.url()?;
 
-  github_client.extract_repo_info_from_url(remote_url).ok()
+  extract_repo_info_from_url(remote_url).ok()
 }
 
 /// Detect GitHub PR number from branch using GitHub API
