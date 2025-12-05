@@ -8,7 +8,7 @@
 
 #![allow(dead_code)]
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 use git2::{BranchType, Repository as Git2Repository};
@@ -17,6 +17,17 @@ use twig_core::RepoState;
 use twig_core::tree_renderer::BranchNode;
 
 pub struct AutoDependencyDiscovery;
+
+type BranchInfo = HashMap<String, (git2::Oid, bool)>;
+
+struct BranchCollection {
+  branch_nodes: HashMap<String, BranchNode>,
+  branch_info: BranchInfo,
+  root_branches: HashSet<String>,
+}
+
+const MAX_COMMIT_DISTANCE: usize = 50;
+const MIN_CONFIDENCE: f64 = 0.55;
 
 #[derive(Debug, Clone)]
 pub struct DependencySuggestion {
@@ -27,13 +38,7 @@ pub struct DependencySuggestion {
 }
 
 impl AutoDependencyDiscovery {
-  /// Discover Git-based dependencies using commit ancestry
-  pub fn discover_git_dependencies(
-    &self,
-    repo: &Git2Repository,
-    repo_state: &RepoState,
-  ) -> Result<HashMap<String, BranchNode>> {
-    debug!("Starting git dependency discovery");
+  fn collect_branch_info(&self, repo: &Git2Repository, repo_state: &RepoState) -> Result<BranchCollection> {
     let mut branch_nodes = HashMap::new();
     let mut branch_info = HashMap::new();
     let mut root_branches = HashSet::new();
@@ -73,6 +78,26 @@ impl AutoDependencyDiscovery {
     }
     debug!(branch_count, "Collected branch information for dependency discovery");
 
+    Ok(BranchCollection {
+      branch_nodes,
+      branch_info,
+      root_branches,
+    })
+  }
+
+  /// Discover Git-based dependencies using commit ancestry
+  pub fn discover_git_dependencies(
+    &self,
+    repo: &Git2Repository,
+    repo_state: &RepoState,
+  ) -> Result<HashMap<String, BranchNode>> {
+    debug!("Starting git dependency discovery");
+    let BranchCollection {
+      mut branch_nodes,
+      branch_info,
+      mut root_branches,
+    } = self.collect_branch_info(repo, repo_state)?;
+
     // Second pass: determine parent-child relationships based on Git history
     self.analyze_commit_ancestry(&mut branch_nodes, &branch_info, &mut root_branches, repo)?;
 
@@ -83,7 +108,7 @@ impl AutoDependencyDiscovery {
   pub fn analyze_commit_ancestry(
     &self,
     branch_nodes: &mut HashMap<String, BranchNode>,
-    branch_info: &HashMap<String, (git2::Oid, bool)>,
+    branch_info: &BranchInfo,
     root_branches: &mut HashSet<String>,
     repo: &Git2Repository,
   ) -> Result<()> {
@@ -104,8 +129,6 @@ impl AutoDependencyDiscovery {
 
       // If the branch has a parent commit, check which branches contain that parent
       if branch_commit.parent_count() > 0 {
-        let parent_commit = branch_commit.parent(0)?;
-
         // Find branches that point to this parent commit or have this commit in their
         // history
         for (other_name, (other_id, _)) in branch_info {
@@ -115,32 +138,10 @@ impl AutoDependencyDiscovery {
 
           // Check if the other branch contains this branch's parent commit
           let mut is_ancestor = false;
-
-          // Use a simpler approach to determine ancestry
-          if let Ok(other_commit) = repo.find_commit(*other_id) {
-            // Check if we can reach parent_commit from other_commit
-            // This is a simplified approach and may not be perfect
-            let mut queue = VecDeque::new();
-            queue.push_back(other_commit);
-            let mut visited = HashSet::new();
-
-            while let Some(current) = queue.pop_front() {
-              if current.id() == parent_commit.id() {
-                is_ancestor = true;
-                break;
-              }
-
-              if visited.contains(&current.id()) {
-                continue;
-              }
-
-              visited.insert(current.id());
-
-              for i in 0..current.parent_count() {
-                if let Ok(parent) = current.parent(i) {
-                  queue.push_back(parent);
-                }
-              }
+          if let Ok((ahead, behind)) = repo.graph_ahead_behind(*commit_id, *other_id) {
+            // other branch tip is an ancestor when behind == 0
+            if behind == 0 && ahead > 0 && ahead <= MAX_COMMIT_DISTANCE {
+              is_ancestor = true;
             }
           }
 
@@ -187,10 +188,19 @@ impl AutoDependencyDiscovery {
     repo: &Git2Repository,
     repo_state: &RepoState,
   ) -> Result<Vec<DependencySuggestion>> {
-    let branch_nodes = self.discover_git_dependencies(repo, repo_state)?;
+    let BranchCollection {
+      mut branch_nodes,
+      branch_info,
+      mut root_branches,
+    } = self.collect_branch_info(repo, repo_state)?;
+    self.analyze_commit_ancestry(&mut branch_nodes, &branch_info, &mut root_branches, repo)?;
     let mut suggestions = Vec::new();
 
     for (branch_name, node) in &branch_nodes {
+      let Some((child_oid, _)) = branch_info.get(branch_name) else {
+        continue;
+      };
+
       for parent in &node.parents {
         // Skip if this dependency already exists in user-defined dependencies
         let already_exists = repo_state
@@ -198,13 +208,21 @@ impl AutoDependencyDiscovery {
           .iter()
           .any(|d| d.child == *branch_name && d.parent == *parent);
 
-        if !already_exists {
-          suggestions.push(DependencySuggestion {
-            child: branch_name.clone(),
-            parent: parent.clone(),
-            confidence: 0.8, // Git ancestry has high confidence
-            reason: "Based on Git commit ancestry".to_string(),
-          });
+        if !already_exists
+          && let Some((parent_oid, _)) = branch_info.get(parent)
+          && let Ok((ahead, behind)) = repo.graph_ahead_behind(*child_oid, *parent_oid)
+          && behind == 0
+          && ahead > 0
+        {
+          let confidence = Self::confidence_from_ahead(ahead);
+          if confidence >= MIN_CONFIDENCE {
+            suggestions.push(DependencySuggestion {
+              child: branch_name.clone(),
+              parent: parent.clone(),
+              confidence,
+              reason: "Based on Git commit ancestry".to_string(),
+            });
+          }
         }
       }
     }
@@ -217,40 +235,18 @@ impl AutoDependencyDiscovery {
     Ok(suggestions)
   }
 
+  fn confidence_from_ahead(ahead: usize) -> f64 {
+    let ahead = ahead as f64;
+    (MAX_COMMIT_DISTANCE as f64 / (MAX_COMMIT_DISTANCE as f64 + ahead)).clamp(0.0, 1.0)
+  }
+
   /// Get root branches from auto-discovery
   pub fn get_auto_discovered_roots(&self, repo: &Git2Repository, _repo_state: &RepoState) -> Result<Vec<String>> {
-    let mut branch_info = HashMap::new();
-    let mut root_branches = HashSet::new();
-
-    // Get all local branches
-    let branches = repo.branches(Some(BranchType::Local))?;
-
-    // Collect branch information
-    for branch_result in branches {
-      let (branch, _) = branch_result?;
-      if let Some(name) = branch.name()? {
-        let is_current = branch.is_head();
-        let commit = branch.get().peel_to_commit()?;
-        branch_info.insert(name.to_string(), (commit.id(), is_current));
-        root_branches.insert(name.to_string());
-      }
-    }
-
-    // Analyze ancestry to remove non-root branches
-    let mut branch_nodes = HashMap::new();
-    for (name, (_, is_current)) in &branch_info {
-      branch_nodes.insert(
-        name.clone(),
-        BranchNode {
-          name: name.clone(),
-          is_current: *is_current,
-          metadata: None,
-          parents: Vec::new(),
-          children: Vec::new(),
-        },
-      );
-    }
-
+    let BranchCollection {
+      mut branch_nodes,
+      branch_info,
+      mut root_branches,
+    } = self.collect_branch_info(repo, _repo_state)?;
     self.analyze_commit_ancestry(&mut branch_nodes, &branch_info, &mut root_branches, repo)?;
 
     let mut roots: Vec<String> = root_branches.into_iter().collect();
@@ -429,6 +425,45 @@ mod tests {
       "Should not suggest feature depends on main (already exists)"
     );
     assert!(has_subfeature_feature, "Should suggest sub-feature depends on feature");
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_suggest_dependencies_skips_distant_ancestors() -> Result<()> {
+    // Create a temporary git repository
+    let git_repo = GitRepoTestGuard::new();
+    let repo = &git_repo.repo;
+    let repo_path = git_repo.path();
+
+    // Create initial commit on main branch
+    create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
+
+    ensure_main_branch(repo)?;
+
+    // Create feature branch and move it far ahead of main
+    create_branch(repo, "feature", Some("main"))?;
+    checkout_branch(repo, "feature")?;
+    for i in 0..60 {
+      let content = format!("Feature content {i}");
+      let message = format!("Feature commit {i}");
+      create_commit(repo, "feature.txt", &content, &message)?;
+    }
+
+    // Initialize repo state
+    let repo_state = RepoState::load(repo_path).unwrap_or_default();
+
+    // Run auto dependency discovery to suggest dependencies
+    let discovery = AutoDependencyDiscovery;
+    let suggestions = discovery.suggest_dependencies(repo, &repo_state)?;
+
+    // The distance cap should prevent suggesting main as a parent for this
+    // far-ahead branch, causing adoption to fall back instead.
+    let has_feature_main = suggestions.iter().any(|s| s.child == "feature" && s.parent == "main");
+    assert!(
+      !has_feature_main,
+      "Branches far ahead of their base should not get auto-suggested parents"
+    );
 
     Ok(())
   }
