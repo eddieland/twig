@@ -594,15 +594,29 @@ fn sanitize_remote_name(name: &str) -> String {
 mod tests {
   use std::env;
 
-  use anyhow::Result;
+  use anyhow::{Context, Result};
   use git2::BranchType;
   use serde_json::json;
   use tokio::runtime::Runtime;
   use twig_test_utils::{GitRepoTestGuard, checkout_branch, create_commit, setup_test_env_with_init};
+  use url::Url;
   use wiremock::matchers::{method, path};
   use wiremock::{Mock, MockServer, ResponseTemplate};
 
   use super::*;
+
+  fn configure_github_instead_of(repo: &Git2Repository, mirror_root: &Path) -> Result<()> {
+    let canonical = mirror_root
+      .canonicalize()
+      .context("Failed to canonicalize GitHub mirror path")?;
+    let base_url = Url::from_directory_path(&canonical)
+      .map_err(|_| anyhow::anyhow!("Failed to create file:// URL for GitHub mirror"))?;
+    let mut config = repo.config()?;
+    config
+      .set_str(&format!("url.{}/.insteadOf", base_url.as_str()), "https://github.com/")
+      .context("Failed to configure GitHub mirror insteadOf mapping")?;
+    Ok(())
+  }
 
   struct DirGuard {
     original: std::path::PathBuf,
@@ -777,7 +791,8 @@ mod tests {
     let (_env_guard, _config_dirs) = setup_test_env_with_init()?;
 
     let remote_root = TempDir::new()?;
-    let remote_repo_path = remote_root.path().join("github.com/example/repo");
+    let mirror_root = remote_root.path().join("github.com");
+    let remote_repo_path = mirror_root.join("example/repo");
     fs::create_dir_all(&remote_repo_path)?;
     let remote_repo = git2::Repository::init(&remote_repo_path)?;
     let mut remote_config = remote_repo.config()?;
@@ -798,7 +813,8 @@ mod tests {
 
     let repo_guard = GitRepoTestGuard::new();
     let repo = &repo_guard.repo;
-    repo.remote("origin", remote_repo_path.to_str().unwrap())?;
+    repo.remote("origin", "https://github.com/example/repo")?;
+    configure_github_instead_of(repo, &mirror_root)?;
 
     let runtime = Runtime::new()?;
     let mock_server = runtime.block_on(MockServer::start());
@@ -820,7 +836,7 @@ mod tests {
             "sha": pr_head_oid.to_string(),
             "repo": {
               "full_name": "example/repo",
-              "clone_url": "https://github.com/example/repo.git",
+              "clone_url": "https://github.com/example/repo",
               "ssh_url": "git@github.com:example/repo.git",
               "owner": { "login": "octocat", "id": 1, "name": "Octocat" }
             }
@@ -884,8 +900,10 @@ mod tests {
 
     let (_env_guard, _config_dirs) = setup_test_env_with_init()?;
 
-    let origin_root = TempDir::new()?;
-    let origin_repo_path = origin_root.path().join("github.com/example/repo");
+    let mirror_root = TempDir::new()?;
+    let github_root = mirror_root.path().join("github.com");
+
+    let origin_repo_path = github_root.join("example/repo");
     fs::create_dir_all(&origin_repo_path)?;
     let origin_repo = git2::Repository::init(&origin_repo_path)?;
     let mut origin_config = origin_repo.config()?;
@@ -899,8 +917,7 @@ mod tests {
     checkout_branch(&origin_repo, "parent")?;
     create_commit(&origin_repo, "parent.txt", "parent", "parent commit")?;
 
-    let fork_root = TempDir::new()?;
-    let fork_repo_path = fork_root.path().join("github.com/forker/repo");
+    let fork_repo_path = github_root.join("forker/repo");
     fs::create_dir_all(&fork_repo_path)?;
     let fork_repo = git2::Repository::init(&fork_repo_path)?;
     let mut fork_config = fork_repo.config()?;
@@ -916,7 +933,8 @@ mod tests {
 
     let repo_guard = GitRepoTestGuard::new();
     let repo = &repo_guard.repo;
-    repo.remote("origin", origin_repo_path.to_str().unwrap())?;
+    repo.remote("origin", "https://github.com/example/repo")?;
+    configure_github_instead_of(repo, &github_root)?;
 
     let runtime = Runtime::new()?;
     let mock_server = runtime.block_on(MockServer::start());
@@ -938,8 +956,8 @@ mod tests {
             "sha": fork_head_oid.to_string(),
             "repo": {
               "full_name": "forker/repo",
-              "clone_url": fork_repo_path.to_str().unwrap(),
-              "ssh_url": fork_repo_path.to_str().unwrap(),
+              "clone_url": "https://github.com/forker/repo",
+              "ssh_url": "git@github.com:forker/repo.git",
               "owner": { "login": "forker", "id": 2, "name": "Forker" }
             }
           },
@@ -978,7 +996,8 @@ mod tests {
     assert_eq!(upstream.name().unwrap(), Some("fork-forker/feature/cool"));
 
     let fork_remote = repo.find_remote("fork-forker")?;
-    assert_eq!(fork_remote.url(), Some(fork_repo_path.to_str().unwrap()));
+    let fork_remote_url = fork_remote.url().expect("fork remote should have a URL");
+    assert!(fork_remote_url.ends_with("/forker/repo"));
 
     let repo_state = RepoState::load(repo_guard.path())?;
     let metadata = repo_state

@@ -13,9 +13,10 @@ use crate::config::{ConfigDirs, GitHubConfig};
 /// Extract owner and repository name from a GitHub URL using the configured
 /// host allowlist.
 ///
-/// Supports HTTPS, SSH, and URLs containing additional path segments (e.g.,
-/// pull request paths). Returns an error when the URL does not resemble a
-/// GitHub repository path or the host is not in the configured allowlist.
+/// Supports HTTPS, SSH, file-based mirrors, and URLs containing additional
+/// path segments (e.g., pull request paths). Returns an error when the URL
+/// does not resemble a GitHub repository path or the host is not in the
+/// configured allowlist.
 pub fn extract_repo_info_from_url(url: &str) -> Result<(String, String)> {
   extract_repo_info_from_url_with_hosts(url, &default_github_hosts())
 }
@@ -32,6 +33,10 @@ pub fn extract_pr_number_from_url(url: &str) -> Result<u32> {
 /// Extract owner and repository name from a GitHub URL using the provided host
 /// allowlist.
 pub fn extract_repo_info_from_url_with_hosts(url: &str, hosts: &[String]) -> Result<(String, String)> {
+  if let Some((owner, repo)) = extract_owner_repo_from_file_url(url, hosts)? {
+    return Ok((owner, repo));
+  }
+
   let (host, path) = extract_host_and_path(url)?;
   ensure_host_allowed(&host, hosts)?;
 
@@ -82,6 +87,35 @@ fn extract_owner_repo_from_path(path: &str) -> Option<(String, String)> {
     return None;
   }
   Some((owner.to_string(), repo.to_string()))
+}
+
+fn extract_owner_repo_from_file_url(url: &str, allowed_hosts: &[String]) -> Result<Option<(String, String)>> {
+  let parsed = match Url::parse(url) {
+    Ok(parsed) if parsed.scheme() == "file" => parsed,
+    _ => return Ok(None),
+  };
+
+  let segments: Vec<_> = parsed
+    .path_segments()
+    .map(|iter| iter.filter(|seg| !seg.is_empty()).collect())
+    .unwrap_or_default();
+
+  let host_index = segments
+    .iter()
+    .position(|seg| allowed_hosts.iter().any(|allowed| allowed.eq_ignore_ascii_case(seg)));
+
+  if let Some(idx) = host_index
+    && segments.len() > idx + 2
+  {
+    let owner = segments[idx + 1].to_string();
+    let repo_raw = segments[idx + 2];
+    let repo = repo_raw.trim_end_matches(".git");
+    if !owner.is_empty() && !repo.is_empty() {
+      return Ok(Some((owner, repo.to_string())));
+    }
+  }
+
+  Ok(None)
 }
 
 fn extract_pr_number_from_path(path: &str) -> Option<u32> {
@@ -150,6 +184,15 @@ mod tests {
   fn extract_repo_info_from_url_custom_host() {
     let hosts = vec!["github.example.com".to_string()];
     let result = extract_repo_info_from_url_with_hosts("https://github.example.com/org/repo", &hosts);
+    assert!(result.is_ok());
+    let (owner, repo) = result.unwrap();
+    assert_eq!(owner, "org");
+    assert_eq!(repo, "repo");
+  }
+
+  #[test]
+  fn extract_repo_info_from_file_url_with_mirror() {
+    let result = extract_repo_info_from_url_with_hosts("file:///tmp/github.com/org/repo", &["github.com".into()]);
     assert!(result.is_ok());
     let (owner, repo) = result.unwrap();
     assert_eq!(owner, "org");
