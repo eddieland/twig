@@ -19,7 +19,7 @@ use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::state::RepoState;
 use twig_core::{checkout_branch, detect_repository};
 use twig_gh::models::{GitHubPullRequest, RepositoryInfo};
-use twig_gh::{GitHubClient, create_github_client_from_netrc};
+use twig_gh::{GitHubClient, create_github_client_from_netrc, extract_repo_info_from_url};
 use twig_jira::{JiraClient, create_jira_client_from_netrc, get_jira_host};
 
 /// Command for intelligently switching to branches based on various inputs
@@ -417,7 +417,7 @@ fn create_branch_from_github_pr(
       .ok_or_else(|| anyhow::anyhow!("Failed to get remote URL"))?;
 
     // Extract owner and repo from remote URL
-    let (owner, repo_name) = github_client.extract_repo_info_from_url(remote_url)?;
+    let (owner, repo_name) = extract_repo_info_from_url(remote_url)?;
 
     // Get the PR details
     let pr = match github_client.get_pull_request(&owner, &repo_name, pr_number).await {

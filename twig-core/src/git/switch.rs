@@ -15,12 +15,10 @@ use regex::Regex;
 
 use crate::git::checkout_branch;
 use crate::git::graph::BranchName;
+use crate::github::extract_pr_number_from_url;
 use crate::jira_parser::JiraTicketParser;
 use crate::output::print_info;
 use crate::state::{BranchMetadata, RepoState};
-
-static GITHUB_PR_URL_REGEX: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"github\.com/[^/]+/[^/]+/pull/(\d+)").expect("Failed to compile GitHub PR URL regex"));
 
 static JIRA_ISSUE_URL_REGEX: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r"/browse/([A-Z]{2,}-\d+)").expect("Failed to compile Jira issue URL regex"));
@@ -264,19 +262,6 @@ fn create_branch_from_base(
 /// Parse and normalize a Jira issue key using the provided parser.
 pub fn parse_jira_issue_key(parser: &JiraTicketParser, input: &str) -> Option<String> {
   parser.parse(input).ok()
-}
-
-/// Extract PR number from a GitHub pull request URL.
-pub fn extract_pr_number_from_url(url: &str) -> Result<u32> {
-  if let Some(captures) = GITHUB_PR_URL_REGEX.captures(url) {
-    let pr_str = captures.get(1).unwrap().as_str();
-    let pr_number = pr_str
-      .parse::<u32>()
-      .with_context(|| format!("Failed to parse PR number '{pr_str}' as a valid integer"))?;
-    Ok(pr_number)
-  } else {
-    Err(anyhow::anyhow!("Could not extract PR number from URL: {url}"))
-  }
 }
 
 /// Extract a Jira issue key from a Jira URL.

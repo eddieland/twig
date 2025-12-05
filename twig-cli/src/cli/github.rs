@@ -17,7 +17,10 @@ use twig_core::output::{
 };
 use twig_core::state::BranchMetadata;
 use twig_core::{RepoState, detect_repository, detect_repository_from_path, get_current_branch_github_pr};
-use twig_gh::{PullRequestStatus, create_github_client_from_netrc, create_github_runtime_and_client};
+use twig_gh::{
+  PullRequestStatus, create_github_client_from_netrc, create_github_runtime_and_client, extract_pr_number_from_url,
+  extract_repo_info_from_url,
+};
 
 /// Command for GitHub integration
 #[derive(Args)]
@@ -228,12 +231,8 @@ fn handle_github_open_command(cmd: &OpenCommand) -> Result<()> {
     }
   };
 
-  // Create GitHub client to extract repo info
-  let base_dirs = BaseDirs::new().context("Failed to get $HOME directory")?;
-  let (_, github_client) = create_github_runtime_and_client(base_dirs.home_dir())?;
-
   // Extract owner and repo from remote URL
-  let (owner, repo_name) = match github_client.extract_repo_info_from_url(remote_url) {
+  let (owner, repo_name) = match extract_repo_info_from_url(remote_url) {
     Ok((owner, repo)) => (owner, repo),
     Err(e) => {
       print_error(&format!("Failed to extract repository info from URL: {e}"));
@@ -364,7 +363,7 @@ fn handle_checks_command(cmd: &ChecksCommand) -> Result<()> {
   };
 
   // Extract owner and repo from remote URL
-  let (owner, repo_name) = match github_client.extract_repo_info_from_url(remote_url) {
+  let (owner, repo_name) = match extract_repo_info_from_url(remote_url) {
     Ok((owner, repo)) => (owner, repo),
     Err(e) => {
       print_error(&format!("Failed to extract repository info from URL: {e}"));
@@ -588,7 +587,7 @@ fn handle_pr_status_command() -> Result<()> {
   };
 
   // Extract owner and repo from remote URL
-  let (owner, repo_name) = match github_client.extract_repo_info_from_url(remote_url) {
+  let (owner, repo_name) = match extract_repo_info_from_url(remote_url) {
     Ok((owner, repo)) => (owner, repo),
     Err(e) => {
       print_error(&format!("Failed to extract repository info from URL: {e}"));
@@ -661,7 +660,7 @@ fn handle_pr_list_command(cmd: &ListCommand) -> Result<()> {
   };
 
   // Extract owner and repo from remote URL
-  let (owner, repo_name) = match github_client.extract_repo_info_from_url(remote_url) {
+  let (owner, repo_name) = match extract_repo_info_from_url(remote_url) {
     Ok((owner, repo)) => (owner, repo),
     Err(e) => {
       print_error(&format!("Failed to extract repository info from URL: {e}"));
@@ -779,7 +778,7 @@ fn handle_pr_link_command(pr_url_or_id: &str) -> Result<()> {
   let github_client = create_github_client_from_netrc(base_dirs.home_dir())?;
 
   // Extract owner and repo from remote URL
-  let (owner, repo_name) = match github_client.extract_repo_info_from_url(remote_url) {
+  let (owner, repo_name) = match extract_repo_info_from_url(remote_url) {
     Ok((owner, repo)) => (owner, repo),
     Err(e) => {
       print_error(&format!("Failed to extract repository info from URL: {e}"));
@@ -790,7 +789,7 @@ fn handle_pr_link_command(pr_url_or_id: &str) -> Result<()> {
   // Determine if input is a PR URL or PR ID
   let pr_number = if pr_url_or_id.contains("github.com") && pr_url_or_id.contains("/pull/") {
     // Input is a URL
-    match github_client.extract_pr_number_from_url(pr_url_or_id) {
+    match extract_pr_number_from_url(pr_url_or_id) {
       Ok(number) => number,
       Err(e) => {
         print_error(&format!("Invalid PR URL: {e}"));
