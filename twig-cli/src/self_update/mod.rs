@@ -2,21 +2,15 @@
 //!
 //! This module downloads the latest Twig release from GitHub, extracts the
 //! platform-appropriate archive, and replaces the currently running binary in a
-//! safe and platform-aware manner. Unix platforms perform an atomic rename,
-//! while Windows stages an auxiliary PowerShell script that swaps binaries
-//! after the current process exits.
+//! safe and platform-aware manner. Platform-specific installation steps live in
+//! dedicated helpers to keep the main workflow cross-platform.
 
 use std::ffi::OsStr;
-#[cfg(windows)]
-use std::fs::OpenOptions;
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-#[cfg(windows)]
-use std::process::Stdio;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow};
 use flate2::read::GzDecoder;
 use reqwest::blocking::Client;
 use serde::Deserialize;
@@ -26,10 +20,19 @@ use uuid::Uuid;
 use zip::ZipArchive;
 
 #[derive(Debug, Clone)]
+/// Options controlling how the `twig self update` command behaves.
 pub struct SelfUpdateOptions {
+  /// Install the latest release even if the current version matches.
   pub force: bool,
 }
 
+/// Download and install the latest Twig release for the current platform.
+///
+/// When `force` is false, the function exits early if the running version
+/// already matches the newest GitHub release tag. Otherwise it downloads the
+/// platform-appropriate archive, extracts the binary into a temporary staging
+/// area, and delegates to platform helpers to atomically replace the current
+/// executable.
 pub fn run(options: SelfUpdateOptions) -> Result<()> {
   let current_version = env!("CARGO_PKG_VERSION").to_string();
   print_info(&format!("Checking for updates (current version {current_version})…"));
@@ -239,17 +242,7 @@ fn extract_tarball(archive_path: &Path, staging_root: &Path, binary_name: &str) 
 
   let extracted = extracted.ok_or_else(|| anyhow!("Binary {binary_name} not found in archive"))?;
 
-  #[cfg(unix)]
-  {
-    use std::os::unix::fs::PermissionsExt;
-    let mut perms = fs::metadata(&extracted)
-      .with_context(|| format!("Failed to read permissions for {}", extracted.display()))?
-      .permissions();
-    perms.set_mode(0o755);
-    fs::set_permissions(&extracted, perms)
-      .with_context(|| format!("Failed to set permissions on {}", extracted.display()))?;
-  }
-
+  platform::finalize_extracted_binary(&extracted)?;
   Ok(extracted)
 }
 
@@ -275,6 +268,7 @@ fn extract_zip(archive_path: &Path, staging_root: &Path, binary_name: &str) -> R
     let mut output =
       File::create(&output_path).with_context(|| format!("Failed to create {}", output_path.display()))?;
     io::copy(&mut entry, &mut output).with_context(|| format!("Failed to extract {}", binary_name))?;
+    platform::finalize_extracted_binary(&output_path)?;
     return Ok(output_path);
   }
 
@@ -291,261 +285,32 @@ enum InstallOutcome {
 fn install_new_binary(binary_path: &Path) -> Result<InstallOutcome> {
   let current_exe = std::env::current_exe().context("Failed to locate current executable")?;
 
-  #[cfg(unix)]
-  {
-    install_on_unix(binary_path, &current_exe)?;
-    Ok(InstallOutcome::Immediate)
-  }
-
-  #[cfg(windows)]
-  {
-    install_on_windows(binary_path, &current_exe)
-  }
+  platform::install_new_binary(binary_path, &current_exe)
 }
 
 #[cfg(unix)]
-fn install_on_unix(new_binary: &Path, current_exe: &Path) -> Result<()> {
-  use std::os::unix::fs::PermissionsExt;
-
-  let parent = current_exe
-    .parent()
-    .ok_or_else(|| anyhow!("Executable path has no parent directory"))?;
-  let staging_target = parent.join(format!(".twig-update-{}", Uuid::new_v4()));
-
-  if let Err(err) = fs::copy(new_binary, &staging_target) {
-    if err.kind() == io::ErrorKind::PermissionDenied {
-      run_sudo_install(new_binary, current_exe)?;
-      return Ok(());
-    }
-    return Err(err).with_context(|| format!("Failed to stage update at {}", staging_target.display()));
-  }
-
-  let mut perms = fs::metadata(&staging_target)
-    .with_context(|| format!("Failed to read metadata for {}", staging_target.display()))?
-    .permissions();
-  perms.set_mode(0o755);
-  fs::set_permissions(&staging_target, perms)
-    .with_context(|| format!("Failed to set permissions on {}", staging_target.display()))?;
-
-  match fs::rename(&staging_target, current_exe) {
-    Ok(()) => {
-      if let Err(err) = fs::remove_file(new_binary) {
-        print_warning(&format!("Failed to remove staged binary: {err}"));
-      }
-      Ok(())
-    }
-    Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
-      if let Err(remove_err) = fs::remove_file(&staging_target) {
-        print_warning(&format!(
-          "Failed to remove temporary file {}: {remove_err}",
-          staging_target.display()
-        ));
-      }
-      run_sudo_install(new_binary, current_exe)?;
-      Ok(())
-    }
-    Err(err) => Err(err).with_context(|| format!("Failed to replace {}", current_exe.display())),
-  }
-}
-
+mod unix;
 #[cfg(unix)]
-fn run_sudo_install(new_binary: &Path, current_exe: &Path) -> Result<()> {
-  let status = Command::new("sudo")
-    .arg("install")
-    .arg("-m")
-    .arg("755")
-    .arg(new_binary)
-    .arg(current_exe)
-    .status()
-    .context("Failed to invoke sudo install")?;
-
-  if status.success() {
-    Ok(())
-  } else {
-    bail!("sudo install exited with status {status}");
-  }
-}
+use unix as platform;
 
 #[cfg(windows)]
-fn install_on_windows(new_binary: &Path, current_exe: &Path) -> Result<InstallOutcome> {
-  let parent = current_exe
-    .parent()
-    .ok_or_else(|| anyhow!("Executable path has no parent directory"))?;
-
-  let requires_admin = windows_requires_admin(parent);
-
-  let staging_dir = std::env::temp_dir().join(format!("twig-update-{}", Uuid::new_v4()));
-  fs::create_dir(&staging_dir)
-    .with_context(|| format!("Failed to create staging directory at {}", staging_dir.display()))?;
-
-  let script_path = staging_dir.join("install.ps1");
-  let helper_script = build_powershell_script(new_binary, current_exe)?;
-  fs::write(&script_path, helper_script)
-    .with_context(|| format!("Failed to write helper script at {}", script_path.display()))?;
-
-  let staged_binary = staging_dir.join(new_binary.file_name().unwrap_or_else(|| OsStr::new("twig.exe")));
-  fs::copy(new_binary, &staged_binary)
-    .with_context(|| format!("Failed to copy staged binary into {}", staging_dir.display()))?;
-  if let Err(err) = fs::remove_file(new_binary) {
-    print_warning(&format!("Failed to remove temporary binary: {err}"));
-  }
-
-  if let Err(err) = start_powershell_helper(&script_path, &staged_binary, current_exe, requires_admin) {
-    if let Err(remove_err) = fs::remove_file(&staged_binary) {
-      print_warning(&format!(
-        "Failed to remove staged binary {} after helper error: {remove_err}",
-        staged_binary.display()
-      ));
-    }
-    if let Err(remove_err) = fs::remove_file(&script_path) {
-      print_warning(&format!(
-        "Failed to remove helper script {} after helper error: {remove_err}",
-        script_path.display()
-      ));
-    }
-    if let Err(remove_err) = fs::remove_dir_all(&staging_dir) {
-      print_warning(&format!(
-        "Failed to clean staging directory {} after helper error: {remove_err}",
-        staging_dir.display()
-      ));
-    }
-    return Err(err);
-  }
-
-  Ok(InstallOutcome::Deferred {
-    elevated: requires_admin,
-  })
-}
-
+mod windows;
 #[cfg(windows)]
-fn windows_requires_admin(parent: &Path) -> bool {
-  let probe = parent.join(format!("twig-update-permission-test-{}", Uuid::new_v4()));
-  match OpenOptions::new().create_new(true).write(true).open(&probe) {
-    Ok(file) => {
-      drop(file);
-      let _ = fs::remove_file(&probe);
-      false
-    }
-    Err(err) => matches!(err.kind(), io::ErrorKind::PermissionDenied),
-  }
-}
+use windows as platform;
 
-#[cfg(windows)]
-fn build_powershell_script(_source: &Path, _target: &Path) -> Result<String> {
-  Ok(format!(
-    r#"param(
-  [Parameter(Mandatory=$true)][string]$Source,
-  [Parameter(Mandatory=$true)][string]$Target,
-  [Parameter(Mandatory=$true)][int]$ParentPid
-)
+#[cfg(not(any(unix, windows)))]
+mod platform {
+  use std::path::Path;
 
-function Wait-ForProcess {{
-  param([int]$Pid)
-  while ($true) {{
-    try {{
-      $proc = Get-Process -Id $Pid -ErrorAction Stop
-      Start-Sleep -Milliseconds 200
-    }} catch {{
-      break
-    }}
-  }}
-}}
+  use anyhow::bail;
 
-Wait-ForProcess -Pid $ParentPid
+  use super::{InstallOutcome, Result};
 
-$targetDir = Split-Path -Parent $Target
-if (-not (Test-Path -LiteralPath $targetDir)) {{
-  Write-Error "Target directory does not exist: $targetDir"
-  exit 1
-}}
-
-if (-not (Test-Path -LiteralPath $Source)) {{
-  Write-Error "Staged Twig binary is missing: $Source"
-  exit 1
-}}
-
-try {{
-  Move-Item -LiteralPath $Source -Destination $Target -Force
-}} catch {{
-  Copy-Item -LiteralPath $Source -Destination $Target -Force
-}}
-
-try {{
-  Remove-Item -LiteralPath $Source -Force -ErrorAction SilentlyContinue
-}} catch {{}}
-try {{
-  Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
-}} catch {{}}
-try {{
-  $stagingDir = Split-Path -Parent $Source
-  if ($stagingDir -and (Test-Path -LiteralPath $stagingDir)) {{
-    Remove-Item -LiteralPath $stagingDir -Force -Recurse -ErrorAction SilentlyContinue
-  }}
-}} catch {{}}
-"#
-  ))
-}
-
-#[cfg(windows)]
-fn start_powershell_helper(
-  script_path: &Path,
-  staged_binary: &Path,
-  current_exe: &Path,
-  requires_admin: bool,
-) -> Result<()> {
-  let pid = std::process::id();
-
-  if requires_admin {
-    let argument_list = format!(
-      "'-NoProfile','-ExecutionPolicy','Bypass','-File','{}','-Source','{}','-Target','{}','-ParentPid','{}'",
-      escape_for_powershell(script_path),
-      escape_for_powershell(staged_binary),
-      escape_for_powershell(current_exe),
-      pid
-    );
-
-    let status = Command::new("powershell.exe")
-      .arg("-NoProfile")
-      .arg("-ExecutionPolicy")
-      .arg("Bypass")
-      .arg("-Command")
-      .arg(format!(
-        "Start-Process PowerShell -Verb RunAs -ArgumentList {}",
-        argument_list
-      ))
-      .status()
-      .context("Failed to launch elevated PowerShell helper")?;
-
-    if status.success() {
-      Ok(())
-    } else {
-      bail!("Failed to start elevated helper (status {status})");
-    }
-  } else {
-    Command::new("powershell.exe")
-      .arg("-NoProfile")
-      .arg("-ExecutionPolicy")
-      .arg("Bypass")
-      .arg("-File")
-      .arg(script_path)
-      .arg("-Source")
-      .arg(staged_binary)
-      .arg("-Target")
-      .arg(current_exe)
-      .arg("-ParentPid")
-      .arg(pid.to_string())
-      .stdin(Stdio::null())
-      .stdout(Stdio::null())
-      .stderr(Stdio::null())
-      .spawn()
-      .context("Failed to launch PowerShell helper")?;
+  pub fn finalize_extracted_binary(_path: &Path) -> Result<()> {
     Ok(())
   }
-}
 
-#[cfg(windows)]
-fn escape_for_powershell(path: &Path) -> String {
-  let path = path.to_string_lossy();
-  let escaped = path.replace("'", "''");
-  format!("'{}'", escaped)
+  pub fn install_new_binary(_new_binary: &Path, _current_exe: &Path) -> Result<InstallOutcome> {
+    bail!("Self-update is unsupported on this platform")
+  }
 }
