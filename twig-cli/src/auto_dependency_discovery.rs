@@ -138,11 +138,10 @@ impl AutoDependencyDiscovery {
 
           // Check if the other branch contains this branch's parent commit
           let mut is_ancestor = false;
-          if let Ok((ahead, behind)) = repo.graph_ahead_behind(*commit_id, *other_id) {
-            // other branch tip is an ancestor when behind == 0
-            if behind == 0 && ahead > 0 && ahead <= MAX_COMMIT_DISTANCE {
-              is_ancestor = true;
-            }
+          if let Ok((ahead, behind)) = repo.graph_ahead_behind(*commit_id, *other_id)
+            && Self::is_viable_relation(ahead, behind)
+          {
+            is_ancestor = true;
           }
 
           if is_ancestor {
@@ -211,10 +210,10 @@ impl AutoDependencyDiscovery {
         if !already_exists
           && let Some((parent_oid, _)) = branch_info.get(parent)
           && let Ok((ahead, behind)) = repo.graph_ahead_behind(*child_oid, *parent_oid)
-          && behind == 0
-          && ahead > 0
+          && Self::is_viable_relation(ahead, behind)
         {
-          let confidence = Self::confidence_from_ahead(ahead);
+          let distance = ahead.saturating_add(behind);
+          let confidence = Self::confidence_from_distance(distance);
           if confidence >= MIN_CONFIDENCE {
             suggestions.push(DependencySuggestion {
               child: branch_name.clone(),
@@ -235,9 +234,14 @@ impl AutoDependencyDiscovery {
     Ok(suggestions)
   }
 
-  fn confidence_from_ahead(ahead: usize) -> f64 {
-    let ahead = ahead as f64;
-    (MAX_COMMIT_DISTANCE as f64 / (MAX_COMMIT_DISTANCE as f64 + ahead)).clamp(0.0, 1.0)
+  fn is_viable_relation(ahead: usize, behind: usize) -> bool {
+    let distance = ahead.saturating_add(behind);
+    distance > 0 && distance <= MAX_COMMIT_DISTANCE
+  }
+
+  fn confidence_from_distance(distance: usize) -> f64 {
+    let distance = distance as f64;
+    (MAX_COMMIT_DISTANCE as f64 / (MAX_COMMIT_DISTANCE as f64 + distance)).clamp(0.0, 1.0)
   }
 
   /// Get root branches from auto-discovery
@@ -425,6 +429,51 @@ mod tests {
       "Should not suggest feature depends on main (already exists)"
     );
     assert!(has_subfeature_feature, "Should suggest sub-feature depends on feature");
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_suggest_dependencies_accepts_base_that_moved_forward() -> Result<()> {
+    // Create a temporary git repository
+    let git_repo = GitRepoTestGuard::new();
+    let repo = &git_repo.repo;
+    let repo_path = git_repo.path();
+
+    // Create initial commit on main branch
+    create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
+
+    ensure_main_branch(repo)?;
+
+    // Create feature branch
+    create_branch(repo, "feature", Some("main"))?;
+    checkout_branch(repo, "feature")?;
+    create_commit(repo, "feature1.txt", "Feature content 1", "Feature commit 1")?;
+    create_commit(repo, "feature2.txt", "Feature content 2", "Feature commit 2")?;
+
+    // Advance main after the feature was cut
+    checkout_branch(repo, "main")?;
+    for i in 0..3 {
+      let file = format!("main-{i}.txt");
+      let msg = format!("Main commit {i}");
+      create_commit(repo, &file, "Main content", &msg)?;
+    }
+
+    // Initialize repo state
+    let repo_state = RepoState::load(repo_path).unwrap_or_default();
+
+    // Run auto dependency discovery to suggest dependencies
+    let discovery = AutoDependencyDiscovery;
+    let suggestions = discovery.suggest_dependencies(repo, &repo_state)?;
+
+    // Even though main moved forward, the distance cap should still consider it a
+    // viable parent
+    let has_feature_main = suggestions.iter().any(|s| s.child == "feature" && s.parent == "main");
+
+    assert!(
+      has_feature_main,
+      "A nearby base that moved forward should still be suggested as the parent"
+    );
 
     Ok(())
   }
