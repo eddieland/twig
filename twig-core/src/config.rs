@@ -87,6 +87,11 @@ impl ConfigDirs {
     self.config_dir.join("jira.toml")
   }
 
+  /// Get the path to the GitHub configuration file
+  pub fn github_config_path(&self) -> PathBuf {
+    self.config_dir.join("github.toml")
+  }
+
   /// Load Jira parsing configuration from file or return default
   pub fn load_jira_config(&self) -> Result<JiraParsingConfig> {
     let config_path = self.jira_config_path();
@@ -120,11 +125,60 @@ impl ConfigDirs {
 
     Ok(())
   }
+
+  /// Load GitHub configuration from file or return default
+  pub fn load_github_config(&self) -> Result<GitHubConfig> {
+    let config_path = self.github_config_path();
+
+    if config_path.exists() {
+      let content = fs::read_to_string(&config_path)
+        .with_context(|| format!("Failed to read GitHub config from {}", config_path.display()))?;
+
+      let config: GitHubConfig = toml::from_str(&content)
+        .with_context(|| format!("Failed to parse GitHub config from {}", config_path.display()))?;
+
+      Ok(config)
+    } else {
+      Ok(GitHubConfig::default())
+    }
+  }
+
+  /// Save GitHub configuration to file
+  pub fn save_github_config(&self, config: &GitHubConfig) -> Result<()> {
+    let config_path = self.github_config_path();
+
+    // Ensure config directory exists
+    if let Some(parent) = config_path.parent() {
+      fs::create_dir_all(parent).with_context(|| format!("Failed to create config directory {}", parent.display()))?;
+    }
+
+    let content = toml::to_string_pretty(config).context("Failed to serialize GitHub config to TOML")?;
+
+    fs::write(&config_path, content)
+      .with_context(|| format!("Failed to write GitHub config to {}", config_path.display()))?;
+
+    Ok(())
+  }
 }
 
 /// Get the configuration directories
 pub fn get_config_dirs() -> Result<ConfigDirs> {
   ConfigDirs::new()
+}
+
+/// GitHub configuration (currently host allowlist for URL parsing)
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GitHubConfig {
+  /// Allowed GitHub hosts (defaults to github.com). Used for URL parsing.
+  pub hosts: Vec<String>,
+}
+
+impl Default for GitHubConfig {
+  fn default() -> Self {
+    Self {
+      hosts: vec!["github.com".to_string()],
+    }
+  }
 }
 
 #[cfg(test)]
@@ -173,5 +227,40 @@ mod tests {
     assert!(config_dirs.config_dir().exists());
     assert!(config_dirs.data_dir().exists());
     assert!(config_dirs.registry_path().exists());
+  }
+
+  #[test]
+  fn test_default_github_config_roundtrip() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_dirs = ConfigDirs {
+      config_dir: temp_dir.path().join("config"),
+      data_dir: temp_dir.path().join("data"),
+      cache_dir: None,
+    };
+
+    let default_config = GitHubConfig::default();
+    config_dirs.save_github_config(&default_config).unwrap();
+    let loaded = config_dirs.load_github_config().unwrap();
+
+    assert_eq!(loaded.hosts, vec!["github.com"]);
+  }
+
+  #[test]
+  fn test_custom_github_config_roundtrip() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_dirs = ConfigDirs {
+      config_dir: temp_dir.path().join("config"),
+      data_dir: temp_dir.path().join("data"),
+      cache_dir: None,
+    };
+
+    let config = GitHubConfig {
+      hosts: vec!["github.example.com".to_string(), "git.mycompany.com".to_string()],
+    };
+
+    config_dirs.save_github_config(&config).unwrap();
+    let loaded = config_dirs.load_github_config().unwrap();
+
+    assert_eq!(loaded.hosts, config.hosts);
   }
 }
