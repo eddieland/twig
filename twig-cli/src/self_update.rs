@@ -282,11 +282,10 @@ fn extract_zip(archive_path: &Path, staging_root: &Path, binary_name: &str) -> R
 }
 
 enum InstallOutcome {
+  #[cfg_attr(windows, allow(dead_code))]
   Immediate,
   #[cfg(windows)]
-  Deferred {
-    elevated: bool,
-  },
+  Deferred { elevated: bool },
 }
 
 fn install_new_binary(binary_path: &Path) -> Result<InstallOutcome> {

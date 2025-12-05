@@ -412,6 +412,7 @@ mod tests {
     assert_eq!(resolved, Some(fs::canonicalize(&binary).unwrap()));
   }
 
+  #[cfg_attr(windows, allow(unused))]
   fn make_executable(path: &Path) {
     #[cfg(unix)]
     {
