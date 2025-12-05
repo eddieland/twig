@@ -136,22 +136,38 @@ struct TargetConfig {
 }
 
 impl TargetConfig {
+  fn product_name(&self) -> &str {
+    self.binary_name.strip_suffix(".exe").unwrap_or(self.binary_name)
+  }
+
   fn matches(&self, asset: &GithubAsset) -> bool {
     let name = asset.name.to_lowercase();
     if !name.ends_with(self.archive_extension) {
       return false;
     }
 
-    let os_match = self.os_markers.iter().any(|marker| name.contains(marker));
+    let trimmed = name.strip_suffix(self.archive_extension).unwrap_or(&name);
+    let parts: Vec<_> = trimmed.split('-').collect();
+    if parts.len() < 3 {
+      return false;
+    }
+
+    if parts[0] != self.product_name() {
+      return false;
+    }
+
+    let os_match = self.os_markers.iter().any(|marker| parts[1].contains(marker));
     if !os_match {
       return false;
     }
 
-    let mut arch_match = self.arch_markers.iter().any(|marker| name.contains(marker));
+    let arch_segment = parts[2];
+
+    let mut arch_match = self.arch_markers.iter().any(|marker| arch_segment.contains(marker));
 
     if !arch_match && self.os_markers.iter().any(|m| *m == "macos" || *m == "darwin") {
       // macOS universal builds should work for both x86_64 and arm64.
-      arch_match = name.contains("universal");
+      arch_match = arch_segment.contains("universal");
     }
 
     arch_match
@@ -312,5 +328,38 @@ mod platform {
 
   pub fn install_new_binary(_new_binary: &Path, _current_exe: &Path) -> Result<InstallOutcome> {
     bail!("Self-update is unsupported on this platform")
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{GithubAsset, TargetConfig};
+
+  fn linux_target() -> TargetConfig {
+    TargetConfig {
+      os_markers: vec!["linux"],
+      arch_markers: vec!["x86_64", "amd64"],
+      archive_extension: ".tar.gz",
+      binary_name: "twig",
+    }
+  }
+
+  fn asset(name: &str) -> GithubAsset {
+    GithubAsset {
+      name: name.to_string(),
+      browser_download_url: String::new(),
+    }
+  }
+
+  #[test]
+  fn selects_primary_linux_asset() {
+    let target = linux_target();
+    assert!(target.matches(&asset("twig-linux-x86_64-v0.1.0.tar.gz")));
+  }
+
+  #[test]
+  fn ignores_twig_flow_asset() {
+    let target = linux_target();
+    assert!(!target.matches(&asset("twig-flow-linux-x86_64-v0.1.0.tar.gz")));
   }
 }
