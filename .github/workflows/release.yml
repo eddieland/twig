@@ -67,14 +67,14 @@ jobs:
         with:
           subject-path: twig-flow-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Upload twig artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: twig-linux
           path: |
             twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
             twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Upload twig-flow artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: twig-flow-linux
           path: |
@@ -121,14 +121,14 @@ jobs:
         with:
           subject-path: twig-flow-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Upload twig artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: twig-macos
           path: |
             twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
             twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Upload twig-flow artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: twig-flow-macos
           path: |
@@ -193,14 +193,14 @@ jobs:
           subject-path: twig-flow-windows-x86_64-v${{ steps.version.outputs.version }}.zip
 
       - name: Upload twig artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: twig-windows
           path: |
             twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip
             twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
       - name: Upload twig-flow artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: twig-flow-windows
           path: |
