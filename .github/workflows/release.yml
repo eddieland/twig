@@ -227,34 +227,34 @@ jobs:
           echo "PREVIOUS_TAG=${PREVIOUS_TAG#v}" >>$GITHUB_ENV
 
       - name: Download Linux artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: twig-linux
           path: ./
       - name: Download Linux twig-flow artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: twig-flow-linux
           path: ./
 
       - name: Download macOS artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: twig-macos
           path: ./
       - name: Download macOS twig-flow artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: twig-flow-macos
           path: ./
 
       - name: Download Windows zip artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: twig-windows
           path: ./
       - name: Download Windows twig-flow artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: twig-flow-windows
           path: ./
