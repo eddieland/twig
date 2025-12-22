@@ -101,7 +101,7 @@ zip = { version = "6.0.0", default-features = false, features = ["deflate"] }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
 
 # Testing dependencies
-insta = "1.44.3"
+insta = "1.45.0"
 tempfile = "3.23"
 wiremock = "0.6.5"
 
