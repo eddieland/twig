@@ -61,8 +61,8 @@ thiserror = "2"
 
 # CLI and UI dependencies
 clap = { version = "4.5.53", features = ["derive"] }
-clap_complete = "4.5.61"
-console = "0.16.1"
+clap_complete = "4.5.62"
+console = "0.16.2"
 dialoguer = "0.12.0"
 emojis = "0.8.0"
 indicatif = "0.18.3"
@@ -80,7 +80,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # Async and networking
-reqwest = { version = "0.12.25", features = ["json", "native-tls", "blocking"], default-features = false }
+reqwest = { version = "0.12.26", features = ["json", "native-tls", "blocking"], default-features = false }
 tokio = { version = "1.48", features = ["rt", "rt-multi-thread", "time", "macros"] }
 
 # Serialization
