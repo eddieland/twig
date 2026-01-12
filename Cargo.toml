@@ -102,7 +102,7 @@ windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Secur
 
 # Testing dependencies
 insta = "1.46.0"
-tempfile = "3.23"
+tempfile = "3.24"
 wiremock = "0.6.5"
 
 [target.'cfg(windows)'.dependencies]
