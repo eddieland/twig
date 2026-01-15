@@ -54,7 +54,3 @@
 
 - Plugin lifecycle: when CLI arguments do not match a subcommand, control falls through to plugin execution defined in `plugin.rs`. Follow existing pattern for new plugin discovery or metadata changes.
 - Auto-dependency features combine static config (`state.rs`) with heuristics in `auto_dependency_discovery.rs`; consult both before altering branch-tree logic.
-
----
-
-_Questions or unclear sections? Ask for feedback so we can refine this guide._
