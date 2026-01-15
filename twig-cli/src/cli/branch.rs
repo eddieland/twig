@@ -4,6 +4,8 @@
 //! dependencies and root branches, including adding, removing, and listing
 //! branch relationships.
 
+use std::path::Path;
+
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use twig_core::output::{print_error, print_info, print_success, print_warning};
@@ -176,12 +178,9 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
 
       // Get the branch name (current or specified)
       let branch_name = if let Some(branch) = cmd.branch {
-        branch
+        resolve_branch_alias(&repo_path, &branch)?
       } else {
-        let repo = git2::Repository::open(&repo_path).context("Failed to open repository")?;
-        let head = repo.head().context("Failed to get HEAD")?;
-        let branch_ref = head.shorthand().context("Failed to get branch name")?;
-        branch_ref.to_string()
+        current_branch_name(&repo_path)?
       };
 
       // Load repository state
@@ -236,13 +235,15 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
 
       // Load repository state
       let mut repo_state = RepoState::load(&repo_path)?;
+      let child = resolve_branch_alias(&repo_path, &cmd.child)?;
+      let parent = resolve_branch_alias(&repo_path, &cmd.parent)?;
 
       // Add the dependency
-      match repo_state.add_dependency(cmd.child.clone(), cmd.parent.clone()) {
+      match repo_state.add_dependency(child.clone(), parent.clone()) {
         Ok(()) => {
           // Save the state
           repo_state.save(&repo_path)?;
-          print_success(&format!("Added dependency: {} -> {}", cmd.child, cmd.parent));
+          print_success(&format!("Added dependency: {child} -> {parent}"));
           Ok(())
         }
         Err(e) => {
@@ -261,14 +262,16 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
 
       // Load repository state
       let mut repo_state = RepoState::load(&repo_path)?;
+      let child = resolve_branch_alias(&repo_path, &cmd.child)?;
+      let parent = resolve_branch_alias(&repo_path, &cmd.parent)?;
 
       // Remove the dependency
-      if repo_state.remove_dependency(&cmd.child, &cmd.parent) {
+      if repo_state.remove_dependency(&child, &parent) {
         // Save the state
         repo_state.save(&repo_path)?;
-        print_success(&format!("Removed dependency: {} -> {}", cmd.child, cmd.parent));
+        print_success(&format!("Removed dependency: {child} -> {parent}"));
       } else {
-        print_warning(&format!("Dependency {} -> {} not found", cmd.child, cmd.parent));
+        print_warning(&format!("Dependency {child} -> {parent} not found"));
       }
 
       Ok(())
@@ -284,16 +287,17 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
 
         // Load repository state
         let mut repo_state = RepoState::load(&repo_path)?;
+        let branch = resolve_branch_alias(&repo_path, &cmd.branch)?;
 
         // Add the root branch
-        match repo_state.add_root(cmd.branch.clone(), cmd.default) {
+        match repo_state.add_root(branch.clone(), cmd.default) {
           Ok(()) => {
             // Save the state
             repo_state.save(&repo_path)?;
             if cmd.default {
-              print_success(&format!("Added {} as default root branch", cmd.branch));
+              print_success(&format!("Added {branch} as default root branch"));
             } else {
-              print_success(&format!("Added {} as root branch", cmd.branch));
+              print_success(&format!("Added {branch} as root branch"));
             }
             Ok(())
           }
@@ -343,18 +347,60 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
 
         // Load repository state
         let mut repo_state = RepoState::load(&repo_path)?;
+        let branch = resolve_branch_alias(&repo_path, &cmd.branch)?;
 
         // Remove the root branch
-        if repo_state.remove_root(&cmd.branch) {
+        if repo_state.remove_root(&branch) {
           // Save the state
           repo_state.save(&repo_path)?;
-          print_success(&format!("Removed {} from root branches", cmd.branch));
+          print_success(&format!("Removed {branch} from root branches"));
         } else {
-          print_warning(&format!("Root branch {} not found", cmd.branch));
+          print_warning(&format!("Root branch {branch} not found"));
         }
 
         Ok(())
       }
     },
   }
+}
+
+/// Resolve branch aliases like ".".
+///
+/// This function checks if the provided branch name is an alias (like ".")
+/// and resolves it to the actual branch name. If the branch name is not an
+/// alias, it is returned as-is.
+///
+/// Arguments:
+/// - `repo_path`: Path to the Git repository.
+/// - `branch`: The input branch name or alias to resolve.
+///
+/// Returns:
+/// - `Ok(String)`: The resolved branch name.
+/// - `Err(anyhow::Error)`: An error if the alias cannot be resolved.
+fn resolve_branch_alias(repo_path: &Path, branch: &str) -> Result<String> {
+  if branch == "." {
+    current_branch_name(repo_path)
+  } else {
+    Ok(branch.to_string())
+  }
+}
+
+/// Get the current branch name of the repository at the given path.
+///
+/// This function will open the Git repository located at `repo_path` and
+/// return the name of the currently checked-out branch. If the repository
+/// is in a detached HEAD state or if any error occurs, an appropriate error
+/// will be returned.
+///
+/// Arguments:
+/// - `repo_path`: Path to the Git repository.
+///
+/// Returns:
+/// - `Ok(String)`: The name of the current branch.
+/// - `Err(anyhow::Error)`: An error if the repository cannot be opened or
+fn current_branch_name(repo_path: &Path) -> Result<String> {
+  let repo = git2::Repository::open(repo_path).context("Failed to open repository")?;
+  let head = repo.head().context("Failed to get HEAD")?;
+  let branch_ref = head.shorthand().context("Failed to get branch name")?;
+  Ok(branch_ref.to_string())
 }
