@@ -4,10 +4,10 @@
 //! dependencies and root branches, including adding, removing, and listing
 //! branch relationships.
 
-use anyhow::{Context, Result};
-use clap::{Args, Subcommand};
 use std::path::Path;
 
+use anyhow::{Context, Result};
+use clap::{Args, Subcommand};
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::{RepoState, detect_repository};
 
