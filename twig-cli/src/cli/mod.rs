@@ -24,10 +24,8 @@ mod tree;
 mod worktree;
 
 use anyhow::Result;
-use clap::builder::Styles;
-use clap::builder::styling::AnsiColor;
 use clap::{ArgAction, Parser, Subcommand};
-use twig_core::output::ColorMode;
+use twig_core::output::{ColorMode, cli_styles};
 
 use crate::plugin;
 
@@ -49,14 +47,7 @@ use crate::plugin;
 #[command(propagate_version = true)]
 #[command(disable_help_subcommand = true)]
 #[command(max_term_width = 120)]
-#[command(styles = Styles::styled()
-    .header(AnsiColor::BrightGreen.on_default().bold().underline())
-    .usage(AnsiColor::Green.on_default().bold())  // Make usage line stand out
-    .literal(AnsiColor::BrightGreen.on_default().bold())  // Command names, flags bold
-    .placeholder(AnsiColor::BrightWhite.on_default().italic())
-    .valid(AnsiColor::Green.on_default())
-    .invalid(AnsiColor::BrightRed.on_default().bold())
-)]
+#[command(styles = cli_styles())]
 pub struct Cli {
   /// Sets the level of verbosity (can be used multiple times)
   #[arg(

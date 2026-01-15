@@ -33,7 +33,7 @@ pub use git::{
 };
 pub use github::{extract_pr_number_from_url, extract_repo_info_from_url};
 pub use jira_parser::{JiraParseError, JiraParsingConfig, JiraParsingMode, JiraTicketParser, create_jira_parser};
-pub use output::{ColorMode, format_repo_path, print_error, print_info, print_success, print_warning};
+pub use output::{ColorMode, cli_styles, format_repo_path, print_error, print_info, print_success, print_warning};
 pub use plugin::{PluginContext, plugin_config_dir, plugin_data_dir};
 pub use state::{
   BranchDependency, BranchMetadata as StateBranchMetadata, Registry, RepoState, Repository, RootBranch, create_worktree,
