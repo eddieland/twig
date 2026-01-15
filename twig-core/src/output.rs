@@ -3,8 +3,23 @@
 //! Provides formatted output functions with colors, emojis, and consistent
 //! styling for user-facing messages and terminal output.
 
+use clap::builder::Styles;
+use clap::builder::styling::AnsiColor;
+use emojis;
 use owo_colors::OwoColorize;
-use {clap, emojis};
+
+/// Returns the standard CLI styles used across twig commands.
+///
+/// Cargo-inspired: green headers, cyan options/flags.
+pub fn cli_styles() -> Styles {
+  Styles::styled()
+    .header(AnsiColor::BrightGreen.on_default().bold())
+    .usage(AnsiColor::BrightGreen.on_default().bold())
+    .literal(AnsiColor::Cyan.on_default().bold())
+    .placeholder(AnsiColor::Cyan.on_default())
+    .valid(AnsiColor::Green.on_default())
+    .invalid(AnsiColor::BrightRed.on_default().bold())
+}
 
 /// Enum representing different color modes for output
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
