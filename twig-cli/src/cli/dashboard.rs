@@ -14,6 +14,7 @@ use tabled::{Table, Tabled};
 use tokio::runtime::Runtime;
 use twig_core::output::{print_error, print_warning};
 use twig_core::state::RepoState;
+use twig_core::truncate_string;
 use twig_gh::{GitHubPullRequest, create_github_client, extract_repo_info_from_url, get_github_credentials};
 use twig_jira::{Issue, create_jira_client_from_netrc, get_jira_host};
 
@@ -152,7 +153,7 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
     };
 
     let time = commit.time();
-    let datetime = chrono::DateTime::from_timestamp(time.seconds(), 0).unwrap();
+    let datetime = chrono::DateTime::from_timestamp(time.seconds(), 0).unwrap_or(chrono::DateTime::UNIX_EPOCH);
     let last_commit_date = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
 
     // Skip if we're only showing recent branches
@@ -377,12 +378,8 @@ fn display_text_dashboard(data: &DashboardData, include_remote: bool, skip_githu
         .pull_requests
         .iter()
         .map(|pr| {
-          // Truncate title if too long
-          let title = if pr.title.len() > 47 {
-            format!("{}...", &pr.title[0..44])
-          } else {
-            pr.title.clone()
-          };
+          // Truncate title if too long (UTF-8 safe)
+          let title = truncate_string(&pr.title, 44);
 
           // Format date to be more readable
           let created_date = pr.created_at.split('T').next().unwrap_or(&pr.created_at);
@@ -411,12 +408,8 @@ fn display_text_dashboard(data: &DashboardData, include_remote: bool, skip_githu
         .issues
         .iter()
         .map(|issue| {
-          // Truncate summary if too long
-          let summary = if issue.fields.summary.len() > 47 {
-            format!("{}...", &issue.fields.summary[0..44])
-          } else {
-            issue.fields.summary.clone()
-          };
+          // Truncate summary if too long (UTF-8 safe)
+          let summary = truncate_string(&issue.fields.summary, 44);
 
           // Get assignee
           let assignee = issue

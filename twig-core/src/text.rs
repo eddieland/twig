@@ -102,6 +102,40 @@ pub fn hyperlink<'a, T: fmt::Display + ?Sized>(label: &'a T, url: &'a str, color
   Hyperlink::new(label, url, colors)
 }
 
+/// Truncate a string to a maximum number of characters, appending "..." if
+/// truncated.
+///
+/// This function properly handles UTF-8 strings by counting characters rather
+/// than bytes, avoiding panics when the string contains multibyte characters
+/// (e.g., emoji, non-ASCII characters).
+///
+/// # Arguments
+/// * `s` - The string to truncate
+/// * `max_chars` - Maximum number of characters to keep (excluding the "..."
+///   suffix)
+///
+/// # Returns
+/// The original string if it fits within `max_chars`, otherwise a truncated
+/// version with "..." appended.
+///
+/// # Examples
+/// ```
+/// use twig_core::text::truncate_string;
+///
+/// assert_eq!(truncate_string("hello", 10), "hello");
+/// assert_eq!(truncate_string("hello world", 5), "hello...");
+/// assert_eq!(truncate_string("🎉🎊🎁🎄🎅", 3), "🎉🎊🎁...");
+/// ```
+pub fn truncate_string(s: &str, max_chars: usize) -> String {
+  let char_count = s.chars().count();
+  if char_count <= max_chars {
+    s.to_string()
+  } else {
+    let truncated: String = s.chars().take(max_chars).collect();
+    format!("{truncated}...")
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -149,5 +183,43 @@ mod tests {
   fn hyperlink_handles_empty_url() {
     let rendered = format!("{}", hyperlink(&"label", "", ColorMode::Yes));
     assert_eq!(rendered, "\x1b]8;;\x07label\x1b]8;;\x07");
+  }
+
+  #[test]
+  fn truncate_string_returns_original_when_short() {
+    assert_eq!(truncate_string("hello", 10), "hello");
+    assert_eq!(truncate_string("hello", 5), "hello");
+  }
+
+  #[test]
+  fn truncate_string_truncates_long_strings() {
+    assert_eq!(truncate_string("hello world", 5), "hello...");
+    assert_eq!(truncate_string("abcdefghij", 3), "abc...");
+  }
+
+  #[test]
+  fn truncate_string_handles_multibyte_characters() {
+    // Emoji (each takes 4 bytes but counts as 1 char)
+    assert_eq!(truncate_string("🎉🎊🎁🎄🎅", 3), "🎉🎊🎁...");
+    assert_eq!(truncate_string("🎉🎊🎁🎄🎅", 5), "🎉🎊🎁🎄🎅");
+    assert_eq!(truncate_string("🎉🎊🎁🎄🎅", 10), "🎉🎊🎁🎄🎅");
+
+    // Non-ASCII characters
+    assert_eq!(truncate_string("日本語テスト", 3), "日本語...");
+    assert_eq!(truncate_string("日本語テスト", 6), "日本語テスト");
+
+    // Mixed ASCII and emoji
+    assert_eq!(truncate_string("Hello 🎉 World", 7), "Hello 🎉...");
+  }
+
+  #[test]
+  fn truncate_string_handles_empty_string() {
+    assert_eq!(truncate_string("", 5), "");
+    assert_eq!(truncate_string("", 0), "");
+  }
+
+  #[test]
+  fn truncate_string_handles_zero_max() {
+    assert_eq!(truncate_string("hello", 0), "...");
   }
 }
