@@ -16,7 +16,9 @@ use twig_core::output::{
   format_check_status, format_command, format_pr_review_status, print_error, print_info, print_success, print_warning,
 };
 use twig_core::state::BranchMetadata;
-use twig_core::{RepoState, detect_repository, detect_repository_from_path, get_current_branch_github_pr};
+use twig_core::{
+  RepoState, detect_repository, detect_repository_from_path, get_current_branch_github_pr, truncate_string,
+};
 use twig_gh::{
   PullRequestStatus, create_github_client_from_netrc, create_github_runtime_and_client, extract_pr_number_from_url,
   extract_repo_info_from_url,
@@ -700,12 +702,8 @@ fn handle_pr_list_command(cmd: &ListCommand) -> Result<()> {
       let rows: Vec<PullRequestRow> = prs
         .into_iter()
         .map(|pr| {
-          // Truncate title if too long
-          let title = if pr.title.len() > 47 {
-            format!("{}...", &pr.title[0..44])
-          } else {
-            pr.title.clone()
-          };
+          // Truncate title if too long (UTF-8 safe)
+          let title = truncate_string(&pr.title, 44);
 
           // Format state with color
           let state_colored = match pr.state.as_str() {
