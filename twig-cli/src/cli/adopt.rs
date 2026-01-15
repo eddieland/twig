@@ -227,19 +227,17 @@ fn adopt_with_auto_resolver(
     "Auto dependency suggestions generated"
   );
 
+  let mut sorted_suggestions = suggestions;
+  sorted_suggestions.sort_by(|a, b| {
+    a.child
+      .cmp(&b.child)
+      .then_with(|| b.confidence.partial_cmp(&a.confidence).unwrap_or(Ordering::Equal))
+      .then_with(|| a.parent.cmp(&b.parent))
+  });
+
   let mut best_suggestions: HashMap<&str, &crate::auto_dependency_discovery::DependencySuggestion> = HashMap::new();
-  for suggestion in &suggestions {
-    if let Some(existing) = best_suggestions.get(suggestion.child.as_str()) {
-      let ordering = suggestion
-        .confidence
-        .partial_cmp(&existing.confidence)
-        .unwrap_or(Ordering::Equal);
-      if ordering == Ordering::Greater {
-        best_suggestions.insert(&suggestion.child, suggestion);
-      }
-    } else {
-      best_suggestions.insert(&suggestion.child, suggestion);
-    }
+  for suggestion in &sorted_suggestions {
+    best_suggestions.entry(suggestion.child.as_str()).or_insert(suggestion);
   }
 
   let resolver = UserDefinedDependencyResolver;
