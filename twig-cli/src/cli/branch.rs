@@ -364,6 +364,19 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
   }
 }
 
+/// Resolve branch aliases like ".".
+///
+/// This function checks if the provided branch name is an alias (like ".")
+/// and resolves it to the actual branch name. If the branch name is not an
+/// alias, it is returned as-is.
+///
+/// Arguments:
+/// - `repo_path`: Path to the Git repository.
+/// - `branch`: The input branch name or alias to resolve.
+///
+/// Returns:
+/// - `Ok(String)`: The resolved branch name.
+/// - `Err(anyhow::Error)`: An error if the alias cannot be resolved.
 fn resolve_branch_alias(repo_path: &Path, branch: &str) -> Result<String> {
   if branch == "." {
     current_branch_name(repo_path)
@@ -372,6 +385,19 @@ fn resolve_branch_alias(repo_path: &Path, branch: &str) -> Result<String> {
   }
 }
 
+/// Get the current branch name of the repository at the given path.
+///
+/// This function will open the Git repository located at `repo_path` and
+/// return the name of the currently checked-out branch. If the repository
+/// is in a detached HEAD state or if any error occurs, an appropriate error
+/// will be returned.
+///
+/// Arguments:
+/// - `repo_path`: Path to the Git repository.
+///
+/// Returns:
+/// - `Ok(String)`: The name of the current branch.
+/// - `Err(anyhow::Error)`: An error if the repository cannot be opened or
 fn current_branch_name(repo_path: &Path) -> Result<String> {
   let repo = git2::Repository::open(repo_path).context("Failed to open repository")?;
   let head = repo.head().context("Failed to get HEAD")?;
