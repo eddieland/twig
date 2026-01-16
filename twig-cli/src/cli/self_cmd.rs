@@ -8,7 +8,9 @@ use clap::{Args, Subcommand};
 use twig_core::output::{format_command, print_header, print_info, print_warning};
 
 use super::completion;
-use crate::self_update::{SelfUpdateOptions, run as run_self_update};
+use crate::self_update::{
+  PluginInstallOptions, SelfUpdateOptions, run as run_self_update, run_flow_plugin_install,
+};
 use crate::{diagnostics, plugin};
 
 /// Arguments for the top-level `twig self` command.
@@ -56,11 +58,28 @@ Twig can locate your installed plugins."
   )]
   #[command(alias = "list-plugins")]
   Plugins,
+
+  /// Install or update the Twig flow plugin
+  #[command(
+    long_about = "Download the latest Twig flow plugin release from GitHub and install it alongside\n\
+the Twig executable so it can be discovered via your PATH. Use this when you want to\n\
+install or update the built-in flow plugin binary."
+  )]
+  #[command(alias = "flow-plugin")]
+  Flow(FlowPluginCommand),
 }
 
 /// Options for `twig self update`.
 #[derive(Args, Debug, Clone)]
 pub struct SelfUpdateCommand {
+  /// Reinstall even if the latest version is already installed
+  #[arg(long)]
+  pub force: bool,
+}
+
+/// Options for `twig self flow`.
+#[derive(Args, Debug, Clone)]
+pub struct FlowPluginCommand {
   /// Reinstall even if the latest version is already installed
   #[arg(long)]
   pub force: bool,
@@ -72,6 +91,12 @@ impl From<SelfUpdateCommand> for SelfUpdateOptions {
   }
 }
 
+impl From<FlowPluginCommand> for PluginInstallOptions {
+  fn from(value: FlowPluginCommand) -> Self {
+    PluginInstallOptions { force: value.force }
+  }
+}
+
 /// Execute a `twig self` command.
 pub fn handle_self_command(args: SelfArgs) -> Result<()> {
   match args.command {
@@ -79,6 +104,7 @@ pub fn handle_self_command(args: SelfArgs) -> Result<()> {
     SelfSubcommand::Diagnose => diagnostics::run_diagnostics(),
     SelfSubcommand::Completion(cmd) => completion::handle_completion_command(cmd),
     SelfSubcommand::Plugins => list_plugins(),
+    SelfSubcommand::Flow(cmd) => run_flow_plugin_install(cmd.into()),
   }
 }
 

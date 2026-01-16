@@ -26,6 +26,13 @@ pub struct SelfUpdateOptions {
   pub force: bool,
 }
 
+#[derive(Debug, Clone)]
+/// Options controlling how `twig self flow` behaves.
+pub struct PluginInstallOptions {
+  /// Reinstall even if the installed plugin already matches the latest release.
+  pub force: bool,
+}
+
 /// Download and install the latest Twig release for the current platform.
 ///
 /// When `force` is false, the function exits early if the running version
@@ -39,7 +46,7 @@ pub fn run(options: SelfUpdateOptions) -> Result<()> {
 
   let client = build_http_client()?;
   let release = fetch_latest_release(&client)?;
-  let target = target_config()?;
+  let target = target_config("twig")?;
   let latest_version = release.clean_tag();
 
   if !options.force && latest_version == current_version {
@@ -77,6 +84,76 @@ pub fn run(options: SelfUpdateOptions) -> Result<()> {
       }
       print_success(&format!(
         "Twig {latest_version} is staged and will complete installation shortly."
+      ));
+    }
+  }
+
+  Ok(())
+}
+
+/// Download and install the latest Twig flow plugin release.
+///
+/// The plugin binary is placed alongside the running Twig executable so it can
+/// be discovered via standard PATH lookups.
+pub fn run_flow_plugin_install(options: PluginInstallOptions) -> Result<()> {
+  let client = build_http_client()?;
+  let release = fetch_latest_release(&client)?;
+  let target = target_config("twig-flow")?;
+  let latest_version = release.clean_tag();
+  let install_path = flow_plugin_install_path(&target)?;
+
+  if !options.force {
+    if let Some(installed_version) = read_installed_plugin_version(&install_path)? {
+      if installed_version == latest_version {
+        print_success("Twig flow plugin is already up to date.");
+        return Ok(());
+      }
+    }
+  }
+
+  let asset = release
+    .find_matching_asset(&target)
+    .ok_or_else(|| anyhow!("No Twig flow plugin asset available for this platform"))?;
+
+  print_info(&format!(
+    "Downloading Twig flow {latest_version} ({})…",
+    asset.name
+  ));
+
+  let staging_root = create_staging_directory()?;
+  let archive_path = download_asset(&client, asset, &staging_root)?;
+  let binary_path = extract_archive(&archive_path, &staging_root, &target)?;
+
+  print_info("Installing Twig flow plugin…");
+  let outcome = install_plugin_binary(&binary_path, &install_path)?;
+
+  if let Err(err) = fs::remove_dir_all(&staging_root) {
+    print_warning(&format!("Failed to clean temporary files: {err}"));
+  }
+
+  if !path_contains_dir(install_path.parent()) {
+    print_warning(&format!(
+      "The plugin was installed to {} which is not on your PATH.",
+      install_path.display()
+    ));
+  }
+
+  match outcome {
+    InstallOutcome::Immediate => {
+      print_success(&format!(
+        "Twig flow {latest_version} is installed at {}.",
+        install_path.display()
+      ));
+    }
+    #[cfg(windows)]
+    InstallOutcome::Deferred { elevated } => {
+      if elevated {
+        print_info("An elevated PowerShell helper will finish applying the update once Twig exits.");
+      } else {
+        print_info("A background PowerShell helper will finish applying the update once Twig exits.");
+      }
+      print_success(&format!(
+        "Twig flow {latest_version} is staged and will complete installation shortly."
       ));
     }
   }
@@ -132,12 +209,14 @@ struct TargetConfig {
   os_markers: Vec<&'static str>,
   arch_markers: Vec<&'static str>,
   archive_extension: &'static str,
-  binary_name: &'static str,
+  binary_name: String,
 }
 
 impl TargetConfig {
   fn product_name(&self) -> &str {
-    self.binary_name.strip_suffix(".exe").unwrap_or(self.binary_name)
+    self.binary_name
+      .strip_suffix(".exe")
+      .unwrap_or(&self.binary_name)
   }
 
   fn matches(&self, asset: &GithubAsset) -> bool {
@@ -174,7 +253,7 @@ impl TargetConfig {
   }
 }
 
-fn target_config() -> Result<TargetConfig> {
+fn target_config(binary_name: &str) -> Result<TargetConfig> {
   let arch_markers = match std::env::consts::ARCH {
     "x86_64" => vec!["x86_64", "amd64"],
     "aarch64" => vec!["aarch64", "arm64"],
@@ -186,19 +265,23 @@ fn target_config() -> Result<TargetConfig> {
       os_markers: vec!["linux"],
       arch_markers,
       archive_extension: ".tar.gz",
-      binary_name: "twig",
+      binary_name: binary_name.to_string(),
     }),
     "macos" => Ok(TargetConfig {
       os_markers: vec!["macos", "darwin"],
       arch_markers,
       archive_extension: ".tar.gz",
-      binary_name: "twig",
+      binary_name: binary_name.to_string(),
     }),
     "windows" => Ok(TargetConfig {
       os_markers: vec!["windows"],
       arch_markers,
       archive_extension: ".zip",
-      binary_name: "twig.exe",
+      binary_name: if binary_name.ends_with(".exe") {
+        binary_name.to_string()
+      } else {
+        format!("{binary_name}.exe")
+      },
     }),
     other => Err(anyhow!("Unsupported operating system: {other}")),
   }
@@ -226,8 +309,8 @@ fn download_asset(client: &Client, asset: &GithubAsset, staging_root: &Path) -> 
 
 fn extract_archive(archive_path: &Path, staging_root: &Path, target: &TargetConfig) -> Result<PathBuf> {
   match target.archive_extension {
-    ".tar.gz" => extract_tarball(archive_path, staging_root, target.binary_name),
-    ".zip" => extract_zip(archive_path, staging_root, target.binary_name),
+    ".tar.gz" => extract_tarball(archive_path, staging_root, &target.binary_name),
+    ".zip" => extract_zip(archive_path, staging_root, &target.binary_name),
     other => Err(anyhow!("Unsupported archive format: {other}")),
   }
 }
@@ -304,6 +387,55 @@ fn install_new_binary(binary_path: &Path) -> Result<InstallOutcome> {
   platform::install_new_binary(binary_path, &current_exe)
 }
 
+fn install_plugin_binary(binary_path: &Path, install_path: &Path) -> Result<InstallOutcome> {
+  platform::install_new_binary(binary_path, install_path)
+}
+
+fn flow_plugin_install_path(target: &TargetConfig) -> Result<PathBuf> {
+  let current_exe = std::env::current_exe().context("Failed to locate current executable")?;
+  let parent = current_exe
+    .parent()
+    .ok_or_else(|| anyhow!("Executable path has no parent directory"))?;
+  Ok(parent.join(&target.binary_name))
+}
+
+fn read_installed_plugin_version(path: &Path) -> Result<Option<String>> {
+  if !path.exists() {
+    return Ok(None);
+  }
+
+  let output = std::process::Command::new(path).arg("--version").output();
+  let Ok(output) = output else {
+    return Ok(None);
+  };
+
+  if !output.status.success() {
+    return Ok(None);
+  }
+
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  Ok(extract_version_from_output(&stdout))
+}
+
+fn extract_version_from_output(output: &str) -> Option<String> {
+  output
+    .split_whitespace()
+    .find(|token| token.chars().next().is_some_and(|ch| ch.is_ascii_digit()))
+    .map(|token| token.trim_matches(|ch: char| !ch.is_ascii_digit() && ch != '.').to_string())
+}
+
+fn path_contains_dir(directory: Option<&Path>) -> bool {
+  let Some(directory) = directory else {
+    return false;
+  };
+  let path_var = std::env::var_os("PATH");
+  let Some(path_var) = path_var.as_deref() else {
+    return false;
+  };
+
+  std::env::split_paths(path_var).any(|path| path == directory)
+}
+
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]
@@ -333,14 +465,14 @@ mod platform {
 
 #[cfg(test)]
 mod tests {
-  use super::{GithubAsset, TargetConfig};
+  use super::{GithubAsset, TargetConfig, extract_version_from_output};
 
-  fn linux_target() -> TargetConfig {
+  fn linux_target(binary_name: &'static str) -> TargetConfig {
     TargetConfig {
       os_markers: vec!["linux"],
       arch_markers: vec!["x86_64", "amd64"],
       archive_extension: ".tar.gz",
-      binary_name: "twig",
+      binary_name: binary_name.to_string(),
     }
   }
 
@@ -353,13 +485,27 @@ mod tests {
 
   #[test]
   fn selects_primary_linux_asset() {
-    let target = linux_target();
+    let target = linux_target("twig");
     assert!(target.matches(&asset("twig-linux-x86_64-v0.1.0.tar.gz")));
   }
 
   #[test]
   fn ignores_twig_flow_asset() {
-    let target = linux_target();
+    let target = linux_target("twig");
     assert!(!target.matches(&asset("twig-flow-linux-x86_64-v0.1.0.tar.gz")));
+  }
+
+  #[test]
+  fn selects_twig_flow_asset() {
+    let target = linux_target("twig-flow");
+    assert!(target.matches(&asset("twig-flow-linux-x86_64-v0.1.0.tar.gz")));
+  }
+
+  #[test]
+  fn parses_version_from_output() {
+    assert_eq!(
+      extract_version_from_output("twig-flow 0.2.3\n").as_deref(),
+      Some("0.2.3")
+    );
   }
 }
