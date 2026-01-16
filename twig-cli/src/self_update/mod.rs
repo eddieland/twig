@@ -104,10 +104,11 @@ pub fn run_flow_plugin_install(options: PluginInstallOptions) -> Result<()> {
 
   if !options.force
     && let Some(installed_version) = read_installed_plugin_version(&install_path)?
-      && installed_version == latest_version {
-        print_success("Twig flow plugin is already up to date.");
-        return Ok(());
-      }
+    && installed_version == latest_version
+  {
+    print_success("Twig flow plugin is already up to date.");
+    return Ok(());
+  }
 
   let asset = release
     .find_matching_asset(&target)
