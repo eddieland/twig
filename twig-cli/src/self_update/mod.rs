@@ -227,20 +227,25 @@ impl TargetConfig {
 
     let trimmed = name.strip_suffix(self.archive_extension).unwrap_or(&name);
     let parts: Vec<_> = trimmed.split('-').collect();
-    if parts.len() < 3 {
+    let product_parts: Vec<_> = self.product_name().split('-').collect();
+    let expected_parts_len = product_parts.len() + 2;
+    if parts.len() < expected_parts_len {
       return false;
     }
 
-    if parts[0] != self.product_name() {
+    let product_segment = product_parts.join("-");
+    let asset_product = parts[..product_parts.len()].join("-");
+    if asset_product != product_segment {
       return false;
     }
 
-    let os_match = self.os_markers.iter().any(|marker| parts[1].contains(marker));
+    let os_segment = parts[product_parts.len()];
+    let os_match = self.os_markers.iter().any(|marker| os_segment.contains(marker));
     if !os_match {
       return false;
     }
 
-    let arch_segment = parts[2];
+    let arch_segment = parts[product_parts.len() + 1];
 
     let mut arch_match = self.arch_markers.iter().any(|marker| arch_segment.contains(marker));
 
