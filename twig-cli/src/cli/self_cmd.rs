@@ -8,7 +8,7 @@ use clap::{Args, Subcommand};
 use twig_core::output::{format_command, print_header, print_info, print_warning};
 
 use super::completion;
-use crate::self_update::{SelfUpdateOptions, run as run_self_update};
+use crate::self_update::{PluginInstallOptions, SelfUpdateOptions, run as run_self_update, run_flow_plugin_install};
 use crate::{diagnostics, plugin};
 
 /// Arguments for the top-level `twig self` command.
@@ -22,15 +22,16 @@ pub struct SelfArgs {
 /// Subcommands available under `twig self`.
 #[derive(Subcommand)]
 pub enum SelfSubcommand {
-  /// Update the Twig binary to the latest release
+  /// Update Twig or its plugins to the latest release
   #[command(
     long_about = "Download the latest Twig release from GitHub and replace the current executable.\n\n\
-This command determines the platform-specific binary to download, verifies permissions,\
-handles sudo elevation when required, and ensures that the running executable is swapped\
-out safely once the update completes."
+This command determines the platform-specific binary to download, verifies permissions,\n\
+handles sudo elevation when required, and ensures that the running executable is swapped\n\
+out safely once the update completes.\n\n\
+Use `twig self update flow` to install or update the flow plugin instead."
   )]
   #[command(alias = "upgrade")]
-  Update(SelfUpdateCommand),
+  Update(SelfUpdateArgs),
 
   /// Run system diagnostics
   #[command(
@@ -58,27 +59,44 @@ Twig can locate your installed plugins."
   Plugins,
 }
 
-/// Options for `twig self update`.
+/// Arguments for `twig self update`.
 #[derive(Args, Debug, Clone)]
-pub struct SelfUpdateCommand {
+pub struct SelfUpdateArgs {
   /// Reinstall even if the latest version is already installed
   #[arg(long)]
   pub force: bool,
+
+  /// What to update
+  #[command(subcommand)]
+  pub target: Option<UpdateTarget>,
 }
 
-impl From<SelfUpdateCommand> for SelfUpdateOptions {
-  fn from(value: SelfUpdateCommand) -> Self {
-    SelfUpdateOptions { force: value.force }
-  }
+/// Target for `twig self update` subcommands.
+#[derive(Subcommand, Debug, Clone)]
+pub enum UpdateTarget {
+  /// Install or update the Twig flow plugin
+  #[command(
+    long_about = "Download the latest Twig flow plugin release from GitHub and install it alongside\n\
+the Twig executable so it can be discovered via your PATH. Use this when you want to\n\
+install or update the built-in flow plugin binary."
+  )]
+  Flow,
 }
 
 /// Execute a `twig self` command.
 pub fn handle_self_command(args: SelfArgs) -> Result<()> {
   match args.command {
-    SelfSubcommand::Update(cmd) => run_self_update(cmd.into()),
+    SelfSubcommand::Update(cmd) => handle_update_command(cmd),
     SelfSubcommand::Diagnose => diagnostics::run_diagnostics(),
     SelfSubcommand::Completion(cmd) => completion::handle_completion_command(cmd),
     SelfSubcommand::Plugins => list_plugins(),
+  }
+}
+
+fn handle_update_command(args: SelfUpdateArgs) -> Result<()> {
+  match args.target {
+    None => run_self_update(SelfUpdateOptions { force: args.force }),
+    Some(UpdateTarget::Flow) => run_flow_plugin_install(PluginInstallOptions { force: args.force }),
   }
 }
 
