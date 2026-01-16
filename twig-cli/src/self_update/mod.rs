@@ -102,23 +102,18 @@ pub fn run_flow_plugin_install(options: PluginInstallOptions) -> Result<()> {
   let latest_version = release.clean_tag();
   let install_path = flow_plugin_install_path(&target)?;
 
-  if !options.force {
-    if let Some(installed_version) = read_installed_plugin_version(&install_path)? {
-      if installed_version == latest_version {
+  if !options.force
+    && let Some(installed_version) = read_installed_plugin_version(&install_path)?
+      && installed_version == latest_version {
         print_success("Twig flow plugin is already up to date.");
         return Ok(());
       }
-    }
-  }
 
   let asset = release
     .find_matching_asset(&target)
     .ok_or_else(|| anyhow!("No Twig flow plugin asset available for this platform"))?;
 
-  print_info(&format!(
-    "Downloading Twig flow {latest_version} ({})…",
-    asset.name
-  ));
+  print_info(&format!("Downloading Twig flow {latest_version} ({})…", asset.name));
 
   let staging_root = create_staging_directory()?;
   let archive_path = download_asset(&client, asset, &staging_root)?;
@@ -214,9 +209,7 @@ struct TargetConfig {
 
 impl TargetConfig {
   fn product_name(&self) -> &str {
-    self.binary_name
-      .strip_suffix(".exe")
-      .unwrap_or(&self.binary_name)
+    self.binary_name.strip_suffix(".exe").unwrap_or(&self.binary_name)
   }
 
   fn matches(&self, asset: &GithubAsset) -> bool {
@@ -426,7 +419,11 @@ fn extract_version_from_output(output: &str) -> Option<String> {
   output
     .split_whitespace()
     .find(|token| token.chars().next().is_some_and(|ch| ch.is_ascii_digit()))
-    .map(|token| token.trim_matches(|ch: char| !ch.is_ascii_digit() && ch != '.').to_string())
+    .map(|token| {
+      token
+        .trim_matches(|ch: char| !ch.is_ascii_digit() && ch != '.')
+        .to_string()
+    })
 }
 
 fn path_contains_dir(directory: Option<&Path>) -> bool {

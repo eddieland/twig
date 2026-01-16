@@ -8,9 +8,7 @@ use clap::{Args, Subcommand};
 use twig_core::output::{format_command, print_header, print_info, print_warning};
 
 use super::completion;
-use crate::self_update::{
-  PluginInstallOptions, SelfUpdateOptions, run as run_self_update, run_flow_plugin_install,
-};
+use crate::self_update::{PluginInstallOptions, SelfUpdateOptions, run as run_self_update, run_flow_plugin_install};
 use crate::{diagnostics, plugin};
 
 /// Arguments for the top-level `twig self` command.
