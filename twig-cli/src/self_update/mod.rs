@@ -19,15 +19,15 @@ use twig_core::output::{print_info, print_success, print_warning};
 use uuid::Uuid;
 use zip::ZipArchive;
 
-#[derive(Debug, Clone)]
 /// Options controlling how the `twig self update` command behaves.
+#[derive(Debug, Clone)]
 pub struct SelfUpdateOptions {
   /// Install the latest release even if the current version matches.
   pub force: bool,
 }
 
+/// Options controlling how `twig self update flow` behaves.
 #[derive(Debug, Clone)]
-/// Options controlling how `twig self flow` behaves.
 pub struct PluginInstallOptions {
   /// Reinstall even if the installed plugin already matches the latest release.
   pub force: bool,
@@ -157,6 +157,7 @@ pub fn run_flow_plugin_install(options: PluginInstallOptions) -> Result<()> {
   Ok(())
 }
 
+/// Constructs an HTTP client configured with a descriptive User-Agent header.
 fn build_http_client() -> Result<Client> {
   Client::builder()
     .user_agent(format!(
@@ -167,28 +168,37 @@ fn build_http_client() -> Result<Client> {
     .context("Failed to construct HTTP client")
 }
 
+/// A GitHub release returned by the Releases API.
 #[derive(Debug, Deserialize)]
 struct GithubRelease {
+  /// The release tag, typically in the form `vX.Y.Z`.
   tag_name: String,
+  /// Downloadable assets attached to the release.
   assets: Vec<GithubAsset>,
 }
 
 impl GithubRelease {
+  /// Returns the version string without a leading `v` prefix.
   fn clean_tag(&self) -> String {
     self.tag_name.trim_start_matches('v').to_string()
   }
 
+  /// Finds the first asset whose name matches the given [`TargetConfig`].
   fn find_matching_asset<'a>(&'a self, target: &TargetConfig) -> Option<&'a GithubAsset> {
     self.assets.iter().find(|asset| target.matches(asset))
   }
 }
 
+/// A downloadable asset attached to a GitHub release.
 #[derive(Debug, Deserialize)]
 struct GithubAsset {
+  /// Filename of the asset (e.g., `twig-linux-x86_64-v0.5.0.tar.gz`).
   name: String,
+  /// Direct download URL for the asset.
   browser_download_url: String,
 }
 
+/// Fetches the latest Twig release metadata from the GitHub Releases API.
 fn fetch_latest_release(client: &Client) -> Result<GithubRelease> {
   client
     .get("https://api.github.com/repos/eddieland/twig/releases/latest")
@@ -200,19 +210,34 @@ fn fetch_latest_release(client: &Client) -> Result<GithubRelease> {
     .context("Failed to deserialize GitHub Releases response")
 }
 
+/// Platform-specific configuration for selecting and extracting release assets.
+///
+/// This struct encapsulates the conventions used to name release archives so
+/// that the correct asset can be selected for the current OS and architecture.
 #[derive(Debug)]
 struct TargetConfig {
+  /// Substrings that identify a matching operating system (e.g., `["linux"]`).
   os_markers: Vec<&'static str>,
+  /// Substrings that identify a matching CPU architecture (e.g., `["x86_64",
+  /// "amd64"]`).
   arch_markers: Vec<&'static str>,
+  /// Expected archive extension (e.g., `.tar.gz` or `.zip`).
   archive_extension: &'static str,
+  /// Name of the binary inside the archive (includes `.exe` suffix on Windows).
   binary_name: String,
 }
 
 impl TargetConfig {
+  /// Returns the product name without any platform-specific suffix.
   fn product_name(&self) -> &str {
     self.binary_name.strip_suffix(".exe").unwrap_or(&self.binary_name)
   }
 
+  /// Returns `true` if the asset filename matches this target configuration.
+  ///
+  /// Matching is case-insensitive and checks the archive extension, product
+  /// name, OS marker, and architecture marker. On macOS, `universal` builds
+  /// are accepted for any architecture.
   fn matches(&self, asset: &GithubAsset) -> bool {
     let name = asset.name.to_lowercase();
     if !name.ends_with(self.archive_extension) {
@@ -252,6 +277,10 @@ impl TargetConfig {
   }
 }
 
+/// Builds a [`TargetConfig`] for the given binary name based on the current
+/// platform.
+///
+/// Returns an error if the current operating system is not supported.
 fn target_config(binary_name: &str) -> Result<TargetConfig> {
   let arch_markers = match std::env::consts::ARCH {
     "x86_64" => vec!["x86_64", "amd64"],
@@ -286,12 +315,16 @@ fn target_config(binary_name: &str) -> Result<TargetConfig> {
   }
 }
 
+/// Creates a uniquely named temporary directory for staging downloaded files.
 fn create_staging_directory() -> Result<PathBuf> {
   let staging = std::env::temp_dir().join(format!("twig-update-{}", Uuid::new_v4()));
   fs::create_dir_all(&staging).context("Failed to create staging directory")?;
   Ok(staging)
 }
 
+/// Downloads a release asset to the staging directory.
+///
+/// Returns the path to the downloaded archive file.
 fn download_asset(client: &Client, asset: &GithubAsset, staging_root: &Path) -> Result<PathBuf> {
   let archive_path = staging_root.join(&asset.name);
   let mut response = client
@@ -306,6 +339,10 @@ fn download_asset(client: &Client, asset: &GithubAsset, staging_root: &Path) -> 
   Ok(archive_path)
 }
 
+/// Extracts the target binary from an archive, dispatching to the appropriate
+/// format handler.
+///
+/// Returns the path to the extracted binary.
 fn extract_archive(archive_path: &Path, staging_root: &Path, target: &TargetConfig) -> Result<PathBuf> {
   match target.archive_extension {
     ".tar.gz" => extract_tarball(archive_path, staging_root, &target.binary_name),
@@ -314,6 +351,7 @@ fn extract_archive(archive_path: &Path, staging_root: &Path, target: &TargetConf
   }
 }
 
+/// Extracts a binary from a gzipped tarball.
 fn extract_tarball(archive_path: &Path, staging_root: &Path, binary_name: &str) -> Result<PathBuf> {
   let file = File::open(archive_path).with_context(|| format!("Failed to open {}", archive_path.display()))?;
   let decoder = GzDecoder::new(file);
@@ -344,6 +382,7 @@ fn extract_tarball(archive_path: &Path, staging_root: &Path, binary_name: &str) 
   Ok(extracted)
 }
 
+/// Extracts a binary from a zip archive (used on Windows).
 fn extract_zip(archive_path: &Path, staging_root: &Path, binary_name: &str) -> Result<PathBuf> {
   let file = File::open(archive_path).with_context(|| format!("Failed to open {}", archive_path.display()))?;
   let mut archive = ZipArchive::new(file).context("Invalid zip archive")?;
@@ -373,23 +412,40 @@ fn extract_zip(archive_path: &Path, staging_root: &Path, binary_name: &str) -> R
   Err(anyhow!("Binary {binary_name} not found in archive"))
 }
 
+/// Indicates whether the binary installation completed immediately or was
+/// deferred.
+///
+/// On Unix, installation is always immediate via atomic rename. On Windows, if
+/// the running executable is locked, installation is deferred to a background
+/// process that waits for Twig to exit before completing the replacement.
 enum InstallOutcome {
+  /// The new binary was installed immediately.
   #[cfg_attr(windows, allow(dead_code))]
   Immediate,
+  /// Installation was deferred to a background process (Windows only).
   #[cfg(windows)]
-  Deferred { elevated: bool },
+  Deferred {
+    /// Whether the deferred process required elevation.
+    elevated: bool,
+  },
 }
 
+/// Installs a new binary to replace the currently running Twig executable.
 fn install_new_binary(binary_path: &Path) -> Result<InstallOutcome> {
   let current_exe = std::env::current_exe().context("Failed to locate current executable")?;
 
   platform::install_new_binary(binary_path, &current_exe)
 }
 
+/// Installs a plugin binary to the specified path.
 fn install_plugin_binary(binary_path: &Path, install_path: &Path) -> Result<InstallOutcome> {
   platform::install_new_binary(binary_path, install_path)
 }
 
+/// Returns the path where the flow plugin should be installed.
+///
+/// Places the plugin in the same directory as the Twig executable so it can
+/// be discovered via PATH.
 fn flow_plugin_install_path(target: &TargetConfig) -> Result<PathBuf> {
   let current_exe = std::env::current_exe().context("Failed to locate current executable")?;
   let parent = current_exe
@@ -398,6 +454,10 @@ fn flow_plugin_install_path(target: &TargetConfig) -> Result<PathBuf> {
   Ok(parent.join(&target.binary_name))
 }
 
+/// Reads the version of an installed plugin by invoking it with `--version`.
+///
+/// Returns `Ok(None)` if the plugin does not exist or cannot report its
+/// version.
 fn read_installed_plugin_version(path: &Path) -> Result<Option<String>> {
   if !path.exists() {
     return Ok(None);
@@ -416,6 +476,10 @@ fn read_installed_plugin_version(path: &Path) -> Result<Option<String>> {
   Ok(extract_version_from_output(&stdout))
 }
 
+/// Parses a version number from command output like `twig-flow 0.2.3`.
+///
+/// Looks for the first whitespace-separated token that starts with an ASCII
+/// digit, then strips any non-version characters from the ends.
 fn extract_version_from_output(output: &str) -> Option<String> {
   output
     .split_whitespace()
@@ -427,6 +491,7 @@ fn extract_version_from_output(output: &str) -> Option<String> {
     })
 }
 
+/// Checks whether a directory is present in the `PATH` environment variable.
 fn path_contains_dir(directory: Option<&Path>) -> bool {
   let Some(directory) = directory else {
     return false;
@@ -468,13 +533,31 @@ mod platform {
 
 #[cfg(test)]
 mod tests {
-  use super::{GithubAsset, TargetConfig, extract_version_from_output};
+  use super::{GithubAsset, GithubRelease, TargetConfig, extract_version_from_output, path_contains_dir};
 
-  fn linux_target(binary_name: &'static str) -> TargetConfig {
+  fn linux_target(binary_name: &str) -> TargetConfig {
     TargetConfig {
       os_markers: vec!["linux"],
       arch_markers: vec!["x86_64", "amd64"],
       archive_extension: ".tar.gz",
+      binary_name: binary_name.to_string(),
+    }
+  }
+
+  fn macos_target(binary_name: &str) -> TargetConfig {
+    TargetConfig {
+      os_markers: vec!["macos", "darwin"],
+      arch_markers: vec!["aarch64", "arm64"],
+      archive_extension: ".tar.gz",
+      binary_name: binary_name.to_string(),
+    }
+  }
+
+  fn windows_target(binary_name: &str) -> TargetConfig {
+    TargetConfig {
+      os_markers: vec!["windows"],
+      arch_markers: vec!["x86_64", "amd64"],
+      archive_extension: ".zip",
       binary_name: binary_name.to_string(),
     }
   }
@@ -486,6 +569,74 @@ mod tests {
     }
   }
 
+  fn release(tag_name: &str, assets: Vec<GithubAsset>) -> GithubRelease {
+    GithubRelease {
+      tag_name: tag_name.to_string(),
+      assets,
+    }
+  }
+
+  // GithubRelease::clean_tag tests
+  #[test]
+  fn clean_tag_strips_v_prefix() {
+    let r = release("v1.2.3", vec![]);
+    assert_eq!(r.clean_tag(), "1.2.3");
+  }
+
+  #[test]
+  fn clean_tag_handles_no_prefix() {
+    let r = release("1.2.3", vec![]);
+    assert_eq!(r.clean_tag(), "1.2.3");
+  }
+
+  #[test]
+  fn clean_tag_strips_multiple_v_prefixes() {
+    let r = release("vvv1.0.0", vec![]);
+    assert_eq!(r.clean_tag(), "1.0.0");
+  }
+
+  // GithubRelease::find_matching_asset tests
+  #[test]
+  fn find_matching_asset_returns_match() {
+    let assets = vec![
+      asset("twig-linux-x86_64-v0.1.0.tar.gz"),
+      asset("twig-windows-x86_64-v0.1.0.zip"),
+    ];
+    let r = release("v0.1.0", assets);
+    let target = linux_target("twig");
+    let found = r.find_matching_asset(&target);
+    assert!(found.is_some());
+    assert_eq!(found.map(|a| a.name.as_str()), Some("twig-linux-x86_64-v0.1.0.tar.gz"));
+  }
+
+  #[test]
+  fn find_matching_asset_returns_none_when_no_match() {
+    let assets = vec![asset("twig-windows-x86_64-v0.1.0.zip")];
+    let r = release("v0.1.0", assets);
+    let target = linux_target("twig");
+    assert!(r.find_matching_asset(&target).is_none());
+  }
+
+  // TargetConfig::product_name tests
+  #[test]
+  fn product_name_strips_exe_suffix() {
+    let target = windows_target("twig.exe");
+    assert_eq!(target.product_name(), "twig");
+  }
+
+  #[test]
+  fn product_name_returns_name_without_exe() {
+    let target = linux_target("twig");
+    assert_eq!(target.product_name(), "twig");
+  }
+
+  #[test]
+  fn product_name_handles_hyphenated_binary() {
+    let target = linux_target("twig-flow");
+    assert_eq!(target.product_name(), "twig-flow");
+  }
+
+  // TargetConfig::matches tests - Linux
   #[test]
   fn selects_primary_linux_asset() {
     let target = linux_target("twig");
@@ -505,10 +656,161 @@ mod tests {
   }
 
   #[test]
+  fn linux_rejects_wrong_extension() {
+    let target = linux_target("twig");
+    assert!(!target.matches(&asset("twig-linux-x86_64-v0.1.0.zip")));
+  }
+
+  #[test]
+  fn linux_rejects_wrong_os() {
+    let target = linux_target("twig");
+    assert!(!target.matches(&asset("twig-windows-x86_64-v0.1.0.tar.gz")));
+  }
+
+  #[test]
+  fn linux_rejects_wrong_arch() {
+    let target = linux_target("twig");
+    assert!(!target.matches(&asset("twig-linux-aarch64-v0.1.0.tar.gz")));
+  }
+
+  #[test]
+  fn linux_accepts_amd64_alias() {
+    let target = linux_target("twig");
+    assert!(target.matches(&asset("twig-linux-amd64-v0.1.0.tar.gz")));
+  }
+
+  // TargetConfig::matches tests - macOS
+  #[test]
+  fn macos_accepts_darwin_marker() {
+    let target = macos_target("twig");
+    assert!(target.matches(&asset("twig-darwin-arm64-v0.1.0.tar.gz")));
+  }
+
+  #[test]
+  fn macos_accepts_macos_marker() {
+    let target = macos_target("twig");
+    assert!(target.matches(&asset("twig-macos-arm64-v0.1.0.tar.gz")));
+  }
+
+  #[test]
+  fn macos_accepts_universal_build() {
+    let target = macos_target("twig");
+    assert!(target.matches(&asset("twig-macos-universal-v0.1.0.tar.gz")));
+  }
+
+  #[test]
+  fn macos_accepts_aarch64_alias() {
+    let target = macos_target("twig");
+    assert!(target.matches(&asset("twig-macos-aarch64-v0.1.0.tar.gz")));
+  }
+
+  // TargetConfig::matches tests - Windows
+  #[test]
+  fn windows_selects_zip_asset() {
+    let target = windows_target("twig.exe");
+    assert!(target.matches(&asset("twig-windows-x86_64-v0.1.0.zip")));
+  }
+
+  #[test]
+  fn windows_rejects_tarball() {
+    let target = windows_target("twig.exe");
+    assert!(!target.matches(&asset("twig-windows-x86_64-v0.1.0.tar.gz")));
+  }
+
+  // TargetConfig::matches tests - case insensitivity
+  #[test]
+  fn matches_is_case_insensitive() {
+    let target = linux_target("twig");
+    assert!(target.matches(&asset("TWIG-LINUX-X86_64-V0.1.0.TAR.GZ")));
+  }
+
+  #[test]
+  fn matches_handles_mixed_case() {
+    let target = linux_target("twig");
+    assert!(target.matches(&asset("Twig-Linux-X86_64-v0.1.0.tar.gz")));
+  }
+
+  // TargetConfig::matches tests - edge cases
+  #[test]
+  fn rejects_asset_with_too_few_parts() {
+    let target = linux_target("twig");
+    assert!(!target.matches(&asset("twig-linux.tar.gz")));
+  }
+
+  #[test]
+  fn rejects_empty_asset_name() {
+    let target = linux_target("twig");
+    assert!(!target.matches(&asset("")));
+  }
+
+  #[test]
+  fn universal_not_accepted_for_linux() {
+    // Universal builds are macOS-specific
+    let target = linux_target("twig");
+    assert!(!target.matches(&asset("twig-linux-universal-v0.1.0.tar.gz")));
+  }
+
+  // extract_version_from_output tests
+  #[test]
   fn parses_version_from_output() {
     assert_eq!(
       extract_version_from_output("twig-flow 0.2.3\n").as_deref(),
       Some("0.2.3")
     );
+  }
+
+  #[test]
+  fn parses_version_with_leading_text() {
+    assert_eq!(extract_version_from_output("version 1.0.0").as_deref(), Some("1.0.0"));
+  }
+
+  #[test]
+  fn parses_version_trims_trailing_chars() {
+    assert_eq!(extract_version_from_output("twig 1.2.3-beta").as_deref(), Some("1.2.3"));
+  }
+
+  #[test]
+  fn version_returns_none_for_empty_output() {
+    assert_eq!(extract_version_from_output(""), None);
+  }
+
+  #[test]
+  fn version_returns_none_for_no_version() {
+    assert_eq!(extract_version_from_output("no version here"), None);
+  }
+
+  #[test]
+  fn version_returns_none_for_only_letters() {
+    assert_eq!(extract_version_from_output("twig flow"), None);
+  }
+
+  #[test]
+  fn parses_version_at_start() {
+    assert_eq!(
+      extract_version_from_output("1.0.0 is the version").as_deref(),
+      Some("1.0.0")
+    );
+  }
+
+  #[test]
+  fn parses_multiline_version_output() {
+    assert_eq!(
+      extract_version_from_output("twig-flow\nversion 2.0.0\nbuilt on date").as_deref(),
+      Some("2.0.0")
+    );
+  }
+
+  // path_contains_dir tests
+  #[test]
+  fn path_contains_dir_returns_false_for_none() {
+    assert!(!path_contains_dir(None));
+  }
+
+  #[test]
+  fn path_contains_dir_returns_false_for_missing_dir() {
+    use std::path::Path;
+    // Use a path that almost certainly isn't in PATH
+    let fake_dir = Path::new("/this/path/should/not/exist/in/path/env/var");
+    assert!(!path_contains_dir(Some(fake_dir)));
   }
 }
