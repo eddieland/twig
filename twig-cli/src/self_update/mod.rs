@@ -813,4 +813,126 @@ mod tests {
     let fake_dir = Path::new("/this/path/should/not/exist/in/path/env/var");
     assert!(!path_contains_dir(Some(fake_dir)));
   }
+
+  #[test]
+  fn selects_twig_when_flow_comes_first() {
+    // Simulates the exact v0.5.2 release asset ordering
+    let assets = vec![
+      // twig-flow assets come FIRST (alphabetically/by upload order)
+      asset("twig-flow-linux-x86_64-v0.5.2.tar.gz"),
+      asset("twig-flow-linux-x86_64-v0.5.2.tar.gz.sha256"),
+      asset("twig-flow-macos-x86_64-v0.5.2.tar.gz"),
+      asset("twig-flow-macos-x86_64-v0.5.2.tar.gz.sha256"),
+      asset("twig-flow-windows-x86_64-v0.5.2.zip"),
+      asset("twig-flow-windows-x86_64-v0.5.2.zip.sha256"),
+      // twig assets come AFTER
+      asset("twig-linux-x86_64-v0.5.2.tar.gz"),
+      asset("twig-linux-x86_64-v0.5.2.tar.gz.sha256"),
+      asset("twig-macos-x86_64-v0.5.2.tar.gz"),
+      asset("twig-macos-x86_64-v0.5.2.tar.gz.sha256"),
+      asset("twig-windows-x86_64-v0.5.2.zip"),
+      asset("twig-windows-x86_64-v0.5.2.zip.sha256"),
+    ];
+    let r = release("v0.5.2", assets);
+    let target = linux_target("twig");
+    let found = r.find_matching_asset(&target);
+    assert!(found.is_some(), "Should find an asset");
+    assert_eq!(
+      found.map(|a| a.name.as_str()),
+      Some("twig-linux-x86_64-v0.5.2.tar.gz"),
+      "Should select twig, not twig-flow"
+    );
+  }
+
+  #[test]
+  fn selects_twig_flow_when_requested() {
+    // When we actually want twig-flow, it should be selected correctly
+    let assets = vec![
+      asset("twig-flow-linux-x86_64-v0.5.2.tar.gz"),
+      asset("twig-linux-x86_64-v0.5.2.tar.gz"),
+    ];
+    let r = release("v0.5.2", assets);
+    let target = linux_target("twig-flow");
+    let found = r.find_matching_asset(&target);
+    assert!(found.is_some(), "Should find twig-flow asset");
+    assert_eq!(
+      found.map(|a| a.name.as_str()),
+      Some("twig-flow-linux-x86_64-v0.5.2.tar.gz"),
+      "Should select twig-flow"
+    );
+  }
+
+  #[test]
+  fn twig_flow_does_not_match_twig_target() {
+    // Explicit check that twig-flow asset doesn't match twig target
+    let target = linux_target("twig");
+    assert!(
+      !target.matches(&asset("twig-flow-linux-x86_64-v0.5.2.tar.gz")),
+      "twig-flow asset should not match twig target"
+    );
+  }
+
+  #[test]
+  fn twig_does_not_match_twig_flow_target() {
+    // And vice versa
+    let target = linux_target("twig-flow");
+    assert!(
+      !target.matches(&asset("twig-linux-x86_64-v0.5.2.tar.gz")),
+      "twig asset should not match twig-flow target"
+    );
+  }
+
+  #[test]
+  fn rejects_hypothetical_twig_plugin_when_looking_for_twig() {
+    // Test with hypothetical plugins to ensure the matching is strict
+    let target = linux_target("twig");
+    // These should all be rejected
+    assert!(!target.matches(&asset("twig-flow-linux-x86_64-v0.5.2.tar.gz")));
+    assert!(!target.matches(&asset("twig-extra-linux-x86_64-v0.5.2.tar.gz")));
+    assert!(!target.matches(&asset("twig-pro-linux-x86_64-v0.5.2.tar.gz")));
+    // But the actual twig asset should match
+    assert!(target.matches(&asset("twig-linux-x86_64-v0.5.2.tar.gz")));
+  }
+
+  #[test]
+  fn handles_multi_hyphen_plugin_names() {
+    // Test with a hypothetical multi-hyphen plugin name
+    let target = linux_target("twig-flow-extra");
+    assert!(target.matches(&asset("twig-flow-extra-linux-x86_64-v0.5.2.tar.gz")));
+    // Should not match shorter prefixes
+    assert!(!target.matches(&asset("twig-flow-linux-x86_64-v0.5.2.tar.gz")));
+    assert!(!target.matches(&asset("twig-linux-x86_64-v0.5.2.tar.gz")));
+  }
+
+  #[test]
+  fn windows_selects_correct_asset_with_mixed_plugins() {
+    let assets = vec![
+      asset("twig-flow-windows-x86_64-v0.5.2.zip"),
+      asset("twig-windows-x86_64-v0.5.2.zip"),
+    ];
+    let r = release("v0.5.2", assets);
+    let target = windows_target("twig.exe");
+    let found = r.find_matching_asset(&target);
+    assert_eq!(
+      found.map(|a| a.name.as_str()),
+      Some("twig-windows-x86_64-v0.5.2.zip"),
+      "Should select twig.zip, not twig-flow.zip"
+    );
+  }
+
+  #[test]
+  fn macos_selects_correct_asset_with_mixed_plugins() {
+    let assets = vec![
+      asset("twig-flow-macos-arm64-v0.5.2.tar.gz"),
+      asset("twig-macos-arm64-v0.5.2.tar.gz"),
+    ];
+    let r = release("v0.5.2", assets);
+    let target = macos_target("twig");
+    let found = r.find_matching_asset(&target);
+    assert_eq!(
+      found.map(|a| a.name.as_str()),
+      Some("twig-macos-arm64-v0.5.2.tar.gz"),
+      "Should select twig, not twig-flow on macOS"
+    );
+  }
 }
