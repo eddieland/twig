@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 use anyhow::Result;
-use git2::{BranchType, Repository, Signature};
+use git2::{BranchType, Repository, RepositoryInitOptions, Signature};
 use tempfile::TempDir;
 
 /// A test guard that creates a temporary git repository and
@@ -30,8 +30,11 @@ impl GitRepoTestGuard {
     let temp_dir = TempDir::new().expect("Failed to create temporary directory");
     let temp_path = temp_dir.path();
 
-    // Initialize a git repository in the temporary directory
-    let repo = Repository::init(temp_path).expect("Failed to initialize git repository");
+    // Initialize a git repository with explicit "main" branch to ensure
+    // consistent behavior across environments (GitHub Actions defaults to "master")
+    let mut opts = RepositoryInitOptions::new();
+    opts.initial_head("main");
+    let repo = Repository::init_opts(temp_path, &opts).expect("Failed to initialize git repository");
 
     // Set test user configuration
     let mut config = repo.config().expect("Failed to get repository config");
@@ -62,8 +65,11 @@ impl GitRepoTestGuard {
     let temp_dir = TempDir::new().expect("Failed to create temporary directory");
     let temp_path = temp_dir.path();
 
-    // Initialize a git repository in the temporary directory
-    let repo = Repository::init(temp_path).expect("Failed to initialize git repository");
+    // Initialize a git repository with explicit "main" branch to ensure
+    // consistent behavior across environments (GitHub Actions defaults to "master")
+    let mut opts = RepositoryInitOptions::new();
+    opts.initial_head("main");
+    let repo = Repository::init_opts(temp_path, &opts).expect("Failed to initialize git repository");
 
     // Set test user configuration
     let mut config = repo.config().expect("Failed to get repository config");
@@ -344,5 +350,18 @@ mod tests {
       std::fs::canonicalize(env::current_dir().unwrap()).unwrap(),
       original_dir
     );
+  }
+
+  #[test]
+  fn test_initial_branch_is_main() {
+    let git_repo = GitRepoTestGuard::new();
+
+    // Create a commit so HEAD exists
+    create_commit(&git_repo.repo, "test.txt", "content", "Initial commit").unwrap();
+
+    // Verify the current branch is "main"
+    let head = git_repo.repo.head().unwrap();
+    assert!(head.is_branch());
+    assert_eq!(head.shorthand(), Some("main"));
   }
 }
