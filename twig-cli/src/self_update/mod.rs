@@ -814,10 +814,6 @@ mod tests {
     assert!(!path_contains_dir(Some(fake_dir)));
   }
 
-  // Regression tests for v0.5.2 release scenario where twig-flow assets appear
-  // before twig assets. The v0.5.1 code had a bug where it would match any asset
-  // containing OS/arch markers in the filename, without checking the product name.
-
   #[test]
   fn selects_twig_when_flow_comes_first() {
     // Simulates the exact v0.5.2 release asset ordering
