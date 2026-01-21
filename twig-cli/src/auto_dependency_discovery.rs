@@ -223,8 +223,8 @@ impl AutoDependencyDiscovery {
     configured_roots: &HashSet<String>,
     _branches_with_children: &HashSet<String>,
   ) -> Option<(String, f64)> {
-    // (name, score, parent_drift, child_depth)
-    let mut best_candidates: Vec<(String, f64, usize, usize)> = Vec::new();
+    // (name, score, parent_drift, child_depth, is_ancestor)
+    let mut best_candidates: Vec<(String, f64, usize, usize, bool)> = Vec::new();
 
     for (candidate_name, (candidate_oid, _)) in candidates {
       if candidate_name == child_name {
@@ -236,27 +236,52 @@ impl AutoDependencyDiscovery {
         continue; // No common ancestor
       };
 
-      // CRITICAL: Verify that the candidate is actually an ancestor of the child.
-      // This prevents sibling branches (which share a fork point but neither is
-      // an ancestor of the other) from being suggested as parents.
-      //
-      // graph_descendant_of(child, candidate) returns true if candidate is an
-      // ancestor of child.
+      // Check if candidate is a direct ancestor of child
       let is_ancestor = repo.graph_descendant_of(child_oid, *candidate_oid).unwrap_or(false);
 
-      // If the candidate is not a direct ancestor, it might be:
-      // 1. A sibling branch (both branched from the same point) - REJECT
-      // 2. A parent branch that has advanced since the child branched - ALLOW if root
+      // Track if this is a non-ancestor candidate that passed stacked check
+      // (we'll need to verify the relationship direction later)
+      let mut is_non_ancestor_stacked = false;
+
+      // If not a direct ancestor, we need to distinguish between:
+      // 1. Sibling branches (both branched from the same base) - REJECT
+      // 2. Stacked parent that advanced (child was cut from candidate, then candidate
+      //    got new commits) - ALLOW
+      // 3. Child being considered as parent (relationship inverted) - REJECT later
       //
-      // We only allow non-ancestor candidates if they are configured root branches,
-      // as these are explicitly designated as base branches for the repository.
-      if !is_ancestor && !configured_roots.contains(candidate_name) {
-        debug!(
-          child = child_name,
-          candidate = candidate_name,
-          "Rejecting non-ancestor candidate (likely a sibling branch)"
-        );
-        continue;
+      // The key insight: for siblings, fork_point equals where both branches meet the
+      // root. For stacked branches, fork_point is further along the candidate's
+      // own history.
+      if !is_ancestor {
+        // Always allow configured root branches (they're explicitly designated as
+        // bases)
+        if !configured_roots.contains(candidate_name) {
+          // Check if this is a stacked relationship (not siblings)
+          // by seeing if fork_point differs from where candidate meets any root
+          let is_stacked = configured_roots.iter().any(|root_name| {
+            if let Some((root_oid, _)) = candidates.get(root_name) {
+              if let Ok(candidate_root_fork) = repo.merge_base(*candidate_oid, *root_oid) {
+                // If fork_point is different from where candidate meets root,
+                // child branched from candidate's own work (stacked), not from a shared base
+                fork_point != candidate_root_fork
+              } else {
+                false
+              }
+            } else {
+              false
+            }
+          });
+
+          if !is_stacked {
+            debug!(
+              child = child_name,
+              candidate = candidate_name,
+              "Rejecting non-ancestor candidate (likely a sibling branch)"
+            );
+            continue;
+          }
+          is_non_ancestor_stacked = true;
+        }
       }
 
       // Calculate how far the child is from the fork point (child_depth)
@@ -281,6 +306,29 @@ impl AutoDependencyDiscovery {
         continue;
       };
 
+      // For non-ancestor stacked candidates, verify the relationship direction.
+      // In a true parent-child relationship where the parent has advanced:
+      // - The parent should have advanced MORE than the child has progressed
+      // - If child_depth >= parent_drift, the relationship direction is ambiguous
+      //
+      // When child_depth == parent_drift, the git history is symmetric and we cannot
+      // reliably determine which branch is the parent. In this case, we fall back to
+      // preferring ancestors (like main) which are always reliable.
+      //
+      // For reliable stacked parent detection, the parent should advance by more
+      // commits than the child has made since branching (parent_drift >
+      // child_depth).
+      if is_non_ancestor_stacked && child_depth >= parent_drift {
+        debug!(
+          child = child_name,
+          candidate = candidate_name,
+          child_depth,
+          parent_drift,
+          "Rejecting non-ancestor candidate (ambiguous or inverted relationship)"
+        );
+        continue;
+      }
+
       // Reject if parent has drifted too far
       if parent_drift > MAX_PARENT_DRIFT {
         debug!(
@@ -296,7 +344,7 @@ impl AutoDependencyDiscovery {
       let score = 1.0 / (1.0 + parent_drift as f64);
 
       if score >= MIN_CONFIDENCE {
-        best_candidates.push((candidate_name.clone(), score, parent_drift, child_depth));
+        best_candidates.push((candidate_name.clone(), score, parent_drift, child_depth, is_ancestor));
       }
     }
 
@@ -304,23 +352,68 @@ impl AutoDependencyDiscovery {
       return None;
     }
 
+    // Find the best ancestor candidate's child_depth for filtering
+    // Non-ancestors should only beat ancestors when they have STRICTLY smaller
+    // child_depth
+    let best_ancestor_depth = best_candidates
+      .iter()
+      .filter(|(_, _, _, _, is_anc)| *is_anc)
+      .map(|(_, _, _, cd, _)| *cd)
+      .min();
+
+    // Filter out non-ancestors that don't have strictly smaller child_depth than
+    // the best ancestor This prevents sibling/child branches from incorrectly
+    // winning due to equal child_depth
+    if let Some(best_anc_depth) = best_ancestor_depth {
+      best_candidates.retain(|(_, _, _, cd, is_anc)| {
+        // Keep all ancestors
+        if *is_anc {
+          return true;
+        }
+        // Keep non-ancestors only if they have strictly smaller child_depth
+        *cd < best_anc_depth
+      });
+    }
+
+    if best_candidates.is_empty() {
+      return None;
+    }
+
     // Sort by tiebreaking criteria:
-    // 1. Higher score (smaller parent drift) first
-    // 2. Smaller child_depth (prefer more direct branching relationship)
-    // 3. Prefer configured root branches
-    // 4. Alphabetical (deterministic fallback)
+    // 1. Smaller child_depth (prefer most direct/closest parent in branch
+    //    hierarchy)
+    // 2. Prefer ancestors over non-ancestors (when child_depth is equal)
+    // 3. Higher score (smaller parent drift)
+    // 4. Prefer configured root branches
+    // 5. Alphabetical (deterministic fallback)
+    //
+    // IMPORTANT: child_depth is prioritized to correctly handle stacked workflows.
+    // When sub-feature branches from feature, and feature later advances, we want
+    // feature (child_depth=1) to win over main (child_depth=N). The ancestor check
+    // is used as a secondary tiebreaker when child_depths are equal.
     best_candidates.sort_by(|a, b| {
+      // Prefer smaller child_depth (more direct relationship)
+      // A smaller child_depth means the fork point is closer to the child,
+      // indicating a more immediate parent-child relationship in the branch hierarchy
+      let depth_cmp = a.3.cmp(&b.3);
+      if depth_cmp != std::cmp::Ordering::Equal {
+        return depth_cmp;
+      }
+
+      // When child_depths are equal, prefer ancestors over non-ancestors
+      // a.4 and b.4 are is_ancestor flags (true should come first)
+      if a.4 != b.4 {
+        return if a.4 {
+          std::cmp::Ordering::Less
+        } else {
+          std::cmp::Ordering::Greater
+        };
+      }
+
       // Compare scores (higher is better, meaning smaller parent drift)
       let score_cmp = b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal);
       if score_cmp != std::cmp::Ordering::Equal {
         return score_cmp;
-      }
-
-      // Prefer smaller child_depth (more direct relationship)
-      // A smaller child_depth means the child branched more directly from this parent
-      let depth_cmp = a.3.cmp(&b.3);
-      if depth_cmp != std::cmp::Ordering::Equal {
-        return depth_cmp;
       }
 
       // Prefer configured root branches
@@ -338,7 +431,7 @@ impl AutoDependencyDiscovery {
       a.0.cmp(&b.0)
     });
 
-    let (name, score, _drift, _depth) = best_candidates.into_iter().next()?;
+    let (name, score, _drift, _depth, _is_ancestor) = best_candidates.into_iter().next()?;
     Some((name, score))
   }
 
@@ -1326,6 +1419,160 @@ mod tests {
     assert!(
       suggestion.is_none() || suggestion.expect("is some").parent != "feature-a",
       "Should NOT suggest sibling feature-a as parent of feature-b"
+    );
+
+    Ok(())
+  }
+
+  /// Test: Stacked parent advances after child branch is cut - should still
+  /// find the parent.
+  ///
+  /// This is the key regression test for the conservative auto-adopt fix.
+  /// Scenario:
+  /// 1. main exists
+  /// 2. feature is created from main
+  /// 3. sub-feature is created from feature
+  /// 4. feature gets new commits (advances)
+  ///
+  /// At step 4, feature is no longer an ancestor of sub-feature, but feature
+  /// should still be suggested as sub-feature's parent because sub-feature
+  /// was cut from feature's history (not from main).
+  #[test]
+  fn test_stacked_parent_advancement() -> Result<()> {
+    let git_repo = GitRepoTestGuard::new();
+    let repo = &git_repo.repo;
+    let repo_path = git_repo.path();
+
+    // Create initial commit on main
+    create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
+    ensure_main_branch(repo)?;
+
+    // Create feature branch from main with some commits
+    create_branch(repo, "feature", Some("main"))?;
+    checkout_branch(repo, "feature")?;
+    create_commit(repo, "feature1.txt", "Feature 1", "Feature commit 1")?;
+    create_commit(repo, "feature2.txt", "Feature 2", "Feature commit 2")?;
+
+    // Create sub-feature from feature
+    create_branch(repo, "sub-feature", Some("feature"))?;
+    checkout_branch(repo, "sub-feature")?;
+    create_commit(repo, "sub_feature.txt", "Sub-feature content", "Sub-feature commit")?;
+
+    // Now advance feature by adding more commits (this is the key part!)
+    // After this, feature is NO LONGER an ancestor of sub-feature
+    checkout_branch(repo, "feature")?;
+    create_commit(repo, "feature3.txt", "Feature 3", "Feature commit 3")?;
+    create_commit(repo, "feature4.txt", "Feature 4", "Feature commit 4")?;
+
+    // Configure main as a root branch (needed to distinguish stacked from siblings)
+    let mut repo_state = RepoState::load(repo_path).unwrap_or_default();
+    let _ = repo_state.add_root("main".to_string(), true);
+    repo_state.save(repo_path)?;
+    let repo_state = RepoState::load(repo_path)?;
+
+    let discovery = AutoDependencyDiscovery;
+    let suggestions = discovery.suggest_dependencies(repo, &repo_state)?;
+
+    // sub-feature should get feature as parent (NOT main)
+    // Even though feature is no longer an ancestor of sub-feature,
+    // the fork-point analysis shows sub-feature was cut from feature's history
+    let suggestion = suggestions.iter().find(|s| s.child == "sub-feature");
+    assert!(suggestion.is_some(), "Should have suggestion for sub-feature");
+    assert_eq!(
+      suggestion.expect("checked above").parent,
+      "feature",
+      "Should suggest feature as parent of sub-feature, even though feature has advanced"
+    );
+
+    // feature should get main as parent
+    let suggestion_feature = suggestions.iter().find(|s| s.child == "feature");
+    assert!(suggestion_feature.is_some(), "Should have suggestion for feature");
+    assert_eq!(
+      suggestion_feature.expect("checked above").parent,
+      "main",
+      "Should suggest main as parent of feature"
+    );
+
+    Ok(())
+  }
+
+  /// Test: Deep stack where middle branch advances
+  ///
+  /// Scenario: main -> feature -> sub-feature -> sub-sub-feature
+  /// Then feature advances. Both sub-feature and sub-sub-feature should
+  /// still find their correct parents.
+  #[test]
+  fn test_deep_stack_with_middle_advancement() -> Result<()> {
+    let git_repo = GitRepoTestGuard::new();
+    let repo = &git_repo.repo;
+    let repo_path = git_repo.path();
+
+    // Create initial commit on main
+    create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
+    ensure_main_branch(repo)?;
+
+    // Create feature from main
+    create_branch(repo, "feature", Some("main"))?;
+    checkout_branch(repo, "feature")?;
+    create_commit(repo, "feature.txt", "Feature content", "Feature commit")?;
+
+    // Create sub-feature from feature
+    create_branch(repo, "sub-feature", Some("feature"))?;
+    checkout_branch(repo, "sub-feature")?;
+    create_commit(repo, "sub_feature.txt", "Sub-feature content", "Sub-feature commit")?;
+
+    // Create sub-sub-feature from sub-feature
+    create_branch(repo, "sub-sub-feature", Some("sub-feature"))?;
+    checkout_branch(repo, "sub-sub-feature")?;
+    create_commit(
+      repo,
+      "sub_sub_feature.txt",
+      "Sub-sub-feature content",
+      "Sub-sub-feature commit",
+    )?;
+
+    // Advance feature (middle of stack) by 2 commits
+    // This ensures parent_drift (2) > child_depth (1), making the relationship
+    // unambiguous
+    checkout_branch(repo, "feature")?;
+    create_commit(repo, "feature2.txt", "Feature 2", "Feature commit 2")?;
+    create_commit(repo, "feature3.txt", "Feature 3", "Feature commit 3")?;
+
+    // Configure main as root
+    let mut repo_state = RepoState::load(repo_path).unwrap_or_default();
+    let _ = repo_state.add_root("main".to_string(), true);
+    repo_state.save(repo_path)?;
+    let repo_state = RepoState::load(repo_path)?;
+
+    let discovery = AutoDependencyDiscovery;
+    let suggestions = discovery.suggest_dependencies(repo, &repo_state)?;
+
+    // Verify the stack relationships are preserved
+    let sub_sub_suggestion = suggestions.iter().find(|s| s.child == "sub-sub-feature");
+    assert!(
+      sub_sub_suggestion.is_some(),
+      "Should have suggestion for sub-sub-feature"
+    );
+    assert_eq!(
+      sub_sub_suggestion.expect("checked above").parent,
+      "sub-feature",
+      "sub-sub-feature should have sub-feature as parent"
+    );
+
+    let sub_suggestion = suggestions.iter().find(|s| s.child == "sub-feature");
+    assert!(sub_suggestion.is_some(), "Should have suggestion for sub-feature");
+    assert_eq!(
+      sub_suggestion.expect("checked above").parent,
+      "feature",
+      "sub-feature should have feature as parent (even though feature advanced)"
+    );
+
+    let feature_suggestion = suggestions.iter().find(|s| s.child == "feature");
+    assert!(feature_suggestion.is_some(), "Should have suggestion for feature");
+    assert_eq!(
+      feature_suggestion.expect("checked above").parent,
+      "main",
+      "feature should have main as parent"
     );
 
     Ok(())
