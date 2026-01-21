@@ -142,6 +142,23 @@ impl AutoDependencyDiscovery {
     let total = branch_info.len();
     debug!(total, "Starting merge-base ancestry analysis");
 
+    // Build effective roots: use configured roots if available, otherwise detect
+    // implicit roots (main, master) from existing branches. This ensures the
+    // sibling-detection logic in find_best_parent works correctly even when no
+    // roots have been explicitly configured.
+    let effective_roots: HashSet<String> = if configured_roots.is_empty() {
+      Self::detect_implicit_roots(branch_info)
+    } else {
+      configured_roots.clone()
+    };
+
+    if !effective_roots.is_empty() && configured_roots.is_empty() {
+      debug!(
+        roots = ?effective_roots,
+        "Using implicit roots for sibling detection (no configured roots)"
+      );
+    }
+
     // Track which branches have children (for tiebreaking)
     let mut branches_with_children: HashSet<String> = HashSet::new();
 
@@ -164,7 +181,7 @@ impl AutoDependencyDiscovery {
         *commit_id,
         branch_name,
         branch_info,
-        configured_roots,
+        &effective_roots,
         &branches_with_children,
       ) {
         relationships.push((branch_name.clone(), best_parent.clone(), confidence));
@@ -435,6 +452,22 @@ impl AutoDependencyDiscovery {
     Some((name, score))
   }
 
+  /// Detect implicit root branches from existing branches.
+  ///
+  /// When no roots are explicitly configured, this function detects common
+  /// default branch names (main, master) that exist in the repository. This
+  /// allows the sibling-detection logic to work correctly even in default
+  /// setups where users haven't run `twig root add`.
+  fn detect_implicit_roots(branch_info: &HashMap<String, (Oid, bool)>) -> HashSet<String> {
+    const IMPLICIT_ROOT_NAMES: &[&str] = &["main", "master"];
+
+    IMPLICIT_ROOT_NAMES
+      .iter()
+      .filter(|name| branch_info.contains_key(**name))
+      .map(|name| (*name).to_string())
+      .collect()
+  }
+
   /// Suggest dependencies based on Git history analysis with merge-base scoring
   pub fn suggest_dependencies(
     &self,
@@ -459,6 +492,14 @@ impl AutoDependencyDiscovery {
       }
     }
 
+    // Build effective roots: use configured roots if available, otherwise detect
+    // implicit roots (main, master) from existing branches.
+    let effective_roots: HashSet<String> = if configured_roots.is_empty() {
+      Self::detect_implicit_roots(&branch_info)
+    } else {
+      configured_roots
+    };
+
     // Track which branches have children (for tiebreaking)
     let mut branches_with_children: HashSet<String> = HashSet::new();
 
@@ -469,7 +510,7 @@ impl AutoDependencyDiscovery {
         *commit_id,
         branch_name,
         &branch_info,
-        &configured_roots,
+        &effective_roots,
         &branches_with_children,
       ) {
         // Skip if this dependency already exists in user-defined dependencies
@@ -1576,5 +1617,185 @@ mod tests {
     );
 
     Ok(())
+  }
+
+  /// Test: Drifted parent branch is detected WITHOUT explicit root
+  /// configuration when "main" exists as an implicit root.
+  ///
+  /// This is the key regression test for the implicit roots fix.
+  /// Previously, when configured_roots was empty, the is_stacked check would
+  /// always return false (because it iterates over an empty set), causing
+  /// all non-ancestor candidates to be rejected.
+  ///
+  /// With the fix, "main" is detected as an implicit root, allowing the
+  /// is_stacked check to work correctly.
+  #[test]
+  fn test_drifted_base_with_implicit_root() -> Result<()> {
+    let git_repo = GitRepoTestGuard::new();
+    let repo = &git_repo.repo;
+    let repo_path = git_repo.path();
+
+    // Create initial commit on main
+    create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
+    ensure_main_branch(repo)?;
+
+    // Create feature branch from main
+    create_branch(repo, "feature", Some("main"))?;
+    checkout_branch(repo, "feature")?;
+    create_commit(repo, "feature.txt", "Feature content", "Feature commit")?;
+
+    // Advance main by 5 commits (simulating other work being merged)
+    // After this, main is NO LONGER an ancestor of feature
+    checkout_branch(repo, "main")?;
+    for i in 1..=5 {
+      create_commit(
+        repo,
+        &format!("main_file_{}.txt", i),
+        &format!("Content {}", i),
+        &format!("Main commit {}", i),
+      )?;
+    }
+
+    // NO explicit root configuration - rely on implicit "main" detection
+    let repo_state = RepoState::load(repo_path).unwrap_or_default();
+    assert!(
+      repo_state.get_root_branches().is_empty(),
+      "This test requires no configured root branches"
+    );
+
+    let discovery = AutoDependencyDiscovery;
+    let suggestions = discovery.suggest_dependencies(repo, &repo_state)?;
+
+    // Should suggest feature -> main even though:
+    // 1. No root branches are explicitly configured
+    // 2. main is not an ancestor of feature (main has advanced)
+    // This works because "main" is detected as an implicit root
+    let suggestion = suggestions.iter().find(|s| s.child == "feature" && s.parent == "main");
+
+    assert!(
+      suggestion.is_some(),
+      "Should suggest feature depends on main using implicit root detection"
+    );
+
+    // Confidence should be reduced due to drift but still valid
+    let confidence = suggestion.expect("checked above").confidence;
+    assert!(
+      confidence > 0.1 && confidence < 1.0,
+      "Confidence should be reduced but valid (got {})",
+      confidence
+    );
+
+    Ok(())
+  }
+
+  /// Test: Stacked parent advancement works with implicit roots
+  ///
+  /// Similar to test_stacked_parent_advancement but without explicit root
+  /// configuration.
+  #[test]
+  fn test_stacked_parent_advancement_with_implicit_root() -> Result<()> {
+    let git_repo = GitRepoTestGuard::new();
+    let repo = &git_repo.repo;
+    let repo_path = git_repo.path();
+
+    // Create initial commit on main
+    create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
+    ensure_main_branch(repo)?;
+
+    // Create feature branch from main with some commits
+    create_branch(repo, "feature", Some("main"))?;
+    checkout_branch(repo, "feature")?;
+    create_commit(repo, "feature1.txt", "Feature 1", "Feature commit 1")?;
+    create_commit(repo, "feature2.txt", "Feature 2", "Feature commit 2")?;
+
+    // Create sub-feature from feature
+    create_branch(repo, "sub-feature", Some("feature"))?;
+    checkout_branch(repo, "sub-feature")?;
+    create_commit(repo, "sub_feature.txt", "Sub-feature content", "Sub-feature commit")?;
+
+    // Advance feature by adding more commits
+    // After this, feature is NO LONGER an ancestor of sub-feature
+    checkout_branch(repo, "feature")?;
+    create_commit(repo, "feature3.txt", "Feature 3", "Feature commit 3")?;
+    create_commit(repo, "feature4.txt", "Feature 4", "Feature commit 4")?;
+
+    // NO explicit root configuration
+    let repo_state = RepoState::load(repo_path).unwrap_or_default();
+    assert!(
+      repo_state.get_root_branches().is_empty(),
+      "This test requires no configured root branches"
+    );
+
+    let discovery = AutoDependencyDiscovery;
+    let suggestions = discovery.suggest_dependencies(repo, &repo_state)?;
+
+    // sub-feature should get feature as parent (NOT main)
+    // This works because "main" is detected as an implicit root, allowing
+    // the is_stacked check to distinguish feature from sibling branches
+    let suggestion = suggestions.iter().find(|s| s.child == "sub-feature");
+    assert!(suggestion.is_some(), "Should have suggestion for sub-feature");
+    assert_eq!(
+      suggestion.expect("checked above").parent,
+      "feature",
+      "Should suggest feature as parent of sub-feature using implicit root detection"
+    );
+
+    // feature should get main as parent
+    let suggestion_feature = suggestions.iter().find(|s| s.child == "feature");
+    assert!(suggestion_feature.is_some(), "Should have suggestion for feature");
+    assert_eq!(
+      suggestion_feature.expect("checked above").parent,
+      "main",
+      "Should suggest main as parent of feature"
+    );
+
+    Ok(())
+  }
+
+  /// Test: detect_implicit_roots function behavior
+  #[test]
+  fn test_detect_implicit_roots() {
+    use git2::Oid;
+
+    // Create a mock branch_info with main
+    let mut branch_info = HashMap::new();
+    let dummy_oid = Oid::zero();
+    branch_info.insert("main".to_string(), (dummy_oid, false));
+    branch_info.insert("feature".to_string(), (dummy_oid, true));
+
+    let roots = AutoDependencyDiscovery::detect_implicit_roots(&branch_info);
+    assert!(roots.contains("main"), "Should detect 'main' as implicit root");
+    assert!(!roots.contains("feature"), "Should not include 'feature'");
+
+    // Test with master instead of main
+    let mut branch_info = HashMap::new();
+    branch_info.insert("master".to_string(), (dummy_oid, false));
+    branch_info.insert("develop".to_string(), (dummy_oid, true));
+
+    let roots = AutoDependencyDiscovery::detect_implicit_roots(&branch_info);
+    assert!(roots.contains("master"), "Should detect 'master' as implicit root");
+    assert!(!roots.contains("develop"), "Should not include 'develop'");
+
+    // Test with both main and master
+    let mut branch_info = HashMap::new();
+    branch_info.insert("main".to_string(), (dummy_oid, false));
+    branch_info.insert("master".to_string(), (dummy_oid, false));
+    branch_info.insert("feature".to_string(), (dummy_oid, true));
+
+    let roots = AutoDependencyDiscovery::detect_implicit_roots(&branch_info);
+    assert!(roots.contains("main"), "Should detect 'main'");
+    assert!(roots.contains("master"), "Should detect 'master'");
+    assert_eq!(roots.len(), 2, "Should have exactly 2 implicit roots");
+
+    // Test with no common root names
+    let mut branch_info = HashMap::new();
+    branch_info.insert("develop".to_string(), (dummy_oid, false));
+    branch_info.insert("feature".to_string(), (dummy_oid, true));
+
+    let roots = AutoDependencyDiscovery::detect_implicit_roots(&branch_info);
+    assert!(
+      roots.is_empty(),
+      "Should have no implicit roots when main/master don't exist"
+    );
   }
 }
