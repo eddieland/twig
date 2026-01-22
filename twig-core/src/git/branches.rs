@@ -68,24 +68,19 @@ pub fn get_upstream_branch(branch_name: &str) -> Result<Option<String>> {
 
 /// Checkout an existing local branch using the provided repository.
 pub fn checkout_branch(repo: &Repository, branch_name: &str) -> Result<()> {
-  let branch = repo
+  // Verify the branch exists
+  repo
     .find_branch(branch_name, git2::BranchType::Local)
     .with_context(|| format!("Branch '{branch_name}' not found"))?;
 
-  let target = branch
-    .get()
-    .target()
-    .ok_or_else(|| anyhow::anyhow!("Branch '{branch_name}' has no target commit"))?;
-
+  // Update HEAD to point to the branch
   repo
     .set_head(&format!("refs/heads/{branch_name}"))
     .with_context(|| format!("Failed to set HEAD to branch '{branch_name}'"))?;
 
-  let object = repo.find_object(target, None)?;
-  let mut builder = git2::build::CheckoutBuilder::new();
-
+  // Update working directory to match HEAD
   repo
-    .checkout_tree(&object, Some(&mut builder))
+    .checkout_head(Some(&mut git2::build::CheckoutBuilder::new()))
     .with_context(|| format!("Failed to checkout branch '{branch_name}'"))?;
 
   Ok(())
