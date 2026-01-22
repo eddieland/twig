@@ -20,7 +20,7 @@ pub use renderer::{
   BranchTableColorMode, BranchTableColumn, BranchTableColumnKind, BranchTableRenderError, BranchTableRenderer,
   BranchTableSchema, BranchTableStyle, ORPHAN_BRANCH_ANNOTATION_KEY,
 };
-pub use repository::{get_repository, get_repository_from_path};
+pub use repository::{get_repository, get_repository_from_path, resolve_repository_root};
 pub use switch::{
   BranchBase, BranchBaseResolution, BranchBaseSource, BranchCreationBase, BranchCreationPolicy, BranchParentReference,
   BranchParentRequest, BranchStateMutations, BranchSwitchAction, BranchSwitchContext, BranchSwitchOutcome,
