@@ -7,14 +7,6 @@
 <!-- Link any GitHub issues, Linear tickets, or other context. Use "Closes #123" when appropriate. -->
 - Closes #
 
-## Testing
-<!-- List the commands you ran and their results. Remove any that do not apply. -->
-- [ ] `make fmt`
-- [ ] `make lint`
-- [ ] `make check`
-- [ ] `make test`
-- [ ] Other (describe):
-
 ## Screenshots / Recordings (if applicable)
 <!-- Drag-and-drop images or paste URLs. Skip if not a UI change. -->
 
