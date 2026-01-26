@@ -95,7 +95,7 @@ predicates = "3.1"
 uuid = { version = "1.18", features = ["v4", "serde"] }
 flate2 = "1.1.8"
 tar = "0.4"
-zip = { version = "7.1", default-features = false, features = ["deflate"] }
+zip = { version = "7.2", default-features = false, features = ["deflate"] }
 
 # Windows-specific dependencies
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
