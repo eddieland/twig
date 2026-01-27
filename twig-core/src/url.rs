@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use git2::Repository as Git2Repository;
 use url::{Position, Url};
 
-use crate::extract_repo_info_from_url;
+use crate::GitHubRepo;
 
 /// Environment variable storing the Jira host configuration.
 pub const ENV_JIRA_HOST: &str = "JIRA_HOST";
@@ -48,7 +48,8 @@ pub fn resolve_github_repo_from_git2(repo: &Git2Repository) -> Result<(String, S
 
   let remote_url = remote.url().context("Remote 'origin' has no URL")?;
 
-  extract_repo_info_from_url(remote_url)
+  let repo = GitHubRepo::parse(remote_url)?;
+  Ok((repo.owner, repo.repo))
 }
 
 /// Normalize a URL by removing trailing slashes from the path when it's just

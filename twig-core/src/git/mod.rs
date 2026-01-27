@@ -35,4 +35,4 @@ pub use tree::{
   filter_branch_graph, find_orphaned_branches,
 };
 
-pub use crate::github::{extract_pr_number_from_url, extract_repo_info_from_url};
+pub use crate::github::{GitHubPr, GitHubRepo, GitRemoteScheme};

@@ -15,7 +15,7 @@ use regex::Regex;
 
 use crate::git::checkout_branch;
 use crate::git::graph::BranchName;
-use crate::github::extract_pr_number_from_url;
+use crate::github::GitHubPr;
 use crate::jira_parser::JiraTicketParser;
 use crate::output::print_info;
 use crate::state::{BranchMetadata, RepoState};
@@ -44,9 +44,9 @@ pub fn detect_switch_input(jira_parser: Option<&JiraTicketParser>, input: &str) 
   // Check for GitHub PR URL
   if input.contains("github.com")
     && input.contains("/pull/")
-    && let Ok(pr_number) = extract_pr_number_from_url(input)
+    && let Ok(pr) = GitHubPr::parse(input)
   {
-    return SwitchInput::GitHubPrUrl(pr_number);
+    return SwitchInput::GitHubPrUrl(pr.number);
   }
 
   // Check for Jira issue URL
@@ -916,11 +916,9 @@ mod tests {
 
   #[test]
   fn extracts_pr_number_from_url() {
-    assert_eq!(
-      extract_pr_number_from_url("https://github.com/owner/repo/pull/123").unwrap(),
-      123
-    );
-    assert!(extract_pr_number_from_url("https://github.com/owner/repo").is_err());
+    let pr = GitHubPr::parse("https://github.com/owner/repo/pull/123").unwrap();
+    assert_eq!(pr.number, 123);
+    assert!(GitHubPr::parse("https://github.com/owner/repo").is_err());
   }
 
   #[test]

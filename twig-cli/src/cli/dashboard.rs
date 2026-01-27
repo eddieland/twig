@@ -15,7 +15,7 @@ use tokio::runtime::Runtime;
 use twig_core::output::{print_error, print_warning};
 use twig_core::state::RepoState;
 use twig_core::truncate_string;
-use twig_gh::{GitHubPullRequest, create_github_client, extract_repo_info_from_url, get_github_credentials};
+use twig_gh::{GitHubPullRequest, GitHubRepo, create_github_client, get_github_credentials};
 use twig_jira::{Issue, create_jira_client_from_netrc, get_jira_host};
 
 // Structure to hold dashboard data
@@ -188,7 +188,8 @@ pub(crate) fn handle_dashboard_command(dashboard: DashboardArgs) -> Result<()> {
       // Get GitHub credentials from .netrc
       if let Ok(creds) = get_github_credentials(base_dirs.home_dir()) {
         let gh = create_github_client(&creds.username, &creds.password);
-        if let Ok((owner, repo_name)) = extract_repo_info_from_url(remote_url) {
+        if let Ok(repo) = GitHubRepo::parse(remote_url) {
+          let (owner, repo_name) = (repo.owner, repo.repo);
           match rt.block_on(gh.list_pull_requests(&owner, &repo_name, Some("open"), None)) {
             Ok(prs) => {
               for pr in prs {
