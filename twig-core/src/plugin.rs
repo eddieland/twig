@@ -28,6 +28,8 @@ pub struct PluginContext {
   pub current_branch: Option<String>,
   /// Color preference propagated from Twig when available.
   pub colors: ColorMode,
+  /// Whether terminal hyperlinks (OSC 8) should be disabled.
+  pub no_links: bool,
   /// Verbosity level propagated from Twig when available.
   pub verbosity: u8,
   /// Version of the Twig binary that invoked the plugin, if known.
@@ -50,6 +52,8 @@ impl PluginContext {
       _ => ColorMode::Auto,
     };
 
+    let no_links = env::var("TWIG_NO_LINKS").map(|v| v == "1").unwrap_or(false);
+
     let verbosity = env::var("TWIG_VERBOSITY")
       .ok()
       .and_then(|value| value.parse::<u8>().ok())
@@ -62,6 +66,7 @@ impl PluginContext {
       current_repo,
       current_branch,
       colors,
+      no_links,
       verbosity,
       version,
     })
@@ -163,6 +168,7 @@ mod tests {
     let branch_guard = EnvVarGuard::new("TWIG_CURRENT_BRANCH");
     let verbosity_guard = EnvVarGuard::new("TWIG_VERBOSITY");
     let colors_guard = EnvVarGuard::new("TWIG_COLORS");
+    let no_links_guard = EnvVarGuard::new("TWIG_NO_LINKS");
     let version_guard = EnvVarGuard::new("TWIG_VERSION");
 
     config_guard.set(temp_config.path());
@@ -171,6 +177,7 @@ mod tests {
     branch_guard.set("feature/env-branch");
     verbosity_guard.set("2");
     colors_guard.set("no");
+    no_links_guard.set("1");
     version_guard.set("0.0.0-env");
 
     let context = PluginContext::discover().expect("context");
@@ -181,6 +188,7 @@ mod tests {
     assert_eq!(context.current_branch, Some("feature/env-branch".to_string()));
     assert_eq!(context.verbosity, 2);
     assert_eq!(context.colors, ColorMode::No);
+    assert!(context.no_links);
     assert_eq!(context.version.as_deref(), Some("0.0.0-env"));
   }
 
@@ -193,6 +201,7 @@ mod tests {
     EnvVarGuard::new("TWIG_CURRENT_BRANCH").remove();
     EnvVarGuard::new("TWIG_VERBOSITY").remove();
     EnvVarGuard::new("TWIG_COLORS").remove();
+    EnvVarGuard::new("TWIG_NO_LINKS").remove();
     EnvVarGuard::new("TWIG_VERSION").remove();
 
     let repo_dir = TempDir::new().unwrap();
@@ -215,6 +224,7 @@ mod tests {
     assert_eq!(canonical_current_repo, canonical_repo_path);
     assert_eq!(context.current_branch, Some(branch_name));
     assert_eq!(context.colors, ColorMode::Auto);
+    assert!(!context.no_links);
     assert_eq!(context.verbosity, 0);
     assert!(context.version.is_none());
 

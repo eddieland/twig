@@ -17,8 +17,14 @@ use tracing::{debug, instrument};
 use twig_core::output::ColorMode;
 
 /// Execute a plugin with the given name and arguments
-#[instrument(level = "debug", skip(verbosity, colors))]
-pub fn execute_plugin(plugin_name: &str, args: Vec<String>, verbosity: u8, colors: ColorMode) -> Result<()> {
+#[instrument(level = "debug", skip(verbosity, colors, no_links))]
+pub fn execute_plugin(
+  plugin_name: &str,
+  args: Vec<String>,
+  verbosity: u8,
+  colors: ColorMode,
+  no_links: bool,
+) -> Result<()> {
   let plugin_binary = format!("twig-{plugin_name}");
 
   let plugin_path = resolve_plugin_path(&plugin_binary)?.ok_or_else(|| {
@@ -41,6 +47,7 @@ pub fn execute_plugin(plugin_name: &str, args: Vec<String>, verbosity: u8, color
     .env("TWIG_CONFIG_DIR", config_dirs.config_dir())
     .env("TWIG_DATA_DIR", config_dirs.data_dir())
     .env("TWIG_COLORS", color_mode_env(colors))
+    .env("TWIG_NO_LINKS", if no_links { "1" } else { "0" })
     .env("TWIG_VERSION", env!("CARGO_PKG_VERSION"))
     .env("TWIG_VERBOSITY", verbosity.to_string())
     .stdin(Stdio::inherit())

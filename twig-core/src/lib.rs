@@ -39,7 +39,7 @@ pub use plugin::{PluginContext, plugin_config_dir, plugin_data_dir};
 pub use state::{
   BranchDependency, BranchMetadata as StateBranchMetadata, Registry, RepoState, Repository, RootBranch, create_worktree,
 };
-pub use text::{Hyperlink, HyperlinkExt, hyperlink, truncate_string};
+pub use text::{Hyperlink, HyperlinkExt, hyperlink, hyperlinks_disabled, set_hyperlinks_override, truncate_string};
 pub use url::{
   ENV_JIRA_HOST, ensure_url_scheme, resolve_github_repo, resolve_github_repo_from_git2, resolve_jira_base_url,
 };
