@@ -1,13 +1,34 @@
-use anyhow::Result;
+use std::path::Path;
+
+use anyhow::{Context, Result};
+use directories::BaseDirs;
+use git2::Repository;
+use tokio::runtime::Runtime;
+use twig_core::checkout_branch;
 use twig_core::git::get_repository;
 use twig_core::git::switch::{
-  BranchSwitchAction, SwitchExecutionOptions, apply_branch_state_mutations, switch_from_input,
+  BranchSwitchAction, SwitchExecutionOptions, SwitchInput, apply_branch_state_mutations, detect_switch_input,
+  resolve_branch_base, store_jira_association, switch_from_input,
 };
 use twig_core::jira_parser::{JiraTicketParser, create_jira_parser};
-use twig_core::output::{print_error, print_success, print_warning};
+use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::state::RepoState;
+use twig_jira::{create_jira_client_from_netrc, get_jira_host};
 
 use crate::Cli;
+
+/// Options when a Jira issue has no associated branch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum JiraBranchChoice {
+  /// Create a branch by fetching issue details from Jira API.
+  CreateFromJira,
+  /// Create a simple branch using the lowercase issue key.
+  CreateSimple,
+  /// Let the user enter a custom branch name.
+  CustomName,
+  /// Abort the operation.
+  Abort,
+}
 
 /// Handle the branch switching mode for the `twig flow` plugin.
 pub fn run(cli: &Cli) -> Result<()> {
@@ -41,6 +62,12 @@ pub fn run(cli: &Cli) -> Result<()> {
   let repo_state = RepoState::load(repo_path).unwrap_or_else(|_| RepoState::default());
   let jira_parser = create_jira_parser().or_else(|| Some(JiraTicketParser::new_default()));
 
+  // Check if this is a Jira issue key without an existing association
+  if let Some(issue_key) = detect_jira_without_association(&target, jira_parser.as_ref(), &repo_state) {
+    return handle_jira_branch_creation(&repo, repo_path, &repo_state, jira_parser.as_ref(), &issue_key);
+  }
+
+  // Standard switch flow for non-Jira inputs or Jira with existing association
   let options = SwitchExecutionOptions {
     create_missing: true,
     parent_option: None,
@@ -72,6 +99,231 @@ pub fn run(cli: &Cli) -> Result<()> {
     }
     Err(err) => {
       print_error(&format!("Failed to switch to {target}: {err}"));
+    }
+  }
+
+  Ok(())
+}
+
+/// Check if the input is a Jira issue key without an existing branch
+/// association.
+fn detect_jira_without_association(
+  input: &str,
+  jira_parser: Option<&JiraTicketParser>,
+  repo_state: &RepoState,
+) -> Option<String> {
+  match detect_switch_input(jira_parser, input) {
+    SwitchInput::JiraIssueKey(key) | SwitchInput::JiraIssueUrl(key) => {
+      // Check if there's already an associated branch
+      if repo_state.get_branch_issue_by_jira(&key).is_some() {
+        None // Has association, use normal flow
+      } else {
+        Some(key) // No association, needs user prompt
+      }
+    }
+    _ => None, // Not a Jira issue
+  }
+}
+
+/// Handle branch creation for a Jira issue that has no existing association.
+fn handle_jira_branch_creation(
+  repo: &Repository,
+  repo_path: &Path,
+  repo_state: &RepoState,
+  jira_parser: Option<&JiraTicketParser>,
+  issue_key: &str,
+) -> Result<()> {
+  let simple_name = issue_key.to_lowercase();
+
+  print_info(&format!(
+    "No branch found for Jira issue {issue_key}. How would you like to proceed?"
+  ));
+
+  let choice = prompt_jira_branch_choice(issue_key, &simple_name)?;
+
+  match choice {
+    JiraBranchChoice::CreateFromJira => create_branch_from_jira(repo, repo_path, jira_parser, issue_key),
+    JiraBranchChoice::CreateSimple => {
+      create_simple_branch(repo, repo_path, repo_state, jira_parser, issue_key, &simple_name)
+    }
+    JiraBranchChoice::CustomName => {
+      let custom_name = prompt_custom_branch_name()?;
+      if let Some(name) = custom_name {
+        create_simple_branch(repo, repo_path, repo_state, jira_parser, issue_key, &name)
+      } else {
+        print_info("Aborted.");
+        Ok(())
+      }
+    }
+    JiraBranchChoice::Abort => {
+      print_info("Aborted.");
+      Ok(())
+    }
+  }
+}
+
+/// Prompt the user to choose how to create a branch for a Jira issue.
+fn prompt_jira_branch_choice(issue_key: &str, simple_name: &str) -> Result<JiraBranchChoice> {
+  let items = [
+    format!("Create branch from Jira (e.g., {issue_key}/issue-summary)"),
+    format!("Create simple branch: {simple_name}"),
+    "Enter custom branch name".to_string(),
+    "Abort".to_string(),
+  ];
+
+  let selection = dialoguer::Select::new()
+    .with_prompt("Select an option")
+    .items(&items)
+    .default(0)
+    .interact()
+    .unwrap_or(3); // Default to abort on error
+
+  Ok(match selection {
+    0 => JiraBranchChoice::CreateFromJira,
+    1 => JiraBranchChoice::CreateSimple,
+    2 => JiraBranchChoice::CustomName,
+    _ => JiraBranchChoice::Abort,
+  })
+}
+
+/// Prompt the user to enter a custom branch name.
+fn prompt_custom_branch_name() -> Result<Option<String>> {
+  let input: String = dialoguer::Input::new()
+    .with_prompt("Enter branch name (or leave empty to abort)")
+    .allow_empty(true)
+    .interact_text()
+    .unwrap_or_default();
+
+  let trimmed = input.trim();
+  if trimmed.is_empty() {
+    Ok(None)
+  } else {
+    Ok(Some(trimmed.to_string()))
+  }
+}
+
+/// Create a branch by fetching issue details from Jira API.
+fn create_branch_from_jira(
+  repo: &Repository,
+  repo_path: &Path,
+  jira_parser: Option<&JiraTicketParser>,
+  issue_key: &str,
+) -> Result<()> {
+  let jira_host = match get_jira_host() {
+    Ok(host) => host,
+    Err(err) => {
+      print_error(&format!("Failed to get Jira host: {err}"));
+      print_info("Hint: Configure Jira in ~/.config/twig/jira.toml or set JIRA_HOST environment variable.");
+      return Ok(());
+    }
+  };
+
+  let base_dirs = match BaseDirs::new() {
+    Some(dirs) => dirs,
+    None => {
+      print_error("Failed to determine home directory.");
+      return Ok(());
+    }
+  };
+
+  let jira_client = match create_jira_client_from_netrc(base_dirs.home_dir(), &jira_host) {
+    Ok(client) => client,
+    Err(err) => {
+      print_error(&format!("Failed to create Jira client: {err}"));
+      print_info("Hint: Ensure Jira credentials are configured in ~/.netrc");
+      return Ok(());
+    }
+  };
+
+  let rt = Runtime::new().context("Failed to create async runtime")?;
+  rt.block_on(async {
+    let issue = match jira_client.get_issue(issue_key).await {
+      Ok(issue) => issue,
+      Err(err) => {
+        print_error(&format!("Failed to fetch Jira issue {issue_key}: {err}"));
+        return Ok(());
+      }
+    };
+
+    // Sanitize the summary for use in a branch name
+    let summary = issue.fields.summary.to_lowercase();
+    let sanitized_summary: String = summary
+      .chars()
+      .map(|c| match c {
+        ' ' | '-' | '_' => '-',
+        c if c.is_alphanumeric() => c,
+        _ => '-',
+      })
+      .collect::<String>()
+      .replace("--", "-")
+      .trim_matches('-')
+      .to_string();
+
+    // Create the branch name in the format "PROJ-123/add-feature"
+    let branch_name = format!("{issue_key}/{sanitized_summary}");
+
+    print_info(&format!("Creating branch: {branch_name}"));
+
+    // Resolve branch base from HEAD
+    let branch_base = resolve_branch_base(repo, repo_path, None, jira_parser)?;
+
+    // Create the branch
+    let base_commit = repo
+      .find_commit(branch_base.commit())
+      .with_context(|| format!("Failed to locate base commit for '{branch_name}'"))?;
+
+    repo
+      .branch(&branch_name, &base_commit, false)
+      .with_context(|| format!("Failed to create branch '{branch_name}'"))?;
+
+    checkout_branch(repo, &branch_name)?;
+
+    // Store the Jira association
+    store_jira_association(repo_path, &branch_name, issue_key)?;
+
+    print_success(&format!(
+      "Created and switched to branch '{branch_name}' for Jira issue {issue_key}"
+    ));
+
+    Ok(())
+  })
+}
+
+/// Create a simple branch with the given name and associate it with the Jira
+/// issue.
+fn create_simple_branch(
+  repo: &Repository,
+  repo_path: &Path,
+  repo_state: &RepoState,
+  jira_parser: Option<&JiraTicketParser>,
+  issue_key: &str,
+  branch_name: &str,
+) -> Result<()> {
+  let options = SwitchExecutionOptions {
+    create_missing: true,
+    parent_option: None,
+  };
+
+  // Use the standard switch flow but with our chosen branch name
+  match switch_from_input(repo, repo_path, repo_state, jira_parser, branch_name, &options) {
+    Ok(outcome) => {
+      if let Err(err) = apply_branch_state_mutations(repo_path, &outcome) {
+        print_warning(&format!("Switched branches but failed to persist state: {err}"));
+      }
+
+      // Store the Jira association if we created a new branch
+      if matches!(outcome.action, BranchSwitchAction::Created { .. })
+        && let Err(err) = store_jira_association(repo_path, branch_name, issue_key)
+      {
+        print_warning(&format!("Failed to store Jira association: {err}"));
+      }
+
+      print_success(&format!(
+        "Created and switched to branch '{branch_name}' for Jira issue {issue_key}"
+      ));
+    }
+    Err(err) => {
+      print_error(&format!("Failed to create branch {branch_name}: {err}"));
     }
   }
 
@@ -123,7 +375,9 @@ mod tests {
 
     run(&cli)?;
 
-    let refreshed = git2::Repository::open(guard.repo.path())?;
+    // Re-open the repository from the working directory to see the updated HEAD
+    let repo_path = guard.repo.workdir().expect("workdir");
+    let refreshed = git2::Repository::open(repo_path)?;
     let head = refreshed.head()?;
     assert_eq!(head.shorthand(), Some("feature/new"));
 
@@ -163,26 +417,37 @@ mod tests {
   }
 
   #[test]
-  fn creates_branch_for_jira_input() -> Result<()> {
-    let guard = GitRepoTestGuard::new_and_change_dir();
-    create_commit(&guard.repo, "file.txt", "content", "initial")?;
+  fn detects_jira_without_association() {
+    let parser = JiraTicketParser::new_default();
+    let state = RepoState::default();
 
-    let cli = Cli {
-      root: false,
-      parent: false,
-      include: None,
-      target: Some("PROJ-999".into()),
-    };
+    // Should detect Jira issue without association
+    let result = detect_jira_without_association("PROJ-123", Some(&parser), &state);
+    assert_eq!(result, Some("PROJ-123".to_string()));
 
-    run(&cli)?;
+    // Should not detect branch names
+    let result = detect_jira_without_association("feature/branch", Some(&parser), &state);
+    assert_eq!(result, None);
 
-    let refreshed = git2::Repository::open(guard.repo.path())?;
-    assert_eq!(refreshed.head()?.shorthand(), Some("proj-999"));
+    // Should not detect numbers (GitHub PR)
+    let result = detect_jira_without_association("123", Some(&parser), &state);
+    assert_eq!(result, None);
+  }
 
-    let repo_path = guard.repo.workdir().expect("workdir");
-    let state = RepoState::load(repo_path)?;
-    let metadata = state.get_branch_metadata("proj-999").expect("metadata stored");
-    assert_eq!(metadata.jira_issue.as_deref(), Some("PROJ-999"));
+  #[test]
+  fn detects_jira_with_association() -> Result<()> {
+    let parser = JiraTicketParser::new_default();
+    let mut state = RepoState::default();
+    state.add_branch_issue(BranchMetadata {
+      branch: "existing-branch".into(),
+      jira_issue: Some("PROJ-123".into()),
+      github_pr: None,
+      created_at: "now".into(),
+    });
+
+    // Should not detect because association exists
+    let result = detect_jira_without_association("PROJ-123", Some(&parser), &state);
+    assert_eq!(result, None);
 
     Ok(())
   }

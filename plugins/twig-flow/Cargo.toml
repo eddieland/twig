@@ -11,8 +11,12 @@ description = "Twig flow plugin providing branch visualization and switching wor
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
+dialoguer = { workspace = true }
+directories = { workspace = true }
 git2 = { workspace = true }
+tokio = { workspace = true }
 twig-core = { path = "../../twig-core" }
+twig-jira = { path = "../../twig-jira" }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
