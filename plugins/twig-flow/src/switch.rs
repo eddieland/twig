@@ -186,4 +186,37 @@ mod tests {
 
     Ok(())
   }
+
+  #[test]
+  fn switches_using_permissive_jira_matching() -> Result<()> {
+    let guard = GitRepoTestGuard::new_and_change_dir();
+    create_commit(&guard.repo, "file.txt", "content", "initial")?;
+    create_branch(&guard.repo, "feature/work", None)?;
+
+    // Add Jira association with uppercase key and hyphen
+    let repo_path = guard.repo.workdir().expect("workdir");
+    let mut state = RepoState::load(repo_path)?;
+    state.add_branch_issue(BranchMetadata {
+      branch: "feature/work".into(),
+      jira_issue: Some("MLTP-3916".into()),
+      github_pr: None,
+      created_at: "now".into(),
+    });
+    state.save(repo_path)?;
+
+    // Switch using lowercase without hyphen (permissive matching)
+    let cli = Cli {
+      root: false,
+      parent: false,
+      include: None,
+      target: Some("mltp3916".into()),
+    };
+
+    run(&cli)?;
+
+    let refreshed = git2::Repository::open(guard.repo.path())?;
+    assert_eq!(refreshed.head()?.shorthand(), Some("feature/work"));
+
+    Ok(())
+  }
 }

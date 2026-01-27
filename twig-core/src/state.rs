@@ -6,14 +6,37 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use git2::Repository as Git2Repository;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::config::ConfigDirs;
+
+/// Regex patterns for normalizing Jira keys (supports with/without hyphen)
+static JIRA_KEY_PATTERN: LazyLock<Regex> =
+  LazyLock::new(|| Regex::new(r"^([A-Za-z]{2,})-?(\d+)$").expect("Failed to compile Jira key regex"));
+
+/// Normalize a Jira key to canonical format (PROJECT-NUMBER, uppercase).
+///
+/// This handles various input formats:
+/// - `PROJ-123` → `PROJ-123`
+/// - `proj-123` → `PROJ-123`
+/// - `PROJ123` → `PROJ-123`
+/// - `proj123` → `PROJ-123`
+///
+/// Returns `None` if the input doesn't match a Jira key pattern.
+fn normalize_jira_key(key: &str) -> Option<String> {
+  JIRA_KEY_PATTERN.captures(key.trim()).map(|captures| {
+    let project = captures.get(1).expect("project group").as_str();
+    let number = captures.get(2).expect("number group").as_str();
+    format!("{}-{}", project.to_uppercase(), number)
+  })
+}
 
 /// Ensure the repository's `.twig/` directory contains a `.gitignore` that
 /// ignores every file within the directory. This keeps twig's metadata out of
@@ -239,11 +262,14 @@ impl RepoState {
     self.dependency_children_index.clear();
     self.dependency_parents_index.clear();
 
-    // Build Jira indices
+    // Build Jira indices with normalized keys for case-insensitive lookup
     for (branch_name, metadata) in &self.branches {
       if let Some(jira_key) = &metadata.jira_issue {
+        // Store original key in branch_to_jira_index
         self.branch_to_jira_index.insert(branch_name.clone(), jira_key.clone());
-        self.jira_to_branch_index.insert(jira_key.clone(), branch_name.clone());
+        // Use normalized key in jira_to_branch_index for permissive matching
+        let normalized_key = normalize_jira_key(jira_key).unwrap_or_else(|| jira_key.clone());
+        self.jira_to_branch_index.insert(normalized_key, branch_name.clone());
       }
     }
 
@@ -324,11 +350,16 @@ impl RepoState {
     self.branches.get(branch)
   }
 
-  /// Get a branch-issue association by Jira issue key
+  /// Get a branch-issue association by Jira issue key.
+  ///
+  /// This performs permissive matching - the lookup is case-insensitive and
+  /// accepts keys with or without a hyphen (e.g., `PROJ-123`, `proj123`).
   #[allow(dead_code)]
   pub fn get_branch_issue_by_jira(&self, jira_issue: &str) -> Option<&BranchMetadata> {
+    // Normalize the lookup key for permissive matching
+    let normalized_key = normalize_jira_key(jira_issue).unwrap_or_else(|| jira_issue.to_string());
     // Use the pre-built index for O(1) lookup
-    if let Some(branch_name) = self.jira_to_branch_index.get(jira_issue) {
+    if let Some(branch_name) = self.jira_to_branch_index.get(&normalized_key) {
       self.branches.get(branch_name)
     } else {
       None
