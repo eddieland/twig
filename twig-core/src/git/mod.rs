@@ -22,10 +22,6 @@ pub use renderer::{
   BranchTableSchema, BranchTableStyle, ORPHAN_BRANCH_ANNOTATION_KEY,
 };
 pub use repository::{get_repository, get_repository_from_path};
-pub use tree::{
-  annotate_orphaned_branches, attach_orphans_to_default_root, default_root_branch, determine_render_root,
-  filter_branch_graph, find_orphaned_branches,
-};
 pub use switch::{
   BranchBase, BranchBaseResolution, BranchBaseSource, BranchCreationBase, BranchCreationPolicy, BranchParentReference,
   BranchParentRequest, BranchStateMutations, BranchSwitchAction, BranchSwitchContext, BranchSwitchOutcome,
@@ -33,6 +29,10 @@ pub use switch::{
   IssueReference, PullRequestHead, SwitchInput, detect_switch_input, extract_jira_issue_from_url, lookup_branch_tip,
   parse_jira_issue_key, resolve_branch_base, store_github_pr_association, store_jira_association,
   switch_or_create_local_branch, try_checkout_remote_branch,
+};
+pub use tree::{
+  annotate_orphaned_branches, attach_orphans_to_default_root, default_root_branch, determine_render_root,
+  filter_branch_graph, find_orphaned_branches,
 };
 
 pub use crate::github::{extract_pr_number_from_url, extract_repo_info_from_url};

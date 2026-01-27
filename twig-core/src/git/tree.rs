@@ -1,7 +1,7 @@
 //! Tree traversal and filtering utilities for branch graphs.
 //!
-//! This module provides functions for determining render roots, finding orphaned
-//! branches, and filtering branch graphs by patterns.
+//! This module provides functions for determining render roots, finding
+//! orphaned branches, and filtering branch graphs by patterns.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -48,7 +48,8 @@ pub fn determine_render_root(
   graph.iter().next().map(|(_, node)| node.name.clone())
 }
 
-/// Finds branches that have no configured dependencies and are not root branches.
+/// Finds branches that have no configured dependencies and are not root
+/// branches.
 ///
 /// An orphaned branch is one that:
 /// - Has no parent dependencies configured in the repo state
@@ -80,9 +81,9 @@ pub fn default_root_branch(state: &RepoState) -> Option<String> {
 
 /// Attaches orphaned branches to the default root branch in the graph.
 ///
-/// This modifies the graph topology so that branches without a configured parent
-/// are shown as children of the default root branch, making the tree visualization
-/// more complete.
+/// This modifies the graph topology so that branches without a configured
+/// parent are shown as children of the default root branch, making the tree
+/// visualization more complete.
 pub fn attach_orphans_to_default_root(graph: BranchGraph, repo_state: &RepoState) -> BranchGraph {
   let Some(default_root) = default_root_branch(repo_state) else {
     return graph;
@@ -172,10 +173,11 @@ pub fn annotate_orphaned_branches(graph: BranchGraph, orphaned: &BTreeSet<Branch
   )
 }
 
-/// Filters a branch graph to include only branches matching a pattern and their ancestors.
+/// Filters a branch graph to include only branches matching a pattern and their
+/// ancestors.
 ///
-/// Returns the filtered graph and the set of branches that directly matched the pattern.
-/// The pattern is matched case-insensitively against branch names.
+/// Returns the filtered graph and the set of branches that directly matched the
+/// pattern. The pattern is matched case-insensitively against branch names.
 ///
 /// Returns `None` if no branches match the pattern.
 pub fn filter_branch_graph(graph: &BranchGraph, pattern: &str) -> Option<(BranchGraph, BTreeSet<BranchName>)> {
