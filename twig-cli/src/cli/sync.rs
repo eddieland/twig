@@ -17,7 +17,7 @@ use tokio::task::JoinSet;
 use tracing::warn;
 use twig_core::output::{print_info, print_success, print_warning};
 use twig_core::state::{BranchMetadata, RepoState};
-use twig_gh::{GitHubClient, create_github_client_from_netrc, extract_repo_info_from_url};
+use twig_gh::{GitHubClient, GitHubRepo, create_github_client_from_netrc};
 
 static JIRA_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
   vec![
@@ -326,7 +326,7 @@ fn resolve_repo_info_from_origin(repo_path: &std::path::Path) -> Option<(String,
   let remote = repo.find_remote("origin").ok()?;
   let remote_url = remote.url()?;
 
-  extract_repo_info_from_url(remote_url).ok()
+  GitHubRepo::parse(remote_url).ok().map(|r| (r.owner, r.repo))
 }
 
 /// Detect GitHub PR number from branch using GitHub API

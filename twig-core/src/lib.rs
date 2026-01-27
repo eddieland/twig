@@ -32,7 +32,7 @@ pub use git::switch::{
 pub use git::{
   checkout_branch, current_branch, detect_repository, detect_repository_from_path, get_repository, in_git_repository,
 };
-pub use github::{extract_pr_number_from_url, extract_repo_info_from_url};
+pub use github::{GitHubPr, GitHubRepo, GitRemoteScheme};
 pub use jira_parser::{JiraParseError, JiraParsingConfig, JiraParsingMode, JiraTicketParser, create_jira_parser};
 pub use output::{ColorMode, cli_styles, format_repo_path, print_error, print_info, print_success, print_warning};
 pub use plugin::{PluginContext, plugin_config_dir, plugin_data_dir};
