@@ -3,7 +3,7 @@ use twig_core::cli_styles;
 
 /// Command-line interface for the `twig flow` plugin.
 #[derive(Debug, Parser, Clone)]
-#[command(name = "twig-flow", about = "Branch visualization and switching for Twig workflows.")]
+#[command(name = "twig-flow", display_name = "🌿 Twig Flow", about = "Branch visualization and switching for Twig workflows.")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(disable_help_subcommand = true)]
 #[command(max_term_width = 120)]
