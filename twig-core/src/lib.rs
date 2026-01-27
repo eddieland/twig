@@ -40,5 +40,7 @@ pub use state::{
   BranchDependency, BranchMetadata as StateBranchMetadata, Registry, RepoState, Repository, RootBranch, create_worktree,
 };
 pub use text::{Hyperlink, HyperlinkExt, hyperlink, truncate_string};
-pub use url::{ENV_JIRA_HOST, ensure_url_scheme, resolve_github_repo, resolve_github_repo_from_git2, resolve_jira_base_url};
+pub use url::{
+  ENV_JIRA_HOST, ensure_url_scheme, resolve_github_repo, resolve_github_repo_from_git2, resolve_jira_base_url,
+};
 pub use utils::{get_current_branch_github_pr, get_current_branch_jira_issue, open_url_in_browser};

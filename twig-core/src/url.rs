@@ -51,7 +51,8 @@ pub fn resolve_github_repo_from_git2(repo: &Git2Repository) -> Result<(String, S
   extract_repo_info_from_url(remote_url)
 }
 
-/// Normalize a URL by removing trailing slashes from the path when it's just "/".
+/// Normalize a URL by removing trailing slashes from the path when it's just
+/// "/".
 fn normalize_url(url: &Url) -> String {
   let mut result = String::new();
   result.push_str(&url[..Position::BeforePath]);
@@ -304,9 +305,7 @@ mod tests {
 
     create_commit(repo, "README.md", "# Test", "Initial commit").unwrap();
 
-    repo
-      .remote("origin", "https://github.com/owner/repo-name.git")
-      .unwrap();
+    repo.remote("origin", "https://github.com/owner/repo-name.git").unwrap();
 
     let (owner, repo_name) = resolve_github_repo(git_repo.path()).unwrap();
     assert_eq!(owner, "owner");
@@ -320,9 +319,7 @@ mod tests {
 
     create_commit(repo, "README.md", "# Test", "Initial commit").unwrap();
 
-    repo
-      .remote("origin", "git@github.com:my-org/my-project.git")
-      .unwrap();
+    repo.remote("origin", "git@github.com:my-org/my-project.git").unwrap();
 
     let (owner, repo_name) = resolve_github_repo(git_repo.path()).unwrap();
     assert_eq!(owner, "my-org");
