@@ -1,3 +1,4 @@
+use std::io::IsTerminal;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -134,6 +135,15 @@ fn handle_jira_branch_creation(
   issue_key: &str,
 ) -> Result<()> {
   let simple_name = issue_key.to_lowercase();
+
+  // Check if we're in an interactive terminal
+  if !std::io::stdin().is_terminal() {
+    print_error(&format!(
+      "No branch found for Jira issue {issue_key}. Cannot prompt for input in non-interactive mode."
+    ));
+    print_info("Hint: Use 'twig switch' to create a branch from Jira, or specify an existing branch name.");
+    return Ok(());
+  }
 
   print_info(&format!(
     "No branch found for Jira issue {issue_key}. How would you like to proceed?"
