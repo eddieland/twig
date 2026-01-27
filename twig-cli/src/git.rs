@@ -726,11 +726,42 @@ fn prompt_for_deletion(branch_name: &str) -> Result<bool> {
   Ok(input == "y" || input == "yes")
 }
 
-/// Delete a git branch
+/// Delete a git branch.
+///
+/// This handles a known libgit2 issue where branch deletion fails when trying
+/// to clean up config entries that don't exist (e.g., when a branch has partial
+/// config from external tools like GitHub CLI). The error message looks like:
+/// "could not find key 'branch.<name>.<key>' to delete"
+///
+/// See: <https://github.com/libgit2/libgit2/issues/4247>
 fn delete_branch(repo: &Git2Repository, branch_name: &str) -> Result<()> {
   let mut branch = repo.find_branch(branch_name, git2::BranchType::Local)?;
-  branch.delete()?;
-  Ok(())
+  match branch.delete() {
+    Ok(()) => Ok(()),
+    Err(e) => {
+      // Check if this is a config-related error (class 7) with "could not find key"
+      // This happens when libgit2 tries to delete config entries that don't exist.
+      // Despite the error, the branch reference itself may have been deleted.
+      let is_config_key_error =
+        e.class() == git2::ErrorClass::Config && e.message().contains("could not find key");
+
+      if is_config_key_error {
+        // Verify if the branch was actually deleted despite the config error
+        if repo.find_branch(branch_name, git2::BranchType::Local).is_err() {
+          // Branch is gone, the deletion succeeded despite the config cleanup error
+          tracing::debug!(
+            branch = branch_name,
+            error = %e,
+            "Branch deleted successfully despite config cleanup error"
+          );
+          return Ok(());
+        }
+      }
+
+      // Either not a config error, or the branch still exists - propagate the error
+      Err(e.into())
+    }
+  }
 }
 
 /// Display prune summary
