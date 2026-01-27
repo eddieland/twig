@@ -219,7 +219,7 @@ impl SelectorState {
       }
 
       // Sort by score (higher is better)
-      matches.sort_by(|a, b| b.1.cmp(&a.1));
+      matches.sort_by_key(|b| std::cmp::Reverse(b.1));
 
       // Update filtered candidates and indices
       self.filtered_indices = matches;
