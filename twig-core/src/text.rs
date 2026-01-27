@@ -111,8 +111,7 @@ pub fn hyperlink<'a, T: fmt::Display + ?Sized>(label: &'a T, url: &'a str, color
 ///
 /// # Arguments
 /// * `s` - The string to truncate
-/// * `max_chars` - Maximum number of characters to keep (excluding the "..."
-///   suffix)
+/// * `max_chars` - Maximum number of characters to keep (excluding the "..." suffix)
 ///
 /// # Returns
 /// The original string if it fits within `max_chars`, otherwise a truncated

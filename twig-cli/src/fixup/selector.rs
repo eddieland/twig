@@ -9,8 +9,7 @@
 //!
 //! - **Fuzzy Search**: Full-text search across commit information using nucleo
 //! - **Rich Display**: Shows commit hash, relative time, author, and indicators
-//! - **Visual Indicators**: Uses symbols to indicate authorship and Jira
-//!   association
+//! - **Visual Indicators**: Uses symbols to indicate authorship and Jira association
 //! - **Keyboard Navigation**: Standard fuzzy finder controls for selection
 //! - **Cross-Platform**: Works on Windows, macOS, and Linux
 //!

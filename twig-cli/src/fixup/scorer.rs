@@ -16,8 +16,7 @@ use crate::fixup::commit_collector::CommitCandidate;
 ///
 /// - **Recency (50% weight)**: More recent commits score higher
 /// - **Authorship (35% weight)**: Commits by the current user score higher
-/// - **Jira Association (15% weight)**: Commits with matching Jira issues score
-///   higher
+/// - **Jira Association (15% weight)**: Commits with matching Jira issues score higher
 ///
 /// After scoring, candidates are sorted in descending order by their total
 /// score, with the most relevant commits appearing first.
@@ -37,8 +36,7 @@ use crate::fixup::commit_collector::CommitCandidate;
 /// # Arguments
 ///
 /// * `candidates` - Mutable slice of commit candidates to score and sort
-/// * `args` - Fixup command arguments containing scoring parameters (days
-///   limit)
+/// * `args` - Fixup command arguments containing scoring parameters (days limit)
 /// * `current_jira_issue` - The current branch's Jira issue for scoring bonus
 ///
 /// # Returns
