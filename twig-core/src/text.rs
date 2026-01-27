@@ -8,6 +8,13 @@
 //! raw text while ignoring the control codes, so the output degrades
 //! gracefully.
 //!
+//! # Global Override
+//!
+//! The [`set_hyperlinks_override`] function allows globally disabling hyperlink
+//! output, which is useful for CLI flags like `--no-links`. When set to
+//! `false`, all hyperlinks will fall back to plain text output regardless of
+//! `ColorMode`.
+//!
 //! # Examples
 //! ```
 //! use twig_core::ColorMode;
@@ -29,6 +36,50 @@
 //! ```
 
 use std::fmt;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Global flag to force hyperlinks off. When `true`, hyperlinks are disabled
+/// regardless of `ColorMode`.
+static HYPERLINKS_DISABLED: AtomicBool = AtomicBool::new(false);
+
+/// Globally disable or enable hyperlink output.
+///
+/// When set to `false`, all hyperlinks will render as plain text with the URL
+/// appended in parentheses, regardless of the `ColorMode` passed to individual
+/// hyperlink calls.
+///
+/// This is useful for CLI flags like `--no-links` that should override all
+/// hyperlink behavior.
+///
+/// # Example
+/// ```
+/// use twig_core::ColorMode;
+/// use twig_core::text::{hyperlink, set_hyperlinks_override};
+///
+/// set_hyperlinks_override(false);
+/// let output = format!(
+///   "{}",
+///   hyperlink(&"link", "https://example.com", ColorMode::Yes)
+/// );
+/// assert_eq!(output, "link (https://example.com)");
+///
+/// set_hyperlinks_override(true);
+/// let output = format!(
+///   "{}",
+///   hyperlink(&"link", "https://example.com", ColorMode::Yes)
+/// );
+/// assert!(output.contains("\x1b]8;;"));
+/// ```
+#[inline]
+pub fn set_hyperlinks_override(enabled: bool) {
+  HYPERLINKS_DISABLED.store(!enabled, Ordering::SeqCst);
+}
+
+/// Check whether hyperlinks are currently disabled via the global override.
+#[inline]
+pub fn hyperlinks_disabled() -> bool {
+  HYPERLINKS_DISABLED.load(Ordering::SeqCst)
+}
 
 use crate::output::ColorMode;
 
@@ -50,7 +101,7 @@ impl<'a, T: fmt::Display + ?Sized> Hyperlink<'a, T> {
     Self {
       label,
       url,
-      enabled: colors != ColorMode::No,
+      enabled: colors != ColorMode::No && !hyperlinks_disabled(),
     }
   }
 
@@ -221,5 +272,38 @@ mod tests {
   #[test]
   fn truncate_string_handles_zero_max() {
     assert_eq!(truncate_string("hello", 0), "...");
+  }
+
+  #[test]
+  fn global_override_disables_hyperlinks() {
+    // Ensure we start with hyperlinks enabled
+    set_hyperlinks_override(true);
+
+    // With override enabled, hyperlinks should work
+    let enabled = format!("{}", hyperlink(&"link", "https://example.com", ColorMode::Yes));
+    assert!(enabled.contains("\x1b]8;;"), "hyperlink should emit OSC8 when enabled");
+
+    // Disable globally
+    set_hyperlinks_override(false);
+    let disabled = format!("{}", hyperlink(&"link", "https://example.com", ColorMode::Yes));
+    assert_eq!(
+      disabled, "link (https://example.com)",
+      "hyperlink should fall back when globally disabled"
+    );
+
+    // Re-enable for other tests
+    set_hyperlinks_override(true);
+  }
+
+  #[test]
+  fn hyperlinks_disabled_reflects_override_state() {
+    set_hyperlinks_override(true);
+    assert!(!hyperlinks_disabled());
+
+    set_hyperlinks_override(false);
+    assert!(hyperlinks_disabled());
+
+    // Re-enable for other tests
+    set_hyperlinks_override(true);
   }
 }

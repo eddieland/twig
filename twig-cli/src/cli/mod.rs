@@ -70,6 +70,10 @@ pub struct Cli {
   )]
   pub colors: ColorMode,
 
+  /// Disable terminal hyperlinks (OSC 8 sequences)
+  #[arg(long)]
+  pub no_links: bool,
+
   /// Subcommands
   #[command(subcommand)]
   pub command: Option<Commands>,
@@ -265,6 +269,11 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
     }
   }
 
+  // Set global hyperlink override based on --no-links argument
+  if cli.no_links {
+    twig_core::set_hyperlinks_override(false);
+  }
+
   match cli.command {
     Some(command) => match command {
       Commands::Adopt(adopt) => adopt::handle_adopt_command(adopt),
@@ -303,7 +312,7 @@ fn handle_plugin_fallback(cli: Cli) -> Result<()> {
   if let Some(plugin_name) = cli.plugin_args.first() {
     if plugin::plugin_is_available(plugin_name)? {
       let plugin_args = cli.plugin_args[1..].to_vec();
-      plugin::execute_plugin(plugin_name, plugin_args, cli.verbose, cli.colors)
+      plugin::execute_plugin(plugin_name, plugin_args, cli.verbose, cli.colors, cli.no_links)
     } else {
       use clap::CommandFactory;
       use clap::error::ErrorKind;
