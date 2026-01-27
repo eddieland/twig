@@ -34,13 +34,10 @@
 //!
 //! # Notes
 //!
-//! - The resolver does not modify the actual Git repository or its branches; it
-//!   only provides a way to visualize and work with user-defined branch
-//!   dependencies.
-//! - Dependency cycles are not allowed and will be reported as errors if
-//!   detected.
-//! - The resolver can suggest a default root branch based on user-defined
-//!   settings or common branch naming conventions.
+//! - The resolver does not modify the actual Git repository or its branches; it only provides a way to visualize and
+//!   work with user-defined branch dependencies.
+//! - Dependency cycles are not allowed and will be reported as errors if detected.
+//! - The resolver can suggest a default root branch based on user-defined settings or common branch naming conventions.
 
 use std::collections::HashMap;
 

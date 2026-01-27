@@ -137,8 +137,8 @@ pub fn write_netrc_entry(path: &Path, machine: &str, username: &str, password: &
 ///
 /// # Arguments
 ///
-/// * `raw_host` - A string slice containing the raw host URL that may include
-///   protocol prefixes (http:// or https://) and/or trailing slashes
+/// * `raw_host` - A string slice containing the raw host URL that may include protocol prefixes (http:// or https://)
+///   and/or trailing slashes
 ///
 /// # Returns
 ///

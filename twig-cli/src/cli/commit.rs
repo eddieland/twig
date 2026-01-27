@@ -184,8 +184,7 @@ fn create_fixup_commit(repo_path: &std::path::Path, message: &str) -> Result<()>
 /// This function creates a commit message in the format "ISSUE-KEY: Summary"
 /// with optional customizations:
 /// - If `message` is provided, it replaces the issue summary
-/// - If `prefix` is provided, it's added before the issue summary (after the
-///   key)
+/// - If `prefix` is provided, it's added before the issue summary (after the key)
 /// - If `suffix` is provided, it's added at the end of the message
 ///
 /// Note: When a custom message is provided, prefix and suffix are ignored.

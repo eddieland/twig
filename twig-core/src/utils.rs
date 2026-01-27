@@ -15,8 +15,7 @@ use anyhow::{Context, Result};
 ///
 /// # Arguments
 ///
-/// * `path` - A filesystem path that may be absolute or relative to the current
-///   working directory.
+/// * `path` - A filesystem path that may be absolute or relative to the current working directory.
 ///
 /// # Errors
 ///
@@ -111,8 +110,7 @@ pub fn is_valid_branch_name(name: &str) -> bool {
 /// # Arguments
 ///
 /// * `s` - Source string to shorten.
-/// * `max_len` - Maximum number of characters to return, including the ellipsis
-///   when truncation occurs.
+/// * `max_len` - Maximum number of characters to return, including the ellipsis when truncation occurs.
 pub fn truncate_string(s: &str, max_len: usize) -> String {
   if s.len() <= max_len {
     s.to_string()
