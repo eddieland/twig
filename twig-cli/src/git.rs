@@ -742,19 +742,33 @@ fn delete_branch(repo: &Git2Repository, branch_name: &str) -> Result<()> {
       // Check if this is a config-related error (class 7) with "could not find key"
       // This happens when libgit2 tries to delete config entries that don't exist.
       // Despite the error, the branch reference itself may have been deleted.
-      let is_config_key_error =
-        e.class() == git2::ErrorClass::Config && e.message().contains("could not find key");
+      let is_config_key_error = e.class() == git2::ErrorClass::Config && e.message().contains("could not find key");
 
       if is_config_key_error {
         // Verify if the branch was actually deleted despite the config error
-        if repo.find_branch(branch_name, git2::BranchType::Local).is_err() {
-          // Branch is gone, the deletion succeeded despite the config cleanup error
-          tracing::debug!(
-            branch = branch_name,
-            error = %e,
-            "Branch deleted successfully despite config cleanup error"
-          );
-          return Ok(());
+        match repo.find_branch(branch_name, git2::BranchType::Local) {
+          Err(lookup_err) if lookup_err.code() == git2::ErrorCode::NotFound => {
+            // Branch is gone, the deletion succeeded despite the config cleanup error
+            tracing::debug!(
+              branch = branch_name,
+              error = %e,
+              "Branch deleted successfully despite config cleanup error"
+            );
+            return Ok(());
+          }
+          Ok(_) => {
+            // Branch still exists, fall through to return the original error
+          }
+          Err(lookup_err) => {
+            // Unexpected lookup error (I/O, permissions, etc.) - log and return original
+            // error
+            tracing::warn!(
+              branch = branch_name,
+              original_error = %e,
+              lookup_error = %lookup_err,
+              "Branch deletion failed; could not verify branch state due to lookup error"
+            );
+          }
         }
       }
 
