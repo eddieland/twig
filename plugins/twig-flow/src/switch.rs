@@ -5,7 +5,6 @@ use anyhow::{Context, Result};
 use directories::BaseDirs;
 use git2::Repository;
 use tokio::runtime::Runtime;
-use twig_core::checkout_branch;
 use twig_core::git::get_repository;
 use twig_core::git::switch::{
   BranchSwitchAction, SwitchExecutionOptions, SwitchInput, apply_branch_state_mutations, detect_switch_input,
@@ -14,6 +13,7 @@ use twig_core::git::switch::{
 use twig_core::jira_parser::{JiraTicketParser, create_jira_parser};
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::state::RepoState;
+use twig_core::{checkout_branch, generate_branch_name_from_issue};
 use twig_jira::{create_jira_client_from_netrc, get_jira_host};
 
 use crate::Cli;
@@ -255,22 +255,8 @@ fn create_branch_from_jira(
       }
     };
 
-    // Sanitize the summary for use in a branch name
-    let summary = issue.fields.summary.to_lowercase();
-    let sanitized_summary: String = summary
-      .chars()
-      .map(|c| match c {
-        ' ' | '-' | '_' => '-',
-        c if c.is_alphanumeric() => c,
-        _ => '-',
-      })
-      .collect::<String>()
-      .replace("--", "-")
-      .trim_matches('-')
-      .to_string();
-
-    // Create the branch name in the format "PROJ-123/add-feature"
-    let branch_name = format!("{issue_key}/{sanitized_summary}");
+    // Create a branch name from the issue key and summary (without stop word filtering)
+    let branch_name = generate_branch_name_from_issue(issue_key, &issue.fields.summary, false);
 
     print_info(&format!("Creating branch: {branch_name}"));
 

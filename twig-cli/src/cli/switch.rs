@@ -17,7 +17,7 @@ use twig_core::git::switch::{
 use twig_core::jira_parser::JiraTicketParser;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::state::RepoState;
-use twig_core::{checkout_branch, detect_repository};
+use twig_core::{checkout_branch, detect_repository, generate_branch_name_from_issue};
 use twig_gh::models::{GitHubPullRequest, RepositoryInfo};
 use twig_gh::{GitHubClient, GitHubRepo, GitRemoteScheme, create_github_client_from_netrc};
 use twig_jira::{JiraClient, create_jira_client_from_netrc, get_jira_host};
@@ -363,24 +363,8 @@ fn create_branch_from_jira_issue(
       }
     };
 
-    // Create a branch name from the issue key and summary
-    let summary = issue.fields.summary.to_lowercase();
-
-    // Sanitize the summary for use in a branch name
-    let sanitized_summary = summary
-      .chars()
-      .map(|c| match c {
-        ' ' | '-' | '_' => '-',
-        c if c.is_alphanumeric() => c,
-        _ => '-',
-      })
-      .collect::<String>()
-      .replace("--", "-")
-      .trim_matches('-')
-      .to_string();
-
-    // Create the branch name in the format "PROJ-123/add-feature"
-    let branch_name = format!("{issue_key}/{sanitized_summary}");
+    // Create a branch name from the issue key and summary (without stop word filtering)
+    let branch_name = generate_branch_name_from_issue(issue_key, &issue.fields.summary, false);
 
     print_info(&format!("Creating branch: {branch_name}",));
 

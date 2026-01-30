@@ -43,4 +43,7 @@ pub use text::{Hyperlink, HyperlinkExt, hyperlink, hyperlinks_disabled, set_hype
 pub use url::{
   ENV_JIRA_HOST, ensure_url_scheme, resolve_github_repo, resolve_github_repo_from_git2, resolve_jira_base_url,
 };
-pub use utils::{filter_stop_words, get_current_branch_github_pr, get_current_branch_jira_issue, open_url_in_browser};
+pub use utils::{
+  filter_stop_words, generate_branch_name_from_issue, get_current_branch_github_pr, get_current_branch_jira_issue,
+  open_url_in_browser,
+};
