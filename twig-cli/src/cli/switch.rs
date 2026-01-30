@@ -380,7 +380,12 @@ fn create_branch_from_jira_issue(
       .to_string();
 
     // Create the branch name in the format "PROJ-123/add-feature"
-    let branch_name = format!("{issue_key}/{sanitized_summary}");
+    // If sanitized summary is empty (e.g., all special characters), use just the issue key
+    let branch_name = if sanitized_summary.is_empty() {
+      issue_key.to_string()
+    } else {
+      format!("{issue_key}/{sanitized_summary}")
+    };
 
     print_info(&format!("Creating branch: {branch_name}",));
 

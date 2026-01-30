@@ -474,7 +474,12 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
       .to_string();
 
     // Create the branch name in the format "PROJ-123/add-feature"
-    let branch_name = format!("{issue_key}/{sanitized_summary}");
+    // If sanitized summary is empty (e.g., all stop words), use just the issue key
+    let branch_name = if sanitized_summary.is_empty() {
+      issue_key.to_string()
+    } else {
+      format!("{issue_key}/{sanitized_summary}")
+    };
 
     // Get the current repository
     let repo_path = match twig_core::detect_repository() {
