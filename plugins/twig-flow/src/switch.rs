@@ -145,14 +145,25 @@ fn handle_jira_branch_creation(
     return Ok(());
   }
 
+  // Try to fetch the Jira issue to show the actual branch name in the prompt
+  let jira_branch_name = fetch_jira_branch_name(issue_key);
+
   print_info(&format!(
     "No branch found for Jira issue {issue_key}. How would you like to proceed?"
   ));
 
-  let choice = prompt_jira_branch_choice(issue_key, &simple_name)?;
+  let choice = prompt_jira_branch_choice(jira_branch_name.as_deref(), &simple_name)?;
 
   match choice {
-    JiraBranchChoice::CreateFromJira => create_branch_from_jira(repo, repo_path, jira_parser, issue_key),
+    JiraBranchChoice::CreateFromJira => {
+      if let Some(branch_name) = jira_branch_name {
+        create_branch_with_name(repo, repo_path, jira_parser, issue_key, &branch_name)
+      } else {
+        // This shouldn't happen since we hide the option when fetch fails,
+        // but handle it gracefully by fetching again
+        create_branch_from_jira(repo, repo_path, jira_parser, issue_key)
+      }
+    }
     JiraBranchChoice::CreateSimple => {
       create_simple_branch(repo, repo_path, repo_state, jira_parser, issue_key, &simple_name)
     }
@@ -173,27 +184,35 @@ fn handle_jira_branch_creation(
 }
 
 /// Prompt the user to choose how to create a branch for a Jira issue.
-fn prompt_jira_branch_choice(issue_key: &str, simple_name: &str) -> Result<JiraBranchChoice> {
-  let items = [
-    format!("Create branch from Jira (e.g., {issue_key}/issue-summary)"),
-    format!("Create simple branch: {simple_name}"),
-    "Enter custom branch name".to_string(),
-    "Abort".to_string(),
-  ];
+///
+/// If `jira_branch_name` is Some, shows the actual branch name. If None (fetch failed),
+/// the "Create branch from Jira" option is omitted.
+fn prompt_jira_branch_choice(jira_branch_name: Option<&str>, simple_name: &str) -> Result<JiraBranchChoice> {
+  let mut items = Vec::new();
+  let mut choice_map = Vec::new();
+
+  if let Some(branch_name) = jira_branch_name {
+    items.push(format!("Create branch from Jira: {branch_name}"));
+    choice_map.push(JiraBranchChoice::CreateFromJira);
+  }
+
+  items.push(format!("Create simple branch: {simple_name}"));
+  choice_map.push(JiraBranchChoice::CreateSimple);
+
+  items.push("Enter custom branch name".to_string());
+  choice_map.push(JiraBranchChoice::CustomName);
+
+  items.push("Abort".to_string());
+  choice_map.push(JiraBranchChoice::Abort);
 
   let selection = dialoguer::Select::new()
     .with_prompt("Select an option")
     .items(&items)
     .default(0)
     .interact()
-    .unwrap_or(3); // Default to abort on error
+    .unwrap_or(choice_map.len() - 1); // Default to abort on error
 
-  Ok(match selection {
-    0 => JiraBranchChoice::CreateFromJira,
-    1 => JiraBranchChoice::CreateSimple,
-    2 => JiraBranchChoice::CustomName,
-    _ => JiraBranchChoice::Abort,
-  })
+  Ok(choice_map.get(selection).copied().unwrap_or(JiraBranchChoice::Abort))
 }
 
 /// Prompt the user to enter a custom branch name.
@@ -210,6 +229,51 @@ fn prompt_custom_branch_name() -> Result<Option<String>> {
   } else {
     Ok(Some(trimmed.to_string()))
   }
+}
+
+/// Fetch the Jira issue and generate the branch name.
+/// Returns None if fetching fails (credentials missing, API error, etc.).
+fn fetch_jira_branch_name(issue_key: &str) -> Option<String> {
+  let jira_host = get_jira_host().ok()?;
+  let base_dirs = BaseDirs::new()?;
+  let jira_client = create_jira_client_from_netrc(base_dirs.home_dir(), &jira_host).ok()?;
+
+  let rt = Runtime::new().ok()?;
+  rt.block_on(async {
+    let issue = jira_client.get_issue(issue_key).await.ok()?;
+    Some(generate_branch_name_from_issue(issue_key, &issue.fields.summary, false))
+  })
+}
+
+/// Create a branch with a pre-determined name (already fetched from Jira).
+fn create_branch_with_name(
+  repo: &Repository,
+  repo_path: &Path,
+  jira_parser: Option<&JiraTicketParser>,
+  issue_key: &str,
+  branch_name: &str,
+) -> Result<()> {
+  print_info(&format!("Creating branch: {branch_name}"));
+
+  let branch_base = resolve_branch_base(repo, repo_path, None, jira_parser)?;
+
+  let base_commit = repo
+    .find_commit(branch_base.commit())
+    .with_context(|| format!("Failed to locate base commit for '{branch_name}'"))?;
+
+  repo
+    .branch(branch_name, &base_commit, false)
+    .with_context(|| format!("Failed to create branch '{branch_name}'"))?;
+
+  checkout_branch(repo, branch_name)?;
+
+  store_jira_association(repo_path, branch_name, issue_key)?;
+
+  print_success(&format!(
+    "Created and switched to branch '{branch_name}' for Jira issue {issue_key}"
+  ));
+
+  Ok(())
 }
 
 /// Create a branch by fetching issue details from Jira API.
