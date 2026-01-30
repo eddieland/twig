@@ -382,7 +382,7 @@ impl BranchGraphBuilder {
       edges.extend(self.attach_orphans_to_default_root(&repo_state, &mut nodes));
     }
 
-    self.apply_divergence(repo, &mut nodes)?;
+    self.apply_divergence(repo, &repo_state, &mut nodes)?;
 
     let root_candidates = self.resolve_root_candidates(&repo_state, &nodes, head_branch.as_deref());
     let current_branch = head_branch
@@ -591,16 +591,33 @@ impl BranchGraphBuilder {
   fn apply_divergence(
     &self,
     repo: &Repository,
+    repo_state: &RepoState,
     nodes: &mut BTreeMap<String, BranchNode>,
   ) -> Result<(), BranchGraphError> {
     let mut cached_counts: HashMap<(Oid, Oid), (usize, usize)> = HashMap::new();
     let head_by_name: BTreeMap<String, Oid> = nodes.iter().map(|(name, node)| (name.clone(), node.head.oid)).collect();
 
+    // Get default root for orphan comparison
+    let default_root = repo_state
+      .get_default_root()
+      .map(str::to_string)
+      .or_else(|| repo_state.get_root_branches().first().cloned());
+
     for node in nodes.values_mut() {
-      let Some(parent) = node.topology.primary_parent.clone() else {
+      // Determine comparison target: primary_parent OR default_root for orphans
+      let comparison_branch = node.topology.primary_parent.clone().map(|p| p.to_string()).or_else(|| {
+        // Orphan: use default root if available and not self
+        default_root
+          .as_ref()
+          .filter(|root| *root != node.name.as_str())
+          .cloned()
+      });
+
+      let Some(parent_name) = comparison_branch else {
         continue;
       };
-      let Some(parent_head) = head_by_name.get(parent.as_str()) else {
+
+      let Some(parent_head) = head_by_name.get(&parent_name) else {
         continue;
       };
 
@@ -771,5 +788,64 @@ mod tests {
         .iter()
         .any(|edge| edge.from.as_str() == main_branch && edge.to.as_str() == "feature/stray")
     );
+  }
+
+  #[test]
+  fn records_divergence_for_orphans_against_default_root() {
+    let repo_guard = GitRepoTestGuard::new();
+    let repo = &repo_guard.repo;
+
+    create_commit(repo, "README.md", "hello", "initial").unwrap();
+    let main_branch = repo.head().unwrap().shorthand().unwrap().to_string();
+    create_branch(repo, "feature/orphan", None).unwrap();
+
+    checkout_branch(repo, "feature/orphan").unwrap();
+    create_commit(repo, "orphan.txt", "content", "orphan work 1").unwrap();
+    create_commit(repo, "orphan2.txt", "more", "orphan work 2").unwrap();
+
+    checkout_branch(repo, &main_branch).unwrap();
+    create_commit(repo, "main.txt", "more", "main work").unwrap();
+
+    let workdir = repo.workdir().unwrap();
+
+    // Configure main as root but NO dependency for the orphan branch
+    let mut state = RepoState::default();
+    state.add_root(main_branch.clone(), true).unwrap();
+    state.save(workdir).unwrap();
+
+    let graph = BranchGraphBuilder::new().build(repo).unwrap();
+    let orphan = graph.get(&BranchName::from("feature/orphan")).unwrap();
+
+    // Orphan should have no primary_parent since we didn't configure a dependency
+    assert!(orphan.topology.primary_parent.is_none());
+
+    // But divergence should still be calculated against the default root
+    let divergence = orphan
+      .metadata
+      .divergence
+      .as_ref()
+      .expect("divergence recorded for orphan");
+    assert_eq!(divergence.ahead, 2); // Two commits on orphan
+    assert_eq!(divergence.behind, 1); // One commit on main after branch point
+  }
+
+  #[test]
+  fn no_divergence_for_default_root_itself() {
+    let repo_guard = GitRepoTestGuard::new();
+    let repo = &repo_guard.repo;
+
+    create_commit(repo, "README.md", "hello", "initial").unwrap();
+    let main_branch = repo.head().unwrap().shorthand().unwrap().to_string();
+
+    let workdir = repo.workdir().unwrap();
+    let mut state = RepoState::default();
+    state.add_root(main_branch.clone(), true).unwrap();
+    state.save(workdir).unwrap();
+
+    let graph = BranchGraphBuilder::new().build(repo).unwrap();
+    let root = graph.get(&BranchName::from(main_branch.as_str())).unwrap();
+
+    // Default root should not have divergence (no self-comparison)
+    assert!(root.metadata.divergence.is_none());
   }
 }
