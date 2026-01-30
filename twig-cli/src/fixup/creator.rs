@@ -97,6 +97,7 @@ mod tests {
       date: Utc::now(),
       is_current_user: true,
       jira_issue: None,
+      is_branch_unique: false,
       score: 0.8,
     }
   }

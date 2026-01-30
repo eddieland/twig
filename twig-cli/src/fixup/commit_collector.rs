@@ -9,7 +9,8 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Duration, Utc};
-use git2::Repository;
+use git2::{Oid, Repository};
+use twig_core::state::RepoState;
 
 use crate::cli::fixup::FixupArgs;
 
@@ -23,6 +24,7 @@ pub struct CommitCandidate {
   pub date: DateTime<Utc>,
   pub is_current_user: bool,
   pub jira_issue: Option<String>,
+  pub is_branch_unique: bool,
   pub score: f64,
 }
 
@@ -60,6 +62,22 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
 
   tracing::debug!("Current git user: {}", current_user);
   tracing::debug!("Current branch Jira issue: {:?}", current_jira_issue);
+
+  // Resolve comparison branch for branch uniqueness detection
+  let current_branch = get_current_branch_name(&repo);
+  let comparison_branch = current_branch
+    .as_ref()
+    .and_then(|branch| resolve_comparison_branch(&repo, repo_path, branch));
+  let comparison_tip = comparison_branch
+    .as_ref()
+    .and_then(|branch| get_comparison_branch_tip(&repo, branch));
+
+  tracing::debug!(
+    "Branch uniqueness detection: current={:?}, comparison={:?}, comparison_tip={:?}",
+    current_branch,
+    comparison_branch,
+    comparison_tip
+  );
 
   // Calculate the cutoff timestamp for filtering by days
   let since_timestamp = (Utc::now() - Duration::days(args.days as i64)).timestamp();
@@ -119,6 +137,17 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
       .as_ref()
       .and_then(|parser| extract_jira_issue_from_message(parser, &message));
 
+    // Determine if this commit is unique to the current branch
+    // A commit is branch-unique if it's NOT reachable from the comparison branch tip
+    // (i.e., the comparison tip is NOT a descendant of this commit, and they're not equal)
+    let is_branch_unique = comparison_tip.is_some_and(|tip| {
+      // The commit is reachable from the comparison tip if:
+      // - The tip is a descendant of the commit (commit is an ancestor of tip), OR
+      // - The commit equals the tip
+      // So branch-unique means: tip is NOT a descendant AND not equal
+      oid != tip && !repo.graph_descendant_of(tip, oid).unwrap_or(true)
+    });
+
     let candidate = CommitCandidate {
       hash,
       short_hash,
@@ -127,6 +156,7 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
       author: author_name,
       date,
       jira_issue,
+      is_branch_unique,
       score: 0.0, // Will be calculated by scorer
     };
 
@@ -158,6 +188,100 @@ fn extract_jira_issue_from_message(parser: &twig_core::jira_parser::JiraTicketPa
 /// Check if a commit message indicates a fixup commit
 fn is_fixup_commit(message: &str) -> bool {
   message.starts_with("fixup!")
+}
+
+/// Resolves the comparison branch for determining branch uniqueness.
+///
+/// The comparison branch is determined with the following priority:
+/// 1. Configured dependency parent (via RepoState::get_dependency_parents())
+/// 2. Default root branch (via RepoState::get_default_root())
+/// 3. Fallback to origin/main or origin/master
+///
+/// # Arguments
+///
+/// * `repo` - The git2 Repository
+/// * `repo_path` - Path to the repository root
+/// * `current_branch` - Name of the current branch
+///
+/// # Returns
+///
+/// The resolved comparison branch reference, or None if no suitable branch found.
+fn resolve_comparison_branch(repo: &Repository, repo_path: &Path, current_branch: &str) -> Option<String> {
+  // Try to load repo state for dependency information
+  if let Ok(state) = RepoState::load(repo_path) {
+    // Priority 1: Check for configured dependency parent
+    let parents = state.get_dependency_parents(current_branch);
+    if let Some(parent) = parents.first() {
+      tracing::debug!("Using dependency parent '{}' as comparison branch", parent);
+      // Try local branch first, then remote tracking
+      if repo.find_branch(parent, git2::BranchType::Local).is_ok() {
+        return Some(parent.to_string());
+      }
+      // Try as remote tracking branch
+      let remote_ref = format!("origin/{parent}");
+      if repo.find_reference(&format!("refs/remotes/{remote_ref}")).is_ok() {
+        return Some(remote_ref);
+      }
+    }
+
+    // Priority 2: Use default root branch
+    if let Some(default_root) = state.get_default_root() {
+      tracing::debug!("Using default root '{}' as comparison branch", default_root);
+      if repo.find_branch(default_root, git2::BranchType::Local).is_ok() {
+        return Some(default_root.to_string());
+      }
+      let remote_ref = format!("origin/{default_root}");
+      if repo.find_reference(&format!("refs/remotes/{remote_ref}")).is_ok() {
+        return Some(remote_ref);
+      }
+    }
+  }
+
+  // Priority 3: Fallback to origin/main or origin/master
+  for fallback in &["origin/main", "origin/master"] {
+    if repo.find_reference(&format!("refs/remotes/{fallback}")).is_ok() {
+      tracing::debug!("Using fallback '{}' as comparison branch", fallback);
+      return Some((*fallback).to_string());
+    }
+  }
+
+  tracing::debug!("No comparison branch found");
+  None
+}
+
+/// Gets the tip commit OID of the comparison branch.
+///
+/// # Arguments
+///
+/// * `repo` - The git2 Repository
+/// * `comparison_branch` - Name of the branch to compare against
+///
+/// # Returns
+///
+/// The OID of the comparison branch tip, or None if it cannot be resolved.
+fn get_comparison_branch_tip(repo: &Repository, comparison_branch: &str) -> Option<Oid> {
+  if comparison_branch.starts_with("origin/") {
+    // Remote tracking branch
+    let refname = format!("refs/remotes/{comparison_branch}");
+    repo.find_reference(&refname).ok()?.target()
+  } else {
+    // Local branch
+    repo
+      .find_branch(comparison_branch, git2::BranchType::Local)
+      .ok()?
+      .get()
+      .target()
+  }
+}
+
+/// Gets the current branch name from the repository.
+fn get_current_branch_name(repo: &Repository) -> Option<String> {
+  let head = repo.head().ok()?;
+  if head.is_branch() {
+    head.shorthand().map(|s| s.to_string())
+  } else {
+    None
+  }
 }
 
 #[cfg(test)]

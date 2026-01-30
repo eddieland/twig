@@ -611,24 +611,32 @@ pub fn select_commit(candidates: &[CommitCandidate], vim_mode: bool) -> Result<O
 ///
 /// The returned string follows this pattern:
 /// ```text
-/// abc123d 2h ago 🎫 ● Fix user authentication bug (john.doe)
+/// abc123d 2h ago ⭐ 🎫 ● Fix user authentication bug (john.doe)
 /// ```
 ///
 /// Where:
 /// - `abc123d` is the short commit hash
 /// - `2h ago` is the relative time
+/// - `⭐` indicates commit is unique to current branch (space if shared with parent)
 /// - `🎫` indicates a Jira issue is present (space if none)
 /// - `●` indicates current user (○ for others)
 /// - `Fix user authentication bug` is the commit message
 /// - `(john.doe)` is the author name
 fn format_candidate_for_display(candidate: &CommitCandidate) -> String {
   let relative_time = format_relative_time(&candidate.date);
-  let author_indicator = if candidate.is_current_user { "●" } else { "○" };
+  let branch_unique_indicator = if candidate.is_branch_unique { "⭐" } else { " " };
   let jira_indicator = if candidate.jira_issue.is_some() { "🎫" } else { " " };
+  let author_indicator = if candidate.is_current_user { "●" } else { "○" };
 
   format!(
-    "{} {} {} {} {} ({})",
-    candidate.short_hash, relative_time, jira_indicator, author_indicator, candidate.message, candidate.author
+    "{} {} {} {} {} {} ({})",
+    candidate.short_hash,
+    relative_time,
+    branch_unique_indicator,
+    jira_indicator,
+    author_indicator,
+    candidate.message,
+    candidate.author
   )
 }
 
@@ -666,6 +674,7 @@ mod tests {
       date,
       is_current_user: true,
       jira_issue: Some("PROJ-123".to_string()),
+      is_branch_unique: false,
       score: 0.8,
     }
   }
@@ -710,6 +719,16 @@ mod tests {
     is_current_user: bool,
     jira_issue: Option<String>,
   ) -> CommitCandidate {
+    create_test_candidate_full(short_hash, hours_ago, is_current_user, jira_issue, false)
+  }
+
+  fn create_test_candidate_full(
+    short_hash: &str,
+    hours_ago: i64,
+    is_current_user: bool,
+    jira_issue: Option<String>,
+    is_branch_unique: bool,
+  ) -> CommitCandidate {
     let now = Utc::now();
     let date = now - chrono::Duration::hours(hours_ago);
 
@@ -721,6 +740,7 @@ mod tests {
       date,
       is_current_user,
       jira_issue,
+      is_branch_unique,
       score: 0.8,
     }
   }
@@ -733,6 +753,17 @@ mod tests {
     assert!(formatted.contains("abc123"));
     assert!(formatted.contains("○")); // Other user indicator
     assert!(!formatted.contains("🎫")); // No Jira indicator
+    assert!(!formatted.contains("⭐")); // No branch-unique indicator
+  }
+
+  #[test]
+  fn test_format_candidate_for_display_branch_unique() {
+    let candidate = create_test_candidate_full("abc123", 2, true, None, true);
+    let formatted = format_candidate_for_display(&candidate);
+
+    assert!(formatted.contains("abc123"));
+    assert!(formatted.contains("⭐")); // Branch-unique indicator
+    assert!(formatted.contains("●")); // Current user indicator
   }
 
   #[test]
