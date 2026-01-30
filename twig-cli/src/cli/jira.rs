@@ -11,8 +11,8 @@ use owo_colors::OwoColorize;
 use twig_core::jira_parser::JiraTicketParser;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::{
-  RepoState, StateBranchMetadata, create_jira_parser, create_worktree, detect_repository, get_config_dirs,
-  get_current_branch_jira_issue,
+  RepoState, StateBranchMetadata, create_jira_parser, create_worktree, detect_repository, filter_stop_words,
+  get_config_dirs, get_current_branch_jira_issue,
 };
 use twig_jira::{create_jira_runtime_and_client, get_jira_host};
 
@@ -457,10 +457,11 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
     };
 
     // Create a branch name from the issue key and summary
-    let summary = issue.fields.summary.to_lowercase();
+    // Filter out low-signal words before sanitizing
+    let filtered_summary = filter_stop_words(&issue.fields.summary).to_lowercase();
 
     // Sanitize the summary for use in a branch name
-    let sanitized_summary = summary
+    let sanitized_summary = filtered_summary
       .chars()
       .map(|c| match c {
         ' ' | '-' | '_' => '-',
