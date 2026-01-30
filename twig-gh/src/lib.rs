@@ -21,4 +21,4 @@ pub use models::{
   CheckRun, CheckSuite, GitHubAuth, GitHubPullRequest, GitHubUser, PullRequestRef, PullRequestReview, PullRequestStatus,
 };
 // Re-export utilities
-pub use utils::{extract_pr_number_from_url, extract_repo_info_from_url};
+pub use utils::{GitHubPr, GitHubRepo, GitRemoteScheme};
