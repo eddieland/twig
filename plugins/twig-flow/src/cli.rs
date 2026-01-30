@@ -1,6 +1,8 @@
 use clap::{ArgGroup, Parser};
 use twig_core::cli_styles;
 
+use crate::complete::flow_target_completer;
+
 /// Command-line interface for the `twig flow` plugin.
 #[derive(Debug, Parser, Clone)]
 #[command(name = "twig-flow", about = "Branch visualization and switching for Twig workflows.")]
@@ -28,6 +30,6 @@ pub struct Cli {
   pub include: Option<String>,
 
   /// Optional branch or ticket target for switching mode.
-  #[arg(value_name = "TARGET")]
+  #[arg(value_name = "TARGET", add = flow_target_completer())]
   pub target: Option<String>,
 }
