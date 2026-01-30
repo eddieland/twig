@@ -11,8 +11,8 @@ use owo_colors::OwoColorize;
 use twig_core::jira_parser::JiraTicketParser;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::{
-  RepoState, StateBranchMetadata, create_jira_parser, create_worktree, detect_repository, filter_stop_words,
-  get_config_dirs, get_current_branch_jira_issue,
+  RepoState, StateBranchMetadata, create_jira_parser, create_worktree, detect_repository,
+  generate_branch_name_from_issue, get_config_dirs, get_current_branch_jira_issue,
 };
 use twig_jira::{create_jira_runtime_and_client, get_jira_host};
 
@@ -456,30 +456,8 @@ fn handle_create_branch_command(issue_key: &str, with_worktree: bool) -> Result<
       }
     };
 
-    // Create a branch name from the issue key and summary
-    // Filter out low-signal words before sanitizing
-    let filtered_summary = filter_stop_words(&issue.fields.summary).to_lowercase();
-
-    // Sanitize the summary for use in a branch name
-    let sanitized_summary = filtered_summary
-      .chars()
-      .map(|c| match c {
-        ' ' | '-' | '_' => '-',
-        c if c.is_alphanumeric() => c,
-        _ => '-',
-      })
-      .collect::<String>()
-      .replace("--", "-")
-      .trim_matches('-') // This trims both leading and trailing hyphens
-      .to_string();
-
-    // Create the branch name in the format "PROJ-123/add-feature"
-    // If sanitized summary is empty (e.g., all stop words), use just the issue key
-    let branch_name = if sanitized_summary.is_empty() {
-      issue_key.to_string()
-    } else {
-      format!("{issue_key}/{sanitized_summary}")
-    };
+    // Create a branch name from the issue key and summary (with stop word filtering)
+    let branch_name = generate_branch_name_from_issue(issue_key, &issue.fields.summary, true);
 
     // Get the current repository
     let repo_path = match twig_core::detect_repository() {

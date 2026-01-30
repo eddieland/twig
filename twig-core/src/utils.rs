@@ -282,6 +282,81 @@ pub fn filter_stop_words(text: &str) -> String {
     .join(" ")
 }
 
+/// Sanitize a summary string for use in a Git branch name.
+///
+/// Converts the summary to lowercase, replaces spaces/hyphens/underscores with hyphens,
+/// removes non-alphanumeric characters, collapses consecutive hyphens, and trims
+/// leading/trailing hyphens.
+///
+/// # Arguments
+///
+/// * `summary` - The summary text to sanitize.
+///
+/// # Returns
+///
+/// A sanitized string suitable for use in a branch name (may be empty).
+fn sanitize_summary_for_branch(summary: &str) -> String {
+  summary
+    .to_lowercase()
+    .chars()
+    .map(|c| match c {
+      ' ' | '-' | '_' => '-',
+      c if c.is_alphanumeric() => c,
+      _ => '-',
+    })
+    .collect::<String>()
+    .replace("--", "-")
+    .trim_matches('-')
+    .to_string()
+}
+
+/// Generate a Git branch name from an issue key and summary.
+///
+/// Creates a branch name in the format `ISSUE-KEY/sanitized-summary`. If the
+/// sanitized summary is empty (e.g., all stop words or special characters),
+/// returns just the issue key to avoid invalid trailing slashes.
+///
+/// # Arguments
+///
+/// * `issue_key` - The issue identifier (e.g., "PROJ-123").
+/// * `summary` - The issue summary/title.
+/// * `filter_stop_words_enabled` - If true, removes common stop words before sanitizing.
+///
+/// # Returns
+///
+/// A valid Git branch name.
+///
+/// # Examples
+///
+/// ```
+/// use twig_core::utils::generate_branch_name_from_issue;
+///
+/// assert_eq!(
+///   generate_branch_name_from_issue("PROJ-123", "Add new feature", false),
+///   "PROJ-123/add-new-feature"
+/// );
+/// assert_eq!(
+///   generate_branch_name_from_issue("PROJ-123", "Add support for the new feature", true),
+///   "PROJ-123/add-support-new-feature"
+/// );
+/// // Empty summary after filtering results in just the issue key
+/// assert_eq!(
+///   generate_branch_name_from_issue("PROJ-123", "the and", true),
+///   "PROJ-123"
+/// );
+/// ```
+pub fn generate_branch_name_from_issue(issue_key: &str, summary: &str, filter_stop_words_enabled: bool) -> String {
+  let processed_summary = if filter_stop_words_enabled { filter_stop_words(summary) } else { summary.to_string() };
+
+  let sanitized_summary = sanitize_summary_for_branch(&processed_summary);
+
+  if sanitized_summary.is_empty() {
+    issue_key.to_string()
+  } else {
+    format!("{issue_key}/{sanitized_summary}")
+  }
+}
+
 /// Open a URL in the default browser
 pub fn open_url_in_browser(url: &str) -> Result<()> {
   use crate::output::{print_success, print_warning};
