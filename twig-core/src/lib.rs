@@ -12,6 +12,7 @@ pub mod github;
 pub mod jira_parser;
 pub mod output;
 pub mod plugin;
+pub mod prompts;
 pub mod state;
 pub mod text;
 pub mod tree_renderer;
@@ -36,6 +37,7 @@ pub use github::{GitHubPr, GitHubRepo, GitRemoteScheme};
 pub use jira_parser::{JiraParseError, JiraParsingConfig, JiraParsingMode, JiraTicketParser, create_jira_parser};
 pub use output::{ColorMode, cli_styles, format_repo_path, print_error, print_info, print_success, print_warning};
 pub use plugin::{PluginContext, plugin_config_dir, plugin_data_dir};
+pub use prompts::twig_theme;
 pub use state::{
   BranchDependency, BranchMetadata as StateBranchMetadata, Registry, RepoState, Repository, RootBranch, create_worktree,
 };

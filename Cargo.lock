@@ -3208,6 +3208,7 @@ dependencies = [
  "chrono",
  "clap",
  "console 0.16.2",
+ "dialoguer",
  "directories",
  "emojis",
  "git2",
