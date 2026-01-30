@@ -346,7 +346,11 @@ fn sanitize_summary_for_branch(summary: &str) -> String {
 /// );
 /// ```
 pub fn generate_branch_name_from_issue(issue_key: &str, summary: &str, filter_stop_words_enabled: bool) -> String {
-  let processed_summary = if filter_stop_words_enabled { filter_stop_words(summary) } else { summary.to_string() };
+  let processed_summary = if filter_stop_words_enabled {
+    filter_stop_words(summary)
+  } else {
+    summary.to_string()
+  };
 
   let sanitized_summary = sanitize_summary_for_branch(&processed_summary);
 
