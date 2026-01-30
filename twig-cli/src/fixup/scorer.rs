@@ -1,7 +1,7 @@
 //! # Commit Scorer
 //!
-//! Implements the scoring algorithm for commit candidates based on recency,
-//! authorship, and Jira issue association.
+//! Implements the scoring algorithm for commit candidates based on branch
+//! uniqueness, recency, authorship, and Jira issue association.
 
 use anyhow::Result;
 use chrono::Utc;
@@ -12,11 +12,16 @@ use crate::fixup::commit_collector::CommitCandidate;
 /// Scores and sorts commit candidates based on relevance criteria.
 ///
 /// This function implements a weighted scoring algorithm that evaluates commits
-/// based on three main factors:
+/// based on four main factors:
 ///
-/// - **Recency (50% weight)**: More recent commits score higher
-/// - **Authorship (35% weight)**: Commits by the current user score higher
-/// - **Jira Association (15% weight)**: Commits with matching Jira issues score higher
+/// - **Branch Uniqueness (50% weight)**: Commits unique to current branch score higher
+/// - **Recency (25% weight)**: More recent commits score higher
+/// - **Authorship (15% weight)**: Commits by the current user score higher
+/// - **Jira Association (10% weight)**: Commits with matching Jira issues score higher
+///
+/// Branch uniqueness is the dominant factor because when working on a feature
+/// branch, commits that exist only on that branch (not reachable from the
+/// parent/root branch) are almost always the correct fixup targets.
 ///
 /// After scoring, candidates are sorted in descending order by their total
 /// score, with the most relevant commits appearing first.
@@ -25,10 +30,12 @@ use crate::fixup::commit_collector::CommitCandidate;
 ///
 /// The total score is calculated as:
 /// ```text
-/// score = (recency_factor * 0.5) + (authorship_bonus * 0.35) + (jira_bonus * 0.15)
+/// score = (branch_unique_bonus * 0.50) + (recency_factor * 0.25)
+///       + (authorship_bonus * 0.15) + (jira_bonus * 0.10)
 /// ```
 ///
 /// Where:
+/// - `branch_unique_bonus` = 1.0 if commit is unique to current branch, 0.0 otherwise
 /// - `recency_factor` = (max_days - days_ago) / max_days, clamped to [0.0, 1.0]
 /// - `authorship_bonus` = 1.0 if current user, 0.0 otherwise
 /// - `jira_bonus` = 1.0 if Jira issues match, 0.0 otherwise
@@ -55,36 +62,40 @@ pub fn score_commits(
   for candidate in candidates.iter_mut() {
     let mut score = 0.0;
 
-    // Recency score (50% weight)
+    // Branch uniqueness score (50% weight) - dominant factor
+    // Commits that exist only on the current branch are highly relevant
+    let branch_unique_score = if candidate.is_branch_unique { 0.50 } else { 0.0 };
+    score += branch_unique_score;
+
+    // Recency score (25% weight)
     let days_ago = (now - candidate.date).num_days() as f64;
     let max_days = args.days as f64;
     let recency_score = ((max_days - days_ago) / max_days).max(0.0);
-    score += recency_score * 0.5;
+    score += recency_score * 0.25;
 
-    // Authorship score (35% weight)
-    if candidate.is_current_user {
-      score += 0.35;
-    }
+    // Authorship score (15% weight)
+    let authorship_score = if candidate.is_current_user { 0.15 } else { 0.0 };
+    score += authorship_score;
 
-    // Jira association score (15% weight)
-    if let (Some(current_issue), Some(commit_issue)) = (&current_jira_issue, &candidate.jira_issue)
+    // Jira association score (10% weight)
+    let jira_score = if let (Some(current_issue), Some(commit_issue)) = (&current_jira_issue, &candidate.jira_issue)
       && current_issue == commit_issue
     {
-      score += 0.15;
-    }
+      0.10
+    } else {
+      0.0
+    };
+    score += jira_score;
 
     candidate.score = score;
 
     tracing::trace!(
-      "Scored commit {}: recency={:.3}, authorship={}, jira={}, total={:.3}",
+      "Scored commit {}: branch_unique={:.2}, recency={:.3}, authorship={:.2}, jira={:.2}, total={:.3}",
       candidate.short_hash,
-      recency_score * 0.5,
-      if candidate.is_current_user { 0.35 } else { 0.0 },
-      if current_jira_issue.is_some() && candidate.jira_issue == current_jira_issue {
-        0.15
-      } else {
-        0.0
-      },
+      branch_unique_score,
+      recency_score * 0.25,
+      authorship_score,
+      jira_score,
       score
     );
   }
@@ -109,6 +120,16 @@ mod tests {
     is_current_user: bool,
     jira_issue: Option<String>,
   ) -> CommitCandidate {
+    create_test_candidate_full(short_hash, days_ago, is_current_user, jira_issue, false)
+  }
+
+  fn create_test_candidate_full(
+    short_hash: &str,
+    days_ago: i64,
+    is_current_user: bool,
+    jira_issue: Option<String>,
+    is_branch_unique: bool,
+  ) -> CommitCandidate {
     let now = Utc::now();
     let date = now - chrono::Duration::days(days_ago);
 
@@ -120,6 +141,7 @@ mod tests {
       date,
       is_current_user,
       jira_issue,
+      is_branch_unique,
       score: 0.0,
     }
   }
@@ -217,5 +239,69 @@ mod tests {
     // The second candidate should now have higher score due to Jira match
     assert!(candidates[0].short_hash == "def456");
     assert!(candidates[0].score > candidates[1].score);
+  }
+
+  #[test]
+  fn test_branch_uniqueness_scoring() {
+    // Create candidates: one branch-unique, one not
+    // The branch-unique commit should score higher even if other factors favor the
+    // non-unique commit
+    let mut candidates = vec![
+      // Branch-unique commit, but older and from different author
+      create_test_candidate_full("unique", 5, false, None, true),
+      // Not branch-unique, but recent and from current author with matching Jira
+      create_test_candidate_full("shared", 1, true, Some("PROJ-123".to_string()), false),
+    ];
+
+    let args = FixupArgs {
+      limit: 20,
+      days: 30,
+      all_authors: true,
+      include_fixups: false,
+      dry_run: false,
+      vim_mode: false,
+    };
+
+    let current_jira_issue = Some("PROJ-123".to_string());
+    score_commits(&mut candidates, &args, current_jira_issue).unwrap();
+
+    // The branch-unique commit should rank first despite other factors
+    // Branch-unique gets 0.50 base score, which should dominate
+    assert_eq!(
+      candidates[0].short_hash, "unique",
+      "Branch-unique commits should rank first"
+    );
+    assert!(
+      candidates[0].score > candidates[1].score,
+      "Branch-unique score {} should be higher than non-unique score {}",
+      candidates[0].score,
+      candidates[1].score
+    );
+  }
+
+  #[test]
+  fn test_branch_uniqueness_tie_breaking() {
+    // When both commits are branch-unique, other factors should break ties
+    let mut candidates = vec![
+      create_test_candidate_full("older", 5, true, None, true),
+      create_test_candidate_full("newer", 1, true, None, true),
+    ];
+
+    let args = FixupArgs {
+      limit: 20,
+      days: 30,
+      all_authors: true,
+      include_fixups: false,
+      dry_run: false,
+      vim_mode: false,
+    };
+
+    score_commits(&mut candidates, &args, None).unwrap();
+
+    // Both are branch-unique, so recency should determine order
+    assert_eq!(
+      candidates[0].short_hash, "newer",
+      "More recent commit should rank first when both are branch-unique"
+    );
   }
 }
