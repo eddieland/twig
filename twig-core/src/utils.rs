@@ -238,6 +238,50 @@ pub fn get_current_branch_github_pr() -> Result<Option<u32>> {
   )
 }
 
+/// Common English stop words to filter from branch names.
+///
+/// These words add little semantic value and make branch names unnecessarily long.
+const STOP_WORDS: &[&str] = &[
+  "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "in", "is", "it", "of", "on", "or", "that",
+  "the", "to", "was", "were", "will", "with",
+];
+
+/// Filter stop words from a text string.
+///
+/// Removes common low-signal words (articles, prepositions, etc.) that add
+/// noise to generated identifiers like branch names. Words are matched
+/// case-insensitively.
+///
+/// # Arguments
+///
+/// * `text` - The input text to filter.
+///
+/// # Returns
+///
+/// A new string with stop words removed and remaining words joined by spaces.
+///
+/// # Examples
+///
+/// ```
+/// use twig_core::utils::filter_stop_words;
+///
+/// assert_eq!(
+///   filter_stop_words("Add support for the new feature"),
+///   "Add support new feature"
+/// );
+/// assert_eq!(
+///   filter_stop_words("Fix a bug in the parser"),
+///   "Fix bug parser"
+/// );
+/// ```
+pub fn filter_stop_words(text: &str) -> String {
+  text
+    .split_whitespace()
+    .filter(|word| !STOP_WORDS.contains(&word.to_lowercase().as_str()))
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
 /// Open a URL in the default browser
 pub fn open_url_in_browser(url: &str) -> Result<()> {
   use crate::output::{print_success, print_warning};
@@ -309,5 +353,22 @@ mod tests {
     assert_eq!(extract_repo_name("/path/to/my-repo"), "my-repo");
     assert_eq!(extract_repo_name("my-repo"), "my-repo");
     assert_eq!(extract_repo_name("/"), "unknown");
+  }
+
+  #[test]
+  fn test_filter_stop_words() {
+    assert_eq!(
+      filter_stop_words("Add support for the new feature"),
+      "Add support new feature"
+    );
+    assert_eq!(filter_stop_words("Fix a bug in the parser"), "Fix bug parser");
+    assert_eq!(
+      filter_stop_words("Update the API to use the new format"),
+      "Update API use new format"
+    );
+    assert_eq!(filter_stop_words("THE QUICK BROWN FOX"), "QUICK BROWN FOX");
+    assert_eq!(filter_stop_words("implement feature"), "implement feature");
+    assert_eq!(filter_stop_words(""), "");
+    assert_eq!(filter_stop_words("the a an"), "");
   }
 }
