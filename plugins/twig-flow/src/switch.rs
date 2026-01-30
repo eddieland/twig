@@ -13,7 +13,7 @@ use twig_core::git::switch::{
 use twig_core::jira_parser::{JiraTicketParser, create_jira_parser};
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::state::RepoState;
-use twig_core::{checkout_branch, generate_branch_name_from_issue};
+use twig_core::{checkout_branch, generate_branch_name_from_issue, twig_theme};
 use twig_jira::{create_jira_client_from_netrc, get_jira_host};
 
 use crate::Cli;
@@ -151,6 +151,7 @@ fn handle_jira_branch_creation(
   print_info(&format!(
     "No branch found for Jira issue {issue_key}. How would you like to proceed?"
   ));
+  println!();
 
   let choice = prompt_jira_branch_choice(jira_branch_name.as_deref(), &simple_name)?;
 
@@ -205,7 +206,7 @@ fn prompt_jira_branch_choice(jira_branch_name: Option<&str>, simple_name: &str) 
   items.push("Abort".to_string());
   choice_map.push(JiraBranchChoice::Abort);
 
-  let selection = dialoguer::Select::new()
+  let selection = dialoguer::Select::with_theme(&twig_theme())
     .with_prompt("Select an option")
     .items(&items)
     .default(0)
@@ -217,7 +218,7 @@ fn prompt_jira_branch_choice(jira_branch_name: Option<&str>, simple_name: &str) 
 
 /// Prompt the user to enter a custom branch name.
 fn prompt_custom_branch_name() -> Result<Option<String>> {
-  let input: String = dialoguer::Input::new()
+  let input: String = dialoguer::Input::with_theme(&twig_theme())
     .with_prompt("Enter branch name (or leave empty to abort)")
     .allow_empty(true)
     .interact_text()

@@ -9,9 +9,9 @@ use std::process::Command;
 use anyhow::{Context, Result};
 use clap::Args;
 use git2::Repository as Git2Repository;
-use twig_core::detect_repository;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::tree_renderer::TreeRenderer;
+use twig_core::{detect_repository, twig_theme};
 
 use crate::consts;
 use crate::user_defined_dependency_resolver::UserDefinedDependencyResolver;
@@ -335,18 +335,16 @@ fn rebase_branch_force(repo_path: &Path, _branch: &str, onto: &str, autostash: b
 /// Handle rebase conflicts
 fn handle_rebase_conflict(_repo_path: &Path, _branch: &str) -> Result<ConflictResolution> {
   print_info("Rebase conflict detected. You have several options:");
-  println!("  1. Continue - Resolve conflicts and continue the rebase");
-  println!("  2. Abort to original - Abort the rebase and return to the original branch");
-  println!("  3. Abort stay here - Abort the rebase but stay on the current branch");
-  println!("  4. Skip - Skip the current commit and continue");
+  println!();
 
-  // In a real interactive environment, we would prompt the user here
-  // For now, we'll just return Continue as the default
-
-  // This would be replaced with actual user input in a real implementation
-  let choice = dialoguer::Select::new()
+  let choice = dialoguer::Select::with_theme(&twig_theme())
     .with_prompt("Select an option")
-    .items(["Continue", "Abort to original", "Abort stay here", "Skip"])
+    .items([
+      "Continue - Resolve conflicts and continue the rebase",
+      "Abort to original - Abort the rebase and return to the original branch",
+      "Abort stay here - Abort the rebase but stay on the current branch",
+      "Skip - Skip the current commit and continue",
+    ])
     .default(0)
     .interact()
     .unwrap_or(0);
