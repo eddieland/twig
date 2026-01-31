@@ -11,8 +11,9 @@
 
 // Re-export the shared completers from twig-core
 pub use twig_core::complete::{
-  BranchCompleter, CandidateKind, TargetCompleter, TypedCandidate, branch_completer, collect_branch_candidates,
-  collect_candidates, collect_typed_candidates, target_completer,
+  AllBranchCompleter, BranchCompleter, CandidateKind, FuzzyBranchCompleter, FuzzyTargetCompleter, TargetCompleter,
+  TypedCandidate, all_branch_completer, branch_completer, collect_all_branch_candidates, collect_branch_candidates,
+  collect_candidates, collect_typed_candidates, fuzzy_branch_completer, fuzzy_target_completer, target_completer,
 };
 
 /// Backward-compatible alias for `TargetCompleter`.

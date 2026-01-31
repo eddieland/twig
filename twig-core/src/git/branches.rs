@@ -45,6 +45,35 @@ pub fn get_local_branches() -> Result<Vec<String>> {
   Ok(branch_names)
 }
 
+/// Get all remote branches in the repository.
+///
+/// Returns branch names without the remote prefix (e.g., "feature/foo" instead of
+/// "origin/feature/foo"). Excludes HEAD references.
+pub fn get_remote_branches() -> Result<Vec<String>> {
+  let repo = get_repository().ok_or_else(|| anyhow::anyhow!("Not in a Git repository"))?;
+
+  let branches = repo.branches(Some(git2::BranchType::Remote))?;
+  let mut branch_names = Vec::new();
+
+  for branch_result in branches {
+    let (branch, _) = branch_result?;
+    if let Some(name) = branch.name()? {
+      // Skip HEAD references like "origin/HEAD"
+      if name.ends_with("/HEAD") {
+        continue;
+      }
+      // Strip the remote prefix (e.g., "origin/") to get just the branch name
+      if let Some((_remote, branch_name)) = name.split_once('/') {
+        branch_names.push(branch_name.to_string());
+      } else {
+        branch_names.push(name.to_string());
+      }
+    }
+  }
+
+  Ok(branch_names)
+}
+
 /// Get the remote tracking branch for a local branch.
 pub fn get_upstream_branch(branch_name: &str) -> Result<Option<String>> {
   let repo = get_repository().ok_or_else(|| anyhow::anyhow!("Not in a Git repository"))?;
