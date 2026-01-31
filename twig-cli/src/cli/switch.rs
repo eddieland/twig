@@ -22,6 +22,8 @@ use twig_gh::models::{GitHubPullRequest, RepositoryInfo};
 use twig_gh::{GitHubClient, GitHubRepo, GitRemoteScheme, create_github_client_from_netrc};
 use twig_jira::{JiraClient, create_jira_client_from_netrc, get_jira_host};
 
+use crate::complete::switch_target_completer;
+
 /// Command for intelligently switching to branches based on various inputs
 #[derive(Args)]
 pub struct SwitchArgs {
@@ -35,7 +37,8 @@ pub struct SwitchArgs {
                 • GitHub PR ID (12345 or PR#12345)\n\
                 • GitHub PR URL (https://github.com/owner/repo/pull/123)\n\
                 • Branch name (feature/my-branch)\n\n\
-                Not required when using --root flag."
+                Not required when using --root flag.",
+    add = switch_target_completer()
   )]
   pub input: Option<String>,
 
