@@ -5,6 +5,7 @@
 //! plugins to access twig's configuration and state in a read-only manner while
 //! maintaining their own separate state.
 
+pub mod complete;
 pub mod config;
 pub mod creds;
 pub mod git;

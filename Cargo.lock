@@ -3219,6 +3219,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "clap_complete",
  "console 0.16.2",
  "dialoguer",
  "directories",
