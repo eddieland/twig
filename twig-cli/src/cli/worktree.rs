@@ -12,6 +12,8 @@ use twig_core::output::{format_command, format_timestamp, print_header};
 use twig_core::state::create_worktree;
 use twig_core::{RepoState, detect_repository_from_path, format_repo_path, print_success, print_warning};
 
+use crate::complete::all_branch_completer;
+
 /// Command for worktree management
 #[derive(Args)]
 pub struct WorktreeArgs {
@@ -54,7 +56,7 @@ pub enum WorktreeSubcommands {
 #[derive(Args)]
 pub struct CreateCommand {
   /// Branch name
-  #[arg(required = true)]
+  #[arg(required = true, add = all_branch_completer())]
   pub branch: String,
 
   /// Path to a specific repository
