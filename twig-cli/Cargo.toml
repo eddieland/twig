@@ -28,7 +28,7 @@ uuid.workspace = true
 
 # CLI and UI dependencies
 clap.workspace = true
-clap_complete.workspace = true
+clap_complete = { workspace = true, features = ["unstable-dynamic"] }
 console.workspace = true
 dialoguer.workspace = true
 emojis.workspace = true
