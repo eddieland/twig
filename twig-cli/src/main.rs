@@ -4,7 +4,8 @@
 //! productivity tool for managing branch dependencies and workflows.
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::CompleteEnv;
 use no_worries::{Config as NoWorriesConfig, Metadata as NoWorriesMetadata, no_worries};
 use tracing::debug;
 use tracing_subscriber::prelude::*;
@@ -23,6 +24,9 @@ fn main() -> Result<()> {
     ..Default::default()
   };
   no_worries!(config).expect("Failed to set up panic handler");
+
+  // Handle shell completion via CompleteEnv (activated by COMPLETE=<shell> env var)
+  CompleteEnv::with_factory(cli::Cli::command).complete();
 
   // Parse CLI arguments using the derive-based implementation
   let cmd = cli::Cli::parse();
