@@ -265,6 +265,32 @@ alias tgps='twig github pr status' # Check PR status
 
 These aliases can significantly reduce typing and make common twig operations more convenient.
 
+## Shell Completions
+
+Enable tab completion for twig commands, options, and arguments:
+
+```bash
+# Bash
+twig self completion bash > ~/.twig-completion.bash
+echo 'source ~/.twig-completion.bash' >> ~/.bashrc
+
+# Zsh
+twig self completion zsh > ~/.twig-completion.zsh
+echo 'source ~/.twig-completion.zsh' >> ~/.zshrc
+
+# Fish
+twig self completion fish > ~/.config/fish/completions/twig.fish
+```
+
+Twig provides intelligent completions that suggest:
+- Commands and subcommands
+- Command-line options and flags
+- Local Git branch names
+- Jira issue keys linked to branches
+- GitHub PR IDs linked to branches
+
+For detailed setup instructions and troubleshooting, see the [Shell Completions Guide](docs/shell-completions.md).
+
 ## Development Resources
 
 For information about development workflows, Makefile usage, and snapshot testing, please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file.
