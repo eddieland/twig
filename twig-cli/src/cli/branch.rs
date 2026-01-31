@@ -11,6 +11,8 @@ use clap::{Args, Subcommand};
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::{RepoState, detect_repository};
 
+use crate::complete::branch_completer;
+
 /// Command for branch dependency and root management
 #[derive(Args)]
 pub struct BranchArgs {
@@ -54,11 +56,11 @@ pub enum BranchSubcommands {
 #[derive(Args)]
 pub struct DependCommand {
   /// The child branch name
-  #[arg(required = true, index = 1)]
+  #[arg(required = true, index = 1, add = branch_completer())]
   pub child: String,
 
   /// The parent branch name
-  #[arg(required = true, index = 2)]
+  #[arg(required = true, index = 2, add = branch_completer())]
   pub parent: String,
 
   /// Path to a specific repository
@@ -70,11 +72,11 @@ pub struct DependCommand {
 #[derive(Args)]
 pub struct RemoveDepCommand {
   /// The child branch name
-  #[arg(required = true, index = 1)]
+  #[arg(required = true, index = 1, add = branch_completer())]
   pub child: String,
 
   /// The parent branch name
-  #[arg(required = true, index = 2)]
+  #[arg(required = true, index = 2, add = branch_completer())]
   pub parent: String,
 
   /// Path to a specific repository
@@ -86,7 +88,7 @@ pub struct RemoveDepCommand {
 #[derive(Args)]
 pub struct ParentCommand {
   /// The branch name (defaults to current branch)
-  #[arg(index = 1)]
+  #[arg(index = 1, add = branch_completer())]
   pub branch: Option<String>,
 
   /// Path to a specific repository
@@ -130,7 +132,7 @@ pub enum RootSubcommands {
 #[derive(Args)]
 pub struct RootAddCommand {
   /// The branch name to add as root
-  #[arg(required = true, index = 1)]
+  #[arg(required = true, index = 1, add = branch_completer())]
   pub branch: String,
 
   /// Set this as the default root branch
@@ -146,7 +148,7 @@ pub struct RootAddCommand {
 #[derive(Args)]
 pub struct RootRemoveCommand {
   /// The branch name to remove from roots
-  #[arg(required = true, index = 1)]
+  #[arg(required = true, index = 1, add = branch_completer())]
   pub branch: String,
 
   /// Path to a specific repository

@@ -16,6 +16,7 @@ path = "src/lib.rs"
 anyhow.workspace = true
 chrono.workspace = true
 clap.workspace = true
+clap_complete = { workspace = true, features = ["unstable-dynamic"] }
 console.workspace = true
 dialoguer.workspace = true
 directories.workspace = true

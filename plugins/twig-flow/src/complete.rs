@@ -5,78 +5,24 @@
 //! - Local Git branch names
 //! - Jira issue keys associated with branches
 //! - GitHub PR IDs associated with branches
+//!
+//! This module re-exports completers from `twig_core::complete`.
 
-use std::ffi::OsStr;
+pub use twig_core::complete::target_completer;
 
-use clap_complete::engine::{ArgValueCompleter, CompletionCandidate, ValueCompleter};
-use twig_core::git::{get_local_branches, get_repository};
-use twig_core::state::RepoState;
-
-/// A completer that provides branch names, Jira keys, and PR IDs as candidates.
-#[derive(Clone)]
-pub struct FlowTargetCompleter;
-
-impl ValueCompleter for FlowTargetCompleter {
-  fn complete(&self, current: &OsStr) -> Vec<CompletionCandidate> {
-    let current_str = current.to_string_lossy().to_lowercase();
-    collect_candidates()
-      .into_iter()
-      .filter(|c| c.to_lowercase().starts_with(&current_str))
-      .map(CompletionCandidate::new)
-      .collect()
-  }
-}
-
-/// Returns an `ArgValueCompleter` for use with clap's `add` extension.
-pub fn flow_target_completer() -> ArgValueCompleter {
-  ArgValueCompleter::new(FlowTargetCompleter)
-}
-
-/// Collect all completion candidates from available data sources.
-fn collect_candidates() -> Vec<String> {
-  let mut candidates = Vec::new();
-
-  // Collect branch names
-  if let Ok(branches) = get_local_branches() {
-    candidates.extend(branches);
-  }
-
-  // Collect Jira keys and PR IDs from repo state
-  if let Some(repo) = get_repository()
-    && let Some(workdir) = repo.workdir()
-    && let Ok(state) = RepoState::load(workdir)
-  {
-    // Add Jira issue keys
-    for jira_key in state.jira_to_branch_index.keys() {
-      candidates.push(jira_key.clone());
-    }
-
-    // Add GitHub PR IDs (prefixed with # for clarity)
-    for metadata in state.branches.values() {
-      if let Some(pr_id) = metadata.github_pr {
-        candidates.push(format!("#{pr_id}"));
-        // Also add plain number for convenience
-        candidates.push(pr_id.to_string());
-      }
-    }
-  }
-
-  // Remove duplicates while preserving order
-  let mut seen = std::collections::HashSet::new();
-  candidates.retain(|c| seen.insert(c.clone()));
-
-  // Sort for consistent output
-  candidates.sort();
-
-  candidates
+/// Backward-compatible alias for `target_completer()`.
+pub fn flow_target_completer() -> clap_complete::engine::ArgValueCompleter {
+  target_completer()
 }
 
 #[cfg(test)]
 mod tests {
+  use std::ffi::OsStr;
+
+  use clap_complete::engine::ValueCompleter;
+  use twig_core::complete::{TargetCompleter, collect_candidates};
   use twig_core::state::{BranchMetadata, RepoState};
   use twig_test_utils::GitRepoTestGuard;
-
-  use super::*;
 
   #[test]
   fn collects_branch_names() {
@@ -141,10 +87,10 @@ mod tests {
     twig_test_utils::create_branch(&guard.repo, "feature/beta", None).unwrap();
     twig_test_utils::create_branch(&guard.repo, "bugfix/gamma", None).unwrap();
 
-    let completer = FlowTargetCompleter;
+    let completer = TargetCompleter;
     let results = completer.complete(OsStr::new("feat"));
 
-    let values: Vec<_> = results
+    let values: Vec<String> = results
       .iter()
       .map(|c| c.get_value().to_string_lossy().to_string())
       .collect();

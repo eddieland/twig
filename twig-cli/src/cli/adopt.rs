@@ -23,6 +23,7 @@ use twig_core::output::{print_info, print_success, print_warning};
 use twig_core::{RepoState, detect_repository, tree_renderer};
 
 use crate::auto_dependency_discovery::AutoDependencyDiscovery;
+use crate::complete::branch_completer;
 use crate::user_defined_dependency_resolver::UserDefinedDependencyResolver;
 
 /// Modes for the adopt command
@@ -48,7 +49,7 @@ pub struct AdoptArgs {
   pub mode: AdoptMode,
 
   /// Branch to adopt orphaned branches under (implies --mode branch)
-  #[arg(long, value_name = "BRANCH")]
+  #[arg(long, value_name = "BRANCH", add = branch_completer())]
   pub parent: Option<String>,
 
   /// Automatically confirm adoption without prompting
