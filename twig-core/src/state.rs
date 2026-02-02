@@ -198,6 +198,18 @@ pub struct RepoState {
   pub dependency_parents_index: HashMap<String, Vec<String>>,
 }
 
+/// Lightweight view for serializing RepoState without cloning.
+/// Borrows data from the original struct to avoid allocations.
+#[derive(Serialize)]
+struct RepoStateForSave<'a> {
+  version: u32,
+  updated_at: DateTime<Utc>,
+  worktrees: &'a Vec<Worktree>,
+  branches: &'a HashMap<String, BranchMetadata>,
+  dependencies: &'a Vec<BranchDependency>,
+  root_branches: &'a Vec<RootBranch>,
+}
+
 impl RepoState {
   /// Load the repository state from disk
   pub fn load<P: AsRef<Path>>(repo_path: P) -> Result<Self> {
@@ -276,9 +288,16 @@ impl RepoState {
     }
     ensure_twig_internal_gitignore(repo_path.as_ref())?;
 
-    // Update timestamp before saving
-    let mut state_to_save = self.clone();
-    state_to_save.updated_at = Utc::now();
+    // Create a lightweight view for serialization instead of cloning the entire state.
+    // This avoids cloning the indices (which are not serialized anyway).
+    let state_to_save = RepoStateForSave {
+      version: self.version,
+      updated_at: Utc::now(),
+      worktrees: &self.worktrees,
+      branches: &self.branches,
+      dependencies: &self.dependencies,
+      root_branches: &self.root_branches,
+    };
 
     let state_path = config_dirs.repo_state_path(&repo_path);
     let content = serde_json::to_string_pretty(&state_to_save).context("Failed to serialize state")?;
