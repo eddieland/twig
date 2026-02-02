@@ -15,7 +15,7 @@
 
 - Prefer Make targets: `make fmt` (runs `cargo fmt`, `cargo clippy --fix`, Ruff for plugin examples), `make lint`, `make test` (`cargo nextest run --workspace`). 【F:Makefile†L1-L58】
 - When building a single crate outside Make, run `cargo build -p <crate-name>` to stay within the workspace context. 【F:Cargo.toml†L1-L60】
-- CI expectations: never call `cargo test`; default to `cargo nextest run` when Make is unavailable. 【F:Makefile†L39-L42】
+- CI expectations: never call `cargo test`; default to `cargo nextest run` when Make is unavailable. **Exception**: doc tests require `cargo test -p <crate> --doc` since nextest doesn't support them. 【F:Makefile†L39-L42】
 - Use `make check` for quick type-checking via `cargo check --workspace`. 【F:Makefile†L31-L34】
 - Coverage via `make coverage` (wraps `cargo llvm-cov nextest`). Release binaries built with `make release` (workspace build).
 
