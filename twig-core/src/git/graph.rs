@@ -7,7 +7,7 @@
 //! contextual metadata so that additional annotations can be layered on without
 //! duplicating graph construction.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
 
@@ -576,10 +576,14 @@ impl BranchGraphBuilder {
 
     let mut edges = Vec::new();
     if let Some(root_node) = nodes.get_mut(&default_root) {
+      let existing_children: HashSet<_> = root_node.topology.children.iter().cloned().collect();
+      let new_children: Vec<_> = child_names
+        .iter()
+        .filter(|name| !existing_children.contains(*name))
+        .cloned()
+        .collect();
+      root_node.topology.children.extend(new_children);
       for child_name in &child_names {
-        if !root_node.topology.children.iter().any(|child| child == child_name) {
-          root_node.topology.children.push(child_name.clone());
-        }
         edges.push(BranchEdge::new(root_node_name.clone(), child_name.clone()));
       }
       root_node.topology.children.sort();

@@ -190,15 +190,17 @@ impl AutoDependencyDiscovery {
     let branch_nodes = self.discover_git_dependencies(repo, repo_state)?;
     let mut suggestions = Vec::new();
 
+    // Pre-build a set of existing dependencies for O(1) lookups
+    let existing_deps: HashSet<(&str, &str)> = repo_state
+      .list_dependencies()
+      .iter()
+      .map(|d| (d.child.as_str(), d.parent.as_str()))
+      .collect();
+
     for (branch_name, node) in &branch_nodes {
       for parent in &node.parents {
         // Skip if this dependency already exists in user-defined dependencies
-        let already_exists = repo_state
-          .list_dependencies()
-          .iter()
-          .any(|d| d.child == *branch_name && d.parent == *parent);
-
-        if !already_exists {
+        if !existing_deps.contains(&(branch_name.as_str(), parent.as_str())) {
           suggestions.push(DependencySuggestion {
             child: branch_name.clone(),
             parent: parent.clone(),
