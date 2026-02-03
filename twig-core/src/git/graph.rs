@@ -278,6 +278,20 @@ impl BranchGraph {
   pub fn edges(&self) -> &[BranchEdge] {
     &self.edges
   }
+
+  /// Consume the graph and return its constituent parts.
+  ///
+  /// This allows callers to modify nodes without cloning the entire graph.
+  pub fn into_parts(
+    self,
+  ) -> (
+    BTreeMap<BranchName, BranchNode>,
+    Vec<BranchEdge>,
+    Vec<BranchName>,
+    Option<BranchName>,
+  ) {
+    (self.nodes, self.edges, self.root_candidates, self.current_branch)
+  }
 }
 
 /// Errors produced when constructing a branch graph.

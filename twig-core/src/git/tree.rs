@@ -5,9 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-use crate::git::{
-  BranchAnnotationValue, BranchEdge, BranchGraph, BranchName, BranchNode, ORPHAN_BRANCH_ANNOTATION_KEY,
-};
+use crate::git::{BranchAnnotationValue, BranchEdge, BranchGraph, BranchName, ORPHAN_BRANCH_ANNOTATION_KEY};
 use crate::state::RepoState;
 
 /// Determines the best root branch to use for rendering the tree.
@@ -91,15 +89,15 @@ pub fn attach_orphans_to_default_root(graph: BranchGraph, repo_state: &RepoState
 
   let default_root_name = BranchName::from(default_root.as_str());
 
-  let mut nodes: BTreeMap<BranchName, BranchNode> =
-    graph.iter().map(|(name, node)| (name.clone(), node.clone())).collect();
-
-  let Some(root_node_name) = nodes.get(&default_root_name).map(|node| node.name.clone()) else {
+  // Check if root exists in graph before extracting parts
+  let Some(root_node) = graph.get(&default_root_name) else {
     return graph;
   };
+  let root_node_name = root_node.name.clone();
 
+  // Collect configured roots and orphan names before extracting parts
   let configured_roots: HashSet<_> = repo_state.get_root_branches().into_iter().collect();
-  let orphan_names: Vec<BranchName> = nodes
+  let orphan_names: Vec<BranchName> = graph
     .iter()
     .filter_map(|(name, node)| {
       if node.topology.primary_parent.is_none()
@@ -117,9 +115,8 @@ pub fn attach_orphans_to_default_root(graph: BranchGraph, repo_state: &RepoState
     return graph;
   }
 
-  let mut edges = graph.edges().to_vec();
-  let root_candidates = graph.root_candidates().to_vec();
-  let current_branch = graph.current_branch().cloned();
+  // Only extract parts after confirming we have work to do
+  let (mut nodes, mut edges, root_candidates, current_branch) = graph.into_parts();
 
   let mut child_names = Vec::new();
   for orphan_name in &orphan_names {
@@ -153,26 +150,19 @@ pub fn annotate_orphaned_branches(graph: BranchGraph, orphaned: &BTreeSet<Branch
     return graph;
   }
 
-  let nodes: BTreeMap<BranchName, BranchNode> = graph
-    .iter()
-    .map(|(name, node)| {
-      let mut node = node.clone();
-      if orphaned.contains(name) {
-        node.metadata.annotations.insert(
-          ORPHAN_BRANCH_ANNOTATION_KEY.to_string(),
-          BranchAnnotationValue::Flag(true),
-        );
-      }
-      (name.clone(), node)
-    })
-    .collect();
+  let (mut nodes, edges, root_candidates, current_branch) = graph.into_parts();
 
-  BranchGraph::from_parts(
-    nodes.into_values(),
-    graph.edges().to_vec(),
-    graph.root_candidates().to_vec(),
-    graph.current_branch().cloned(),
-  )
+  // Only modify nodes that are orphaned, avoiding clones of non-orphaned nodes
+  for name in orphaned {
+    if let Some(node) = nodes.get_mut(name) {
+      node.metadata.annotations.insert(
+        ORPHAN_BRANCH_ANNOTATION_KEY.to_string(),
+        BranchAnnotationValue::Flag(true),
+      );
+    }
+  }
+
+  BranchGraph::from_parts(nodes.into_values(), edges, root_candidates, current_branch)
 }
 
 /// Filters a branch graph to include only branches matching a pattern and their
@@ -244,7 +234,7 @@ mod tests {
   use git2::Oid;
 
   use super::*;
-  use crate::git::{BranchHead, BranchKind, BranchTopology};
+  use crate::git::{BranchHead, BranchKind, BranchNode, BranchTopology};
 
   fn branch_node(name: &str) -> BranchNode {
     BranchNode {
