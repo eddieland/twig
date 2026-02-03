@@ -43,6 +43,8 @@ impl CandidateKind {
 pub struct TypedCandidate {
   /// The value to complete to.
   pub value: String,
+  /// Pre-computed lowercase value for case-insensitive matching.
+  value_lower: String,
   /// The type of candidate.
   pub kind: CandidateKind,
 }
@@ -50,10 +52,18 @@ pub struct TypedCandidate {
 impl TypedCandidate {
   /// Create a new typed candidate.
   pub fn new(value: impl Into<String>, kind: CandidateKind) -> Self {
+    let value = value.into();
+    let value_lower = value.to_lowercase();
     Self {
-      value: value.into(),
+      value,
+      value_lower,
       kind,
     }
+  }
+
+  /// Returns whether this candidate's value starts with the given lowercase prefix.
+  pub fn matches_prefix(&self, prefix_lower: &str) -> bool {
+    self.value_lower.starts_with(prefix_lower)
   }
 
   /// Convert to a clap_complete CompletionCandidate with help text.
@@ -150,7 +160,7 @@ impl ValueCompleter for TargetCompleter {
     let current_str = current.to_string_lossy().to_lowercase();
     collect_typed_candidates()
       .into_iter()
-      .filter(|c| c.value.to_lowercase().starts_with(&current_str))
+      .filter(|c| c.matches_prefix(&current_str))
       .map(|c| c.to_completion_candidate())
       .collect()
   }
@@ -174,7 +184,7 @@ impl ValueCompleter for BranchCompleter {
     let current_str = current.to_string_lossy().to_lowercase();
     collect_branch_candidates()
       .into_iter()
-      .filter(|c| c.value.to_lowercase().starts_with(&current_str))
+      .filter(|c| c.matches_prefix(&current_str))
       .map(|c| c.to_completion_candidate())
       .collect()
   }
@@ -194,7 +204,7 @@ mod tests {
     let prefix_lower = prefix.to_lowercase();
     candidates
       .iter()
-      .filter(|c| c.value.to_lowercase().starts_with(&prefix_lower))
+      .filter(|c| c.matches_prefix(&prefix_lower))
       .map(|c| c.value.clone())
       .collect()
   }
