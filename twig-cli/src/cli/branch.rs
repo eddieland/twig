@@ -188,12 +188,11 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
       // Load repository state
       let repo_state = RepoState::load(&repo_path)?;
 
-      // Get parent dependencies for the branch
+      // Get parent dependencies for the branch using indexed O(1) lookup
       let parents: Vec<_> = repo_state
-        .dependencies
-        .iter()
-        .filter(|dep| dep.child == branch_name)
-        .map(|dep| dep.parent.clone())
+        .get_dependency_parents(&branch_name)
+        .into_iter()
+        .map(|s| s.to_string())
         .collect();
 
       if parents.is_empty() {
