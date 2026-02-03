@@ -195,12 +195,8 @@ fn switch_from_pr(
   pr_number: u32,
   options: &SwitchExecutionOptions,
 ) -> Result<BranchSwitchOutcome> {
-  for branch_issue in repo_state.list_branch_issues() {
-    if let Some(github_pr) = branch_issue.github_pr
-      && github_pr == pr_number
-    {
-      return switch_to_branch_name(repository, repository_path, None, &branch_issue.branch, options);
-    }
+  if let Some(branch_issue) = repo_state.get_branch_issue_by_pr(pr_number) {
+    return switch_to_branch_name(repository, repository_path, None, &branch_issue.branch, options);
   }
 
   if !options.create_missing {
