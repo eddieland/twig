@@ -193,6 +193,8 @@ pub struct RepoState {
   #[serde(skip)]
   pub jira_to_branch_index: HashMap<String, String>,
   #[serde(skip)]
+  pub pr_to_branch_index: HashMap<u32, String>,
+  #[serde(skip)]
   pub dependency_children_index: HashMap<String, Vec<String>>,
   #[serde(skip)]
   pub dependency_parents_index: HashMap<String, Vec<String>>,
@@ -227,6 +229,7 @@ impl RepoState {
         root_branches: Vec::new(),
         branch_to_jira_index: HashMap::new(),
         jira_to_branch_index: HashMap::new(),
+        pr_to_branch_index: HashMap::new(),
         dependency_children_index: HashMap::new(),
         dependency_parents_index: HashMap::new(),
       };
@@ -248,14 +251,18 @@ impl RepoState {
     // Clear existing indices
     self.branch_to_jira_index.clear();
     self.jira_to_branch_index.clear();
+    self.pr_to_branch_index.clear();
     self.dependency_children_index.clear();
     self.dependency_parents_index.clear();
 
-    // Build Jira indices
+    // Build Jira and PR indices
     for (branch_name, metadata) in &self.branches {
       if let Some(jira_key) = &metadata.jira_issue {
         self.branch_to_jira_index.insert(branch_name.clone(), jira_key.clone());
         self.jira_to_branch_index.insert(jira_key.clone(), branch_name.clone());
+      }
+      if let Some(pr_number) = metadata.github_pr {
+        self.pr_to_branch_index.insert(pr_number, branch_name.clone());
       }
     }
 
@@ -348,6 +355,16 @@ impl RepoState {
   pub fn get_branch_issue_by_jira(&self, jira_issue: &str) -> Option<&BranchMetadata> {
     // Use the pre-built index for O(1) lookup
     if let Some(branch_name) = self.jira_to_branch_index.get(jira_issue) {
+      self.branches.get(branch_name)
+    } else {
+      None
+    }
+  }
+
+  /// Get a branch-issue association by GitHub PR number
+  pub fn get_branch_issue_by_pr(&self, pr_number: u32) -> Option<&BranchMetadata> {
+    // Use the pre-built index for O(1) lookup
+    if let Some(branch_name) = self.pr_to_branch_index.get(&pr_number) {
       self.branches.get(branch_name)
     } else {
       None
@@ -1053,6 +1070,17 @@ mod tests {
     assert_eq!(state.branches.len(), 1);
     assert!(state.branches.contains_key("feature-branch"));
     assert_eq!(state.branches["feature-branch"].github_pr, Some(123));
+
+    // Check PR index was built
+    assert_eq!(state.pr_to_branch_index.get(&123), Some(&"feature-branch".to_string()));
+
+    // Check O(1) lookup via get_branch_issue_by_pr
+    let retrieved = state.get_branch_issue_by_pr(123);
+    assert!(retrieved.is_some());
+    assert_eq!(retrieved.unwrap().branch, "feature-branch");
+
+    // Non-existent PR should return None
+    assert!(state.get_branch_issue_by_pr(999).is_none());
   }
 
   #[test]
