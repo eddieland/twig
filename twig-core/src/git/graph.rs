@@ -494,9 +494,15 @@ impl BranchGraphBuilder {
   fn apply_dependencies(&self, repo_state: &RepoState, nodes: &mut BTreeMap<String, BranchNode>) -> Vec<BranchEdge> {
     let mut edges = Vec::new();
     let mut parents_by_child: BTreeMap<String, Vec<BranchName>> = BTreeMap::new();
+    // Track children per parent for O(1) deduplication instead of O(n) .any() lookups
+    let mut children_seen: HashMap<String, HashSet<BranchName>> = HashMap::new();
 
+    // Single pass: build parents_by_child, edges, and children in one iteration
     for dependency in repo_state.list_dependencies() {
-      if nodes.contains_key(&dependency.child) && nodes.contains_key(&dependency.parent) {
+      let child_exists = nodes.contains_key(&dependency.child);
+      let parent_exists = nodes.contains_key(&dependency.parent);
+
+      if child_exists && parent_exists {
         let parent_name = nodes
           .get(&dependency.parent)
           .map(|node| node.name.clone())
@@ -505,17 +511,23 @@ impl BranchGraphBuilder {
           .entry(dependency.child.clone())
           .or_default()
           .push(parent_name);
-      }
-    }
 
-    for dependency in repo_state.list_dependencies() {
-      if let Some(child_branch) = nodes.get(&dependency.child).map(|node| node.name.clone())
-        && let Some(parent_node) = nodes.get_mut(&dependency.parent)
-      {
-        if !parent_node.topology.children.iter().any(|child| child == &child_branch) {
+        let child_branch = nodes
+          .get(&dependency.child)
+          .map(|node| node.name.clone())
+          .expect("checked via contains_key");
+
+        // Use HashSet for O(1) deduplication check
+        let seen = children_seen.entry(dependency.parent.clone()).or_default();
+        if seen.insert(child_branch.clone())
+          && let Some(parent_node) = nodes.get_mut(&dependency.parent)
+        {
           parent_node.topology.children.push(child_branch.clone());
         }
-        edges.push(BranchEdge::new(parent_node.name.clone(), child_branch));
+
+        if let Some(parent_node) = nodes.get(&dependency.parent) {
+          edges.push(BranchEdge::new(parent_node.name.clone(), child_branch));
+        }
       }
     }
 
