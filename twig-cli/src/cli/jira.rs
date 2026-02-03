@@ -404,9 +404,10 @@ fn handle_transition_issue_command(issue_key: &str, transition: Option<&str>) ->
     };
 
     // Find the transition ID by name (case-insensitive)
+    let transition_name_lower = transition_name.to_lowercase();
     let transition_id = transitions
       .iter()
-      .find(|t| t.name.to_lowercase() == transition_name.to_lowercase() || t.id == transition_name)
+      .find(|t| t.name.to_lowercase() == transition_name_lower || t.id == transition_name)
       .map(|t| t.id.clone());
 
     match transition_id {

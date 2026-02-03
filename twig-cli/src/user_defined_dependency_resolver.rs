@@ -39,7 +39,7 @@
 //! - Dependency cycles are not allowed and will be reported as errors if detected.
 //! - The resolver can suggest a default root branch based on user-defined settings or common branch naming conventions.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 use git2::{BranchType, Repository as Git2Repository};
@@ -189,6 +189,9 @@ impl UserDefinedDependencyResolver {
     // Get user-defined root branches
     let user_roots = repo_state.list_roots();
 
+    // Pre-build HashSet for O(1) root membership checks instead of O(n) .any() lookups
+    let user_root_set: HashSet<&str> = user_roots.iter().map(|r| r.branch.as_str()).collect();
+
     // If we have user-defined roots, use only those that exist in our branches
     if !user_roots.is_empty() {
       for root in user_roots {
@@ -200,7 +203,7 @@ impl UserDefinedDependencyResolver {
 
     // Find branches that have no parents and are not explicitly marked as roots
     for (branch_name, node) in branch_nodes {
-      let is_user_root = user_roots.iter().any(|r| r.branch == *branch_name);
+      let is_user_root = user_root_set.contains(branch_name.as_str());
       let has_parents = !node.parents.is_empty();
 
       if !has_parents && !is_user_root {

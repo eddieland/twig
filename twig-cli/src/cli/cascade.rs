@@ -308,6 +308,9 @@ fn determine_rebase_order(repo_state: &RepoState, start_branch: &str, branches: 
   // Build a dependency graph
   let mut graph: HashMap<String, Vec<String>> = HashMap::new();
 
+  // Pre-build HashSet for O(1) membership checks instead of O(n) Vec lookups
+  let branch_set: HashSet<&str> = branches.iter().map(|s| s.as_str()).collect();
+
   // Add all branches to the graph
   for branch in branches {
     graph.insert(branch.clone(), Vec::new());
@@ -317,7 +320,7 @@ fn determine_rebase_order(repo_state: &RepoState, start_branch: &str, branches: 
   for branch in branches {
     let parents = repo_state.get_dependency_parents(branch);
     for parent in parents {
-      if branches.contains(&parent.to_string()) {
+      if branch_set.contains(parent) {
         // If the parent is also in our list of branches to rebase,
         // add it as a dependency (child depends on parent)
         if let Some(deps) = graph.get_mut(parent) {
@@ -362,7 +365,7 @@ fn determine_rebase_order(repo_state: &RepoState, start_branch: &str, branches: 
   // Start with branches that depend on the start branch
   let start_children = repo_state.get_dependency_children(start_branch);
   for child in start_children {
-    if branches.contains(&child.to_string()) {
+    if branch_set.contains(child) {
       visit(child, &graph, &mut visited, &mut temp_visited, &mut result);
     }
   }

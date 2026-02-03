@@ -130,8 +130,10 @@ pub fn attach_orphans_to_default_root(graph: BranchGraph, repo_state: &RepoState
   }
 
   if let Some(root_node) = nodes.get_mut(&root_node_name) {
+    // Pre-collect existing children for O(1) membership checks
+    let existing_children: HashSet<_> = root_node.topology.children.iter().cloned().collect();
     for child_name in &child_names {
-      if !root_node.topology.children.iter().any(|child| child == child_name) {
+      if !existing_children.contains(child_name) {
         root_node.topology.children.push(child_name.clone());
       }
       edges.push(BranchEdge::new(root_node_name.clone(), child_name.clone()));
