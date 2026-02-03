@@ -98,7 +98,7 @@ pub fn attach_orphans_to_default_root(graph: BranchGraph, repo_state: &RepoState
     return graph;
   };
 
-  let configured_roots: BTreeSet<_> = repo_state.get_root_branches().into_iter().collect();
+  let configured_roots: HashSet<_> = repo_state.get_root_branches().into_iter().collect();
   let orphan_names: Vec<BranchName> = nodes
     .iter()
     .filter_map(|(name, node)| {
