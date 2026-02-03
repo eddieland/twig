@@ -203,10 +203,10 @@ impl SelectorState {
     } else {
       // Perform fuzzy matching with nucleo (case-insensitive)
       let mut matches: Vec<(usize, u16)> = Vec::new();
+      let search_query_lower = self.search_query.to_lowercase();
 
       for (index, candidate) in self.all_candidates.iter().enumerate() {
         let display_text = format_candidate_for_display(candidate).to_lowercase();
-        let search_query_lower = self.search_query.to_lowercase();
         let mut haystack_buf = Vec::new();
         let mut needle_buf = Vec::new();
         let haystack = Utf32Str::new(&display_text, &mut haystack_buf);
