@@ -282,11 +282,14 @@ pub fn filter_stop_words(text: &str) -> String {
     .join(" ")
 }
 
+/// Maximum character length for the summary portion of a branch name.
+const MAX_BRANCH_SUMMARY_LENGTH: usize = 40;
+
 /// Sanitize a summary string for use in a Git branch name.
 ///
 /// Converts the summary to lowercase, replaces spaces/hyphens/underscores with hyphens,
-/// removes non-alphanumeric characters, collapses consecutive hyphens, and trims
-/// leading/trailing hyphens.
+/// removes non-alphanumeric characters, collapses consecutive hyphens, trims
+/// leading/trailing hyphens, and truncates to a maximum length at word boundaries.
 ///
 /// # Arguments
 ///
@@ -296,7 +299,7 @@ pub fn filter_stop_words(text: &str) -> String {
 ///
 /// A sanitized string suitable for use in a branch name (may be empty).
 fn sanitize_summary_for_branch(summary: &str) -> String {
-  summary
+  let sanitized: String = summary
     .to_lowercase()
     .chars()
     .map(|c| match c {
@@ -307,7 +310,18 @@ fn sanitize_summary_for_branch(summary: &str) -> String {
     .collect::<String>()
     .replace("--", "-")
     .trim_matches('-')
-    .to_string()
+    .to_string();
+
+  // Truncate at word boundary (hyphen) if over limit
+  if sanitized.len() <= MAX_BRANCH_SUMMARY_LENGTH {
+    return sanitized;
+  }
+
+  let truncated = &sanitized[..MAX_BRANCH_SUMMARY_LENGTH];
+  match truncated.rfind('-') {
+    Some(pos) if pos > 0 => truncated[..pos].to_string(),
+    _ => truncated.to_string(),
+  }
 }
 
 /// Generate a Git branch name from an issue key and summary.
@@ -338,6 +352,15 @@ fn sanitize_summary_for_branch(summary: &str) -> String {
 /// assert_eq!(
 ///   generate_branch_name_from_issue("PROJ-123", "Add support for the new feature", true),
 ///   "PROJ-123/add-support-new-feature"
+/// );
+/// // Long summaries are truncated to 40 chars at word boundaries
+/// assert_eq!(
+///   generate_branch_name_from_issue(
+///     "PROJ-123",
+///     "Implement user authentication with OAuth2 and refresh tokens",
+///     true
+///   ),
+///   "PROJ-123/implement-user-authentication-oauth2"
 /// );
 /// // Empty summary after filtering results in just the issue key
 /// assert_eq!(

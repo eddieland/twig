@@ -32,6 +32,12 @@ cargo nextest run -p twig-core  # Single crate
 cargo nextest run -E 'test(my_test_name)'  # Single test by name
 ```
 
+**Exception**: Doc tests require `cargo test --doc` (nextest doesn't support them):
+
+```bash
+cargo test -p twig-core --doc   # Run doc tests for a crate
+```
+
 **Snapshot testing with Insta**:
 
 ```bash
