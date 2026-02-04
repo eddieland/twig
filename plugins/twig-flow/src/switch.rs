@@ -31,6 +31,17 @@ enum JiraBranchChoice {
   Abort,
 }
 
+/// Options when a branch name doesn't exist locally or remotely.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BranchCreateChoice {
+  /// Create the branch with the given name.
+  Create,
+  /// Let the user enter a custom branch name.
+  CustomName,
+  /// Abort the operation.
+  Abort,
+}
+
 /// Handle the branch switching mode for the `twig flow` plugin.
 pub fn run(cli: &Cli) -> Result<()> {
   let Some(target) = cli.target.as_deref() else {
@@ -68,6 +79,10 @@ pub fn run(cli: &Cli) -> Result<()> {
     return handle_jira_branch_creation(&repo, repo_path, &repo_state, jira_parser.as_ref(), &issue_key);
   }
 
+  // Check if this is a branch name (not Jira/PR) for potential branch creation prompt
+  let switch_input = detect_switch_input(jira_parser.as_ref(), &target);
+  let is_branch_name_input = matches!(switch_input, SwitchInput::BranchName(_));
+
   // Standard switch flow for non-Jira inputs or Jira with existing association
   let options = SwitchExecutionOptions {
     create_missing: true,
@@ -99,6 +114,10 @@ pub fn run(cli: &Cli) -> Result<()> {
       }
     }
     Err(err) => {
+      // If this was a branch name input and switching failed, offer to create it
+      if is_branch_name_input {
+        return handle_branch_creation(&repo, repo_path, jira_parser.as_ref(), &target, &err);
+      }
       print_error(&format!("Failed to switch to {target}: {err}"));
     }
   }
@@ -230,6 +249,95 @@ fn prompt_custom_branch_name() -> Result<Option<String>> {
   } else {
     Ok(Some(trimmed.to_string()))
   }
+}
+
+/// Handle branch creation when switching to a branch name that doesn't exist.
+fn handle_branch_creation(
+  repo: &Repository,
+  repo_path: &Path,
+  jira_parser: Option<&JiraTicketParser>,
+  branch_name: &str,
+  switch_error: &anyhow::Error,
+) -> Result<()> {
+  // Check if we're in an interactive terminal
+  if !std::io::stdin().is_terminal() {
+    print_error(&format!("Failed to switch to {branch_name}: {switch_error}"));
+    return Ok(());
+  }
+
+  print_info(&format!(
+    "Branch '{branch_name}' was not found locally or on origin. Would you like to create it?"
+  ));
+  println!();
+
+  let choice = prompt_branch_create_choice(branch_name)?;
+
+  match choice {
+    BranchCreateChoice::Create => create_new_branch(repo, repo_path, jira_parser, branch_name),
+    BranchCreateChoice::CustomName => {
+      let custom_name = prompt_custom_branch_name()?;
+      if let Some(name) = custom_name {
+        create_new_branch(repo, repo_path, jira_parser, &name)
+      } else {
+        print_info("Aborted.");
+        Ok(())
+      }
+    }
+    BranchCreateChoice::Abort => {
+      print_info("Aborted.");
+      Ok(())
+    }
+  }
+}
+
+/// Prompt the user to choose how to create a branch.
+fn prompt_branch_create_choice(branch_name: &str) -> Result<BranchCreateChoice> {
+  let items = [
+    format!("Create branch: {branch_name}"),
+    "Enter custom branch name".to_string(),
+    "Abort".to_string(),
+  ];
+
+  let choice_map = [
+    BranchCreateChoice::Create,
+    BranchCreateChoice::CustomName,
+    BranchCreateChoice::Abort,
+  ];
+
+  let selection = dialoguer::Select::with_theme(&twig_theme())
+    .with_prompt("Select an option")
+    .items(&items)
+    .default(0)
+    .interact()
+    .unwrap_or(choice_map.len() - 1); // Default to abort on error
+
+  Ok(choice_map.get(selection).copied().unwrap_or(BranchCreateChoice::Abort))
+}
+
+/// Create a new branch with the given name.
+fn create_new_branch(
+  repo: &Repository,
+  repo_path: &Path,
+  jira_parser: Option<&JiraTicketParser>,
+  branch_name: &str,
+) -> Result<()> {
+  print_info(&format!("Creating branch: {branch_name}"));
+
+  let branch_base = resolve_branch_base(repo, repo_path, None, jira_parser)?;
+
+  let base_commit = repo
+    .find_commit(branch_base.commit())
+    .with_context(|| format!("Failed to locate base commit for '{branch_name}'"))?;
+
+  repo
+    .branch(branch_name, &base_commit, false)
+    .with_context(|| format!("Failed to create branch '{branch_name}'"))?;
+
+  checkout_branch(repo, branch_name)?;
+
+  print_success(&format!("Created and switched to branch '{branch_name}'"));
+
+  Ok(())
 }
 
 /// Fetch the Jira issue and generate the branch name.
