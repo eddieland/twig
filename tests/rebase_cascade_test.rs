@@ -114,6 +114,7 @@ fn run_cascade_command(
   force: bool,
   show_graph: bool,
   autostash: bool,
+  preview: bool,
 ) -> Result<String> {
   use twig_cli::cli::cascade::{CascadeArgs, handle_cascade_command};
 
@@ -125,6 +126,7 @@ fn run_cascade_command(
     force,
     show_graph,
     autostash,
+    preview,
     repo: Some(repo_path.to_string_lossy().to_string()),
   };
 
@@ -236,7 +238,7 @@ fn test_cascade_command() -> Result<()> {
   run_rebase_command(repo_path, false, false, false)?;
 
   // Then cascade from feature to its children
-  let output = run_cascade_command(repo_path, None, false, false, false)?;
+  let output = run_cascade_command(repo_path, None, false, false, false, false)?;
 
   // Verify that the cascade was successful
   assert!(
@@ -345,7 +347,7 @@ fn test_cascade_with_max_depth() -> Result<()> {
   run_rebase_command(repo_path, false, false, false)?;
 
   // Then cascade from feature to its children with max-depth=1
-  let output = run_cascade_command(repo_path, Some(1), false, false, false)?;
+  let output = run_cascade_command(repo_path, Some(1), false, false, false, false)?;
 
   // Verify that the cascade was successful
   assert!(
@@ -371,6 +373,81 @@ fn test_cascade_with_max_depth() -> Result<()> {
   assert!(
     entry.is_none(),
     "main-update.txt should NOT be present in sub-sub-feature branch due to max-depth=1"
+  );
+
+  Ok(())
+}
+
+#[test]
+fn test_cascade_preview() -> Result<()> {
+  // Create a temporary git repository
+  let git_repo = GitRepoTestGuard::new();
+  let repo = &git_repo.repo;
+  let repo_path = git_repo.path();
+
+  // Create initial commit on main branch
+  create_commit(repo, "file1.txt", "Initial content", "Initial commit")?;
+
+  ensure_main_branch(repo)?;
+
+  // Create feature branch
+  create_branch(repo, "feature", Some("main"))?;
+  checkout_branch(repo, "feature")?;
+  create_commit(repo, "feature.txt", "Feature content", "Feature commit")?;
+
+  // Create sub-feature branch from feature
+  create_branch(repo, "sub-feature", Some("feature"))?;
+  checkout_branch(repo, "sub-feature")?;
+  create_commit(repo, "sub-feature.txt", "Sub-feature content", "Sub-feature commit")?;
+
+  // Go back to main and create another commit
+  checkout_branch(repo, "main")?;
+  create_commit(repo, "main-update.txt", "Updated main content", "Updated main commit")?;
+
+  // Set up branch dependencies
+  add_branch_dependency(repo_path, "feature", "main")?;
+  add_branch_dependency(repo_path, "sub-feature", "feature")?;
+  add_root_branch(repo_path, "main", true)?;
+
+  // Checkout feature branch
+  checkout_branch(repo, "feature")?;
+
+  // Record the commit SHAs before preview
+  let feature_sha = repo.head()?.peel_to_commit()?.id();
+  checkout_branch(repo, "sub-feature")?;
+  let sub_feature_sha = repo.head()?.peel_to_commit()?.id();
+  checkout_branch(repo, "feature")?;
+
+  // Run cascade with --preview
+  let output = run_cascade_command(repo_path, None, false, false, false, true)?;
+
+  // Preview should succeed without error
+  assert!(
+    output.contains("Cascading rebase completed successfully"),
+    "Preview should return Ok: got {output}"
+  );
+
+  // Verify that no branches were actually modified
+  checkout_branch(repo, "feature")?;
+  let feature_sha_after = repo.head()?.peel_to_commit()?.id();
+  assert_eq!(
+    feature_sha, feature_sha_after,
+    "feature branch should not be modified by preview"
+  );
+
+  checkout_branch(repo, "sub-feature")?;
+  let sub_feature_sha_after = repo.head()?.peel_to_commit()?.id();
+  assert_eq!(
+    sub_feature_sha, sub_feature_sha_after,
+    "sub-feature branch should not be modified by preview"
+  );
+
+  // Verify that sub-feature does NOT have changes from main (no rebase happened)
+  let sub_feature_tree = repo.head()?.peel_to_commit()?.tree()?;
+  let entry = sub_feature_tree.get_name("main-update.txt");
+  assert!(
+    entry.is_none(),
+    "main-update.txt should NOT be present in sub-feature after preview (no rebase should occur)"
   );
 
   Ok(())

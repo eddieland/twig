@@ -364,11 +364,10 @@ impl RepoState {
   /// Get a branch-issue association by GitHub PR number
   pub fn get_branch_issue_by_pr(&self, pr_number: u32) -> Option<&BranchMetadata> {
     // Use the pre-built index for O(1) lookup
-    if let Some(branch_name) = self.pr_to_branch_index.get(&pr_number) {
-      self.branches.get(branch_name)
-    } else {
-      None
-    }
+    self
+      .pr_to_branch_index
+      .get(&pr_number)
+      .and_then(|branch_name| self.branches.get(branch_name))
   }
 
   /// List all branch-issue associations
