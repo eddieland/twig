@@ -36,6 +36,10 @@ pub struct CascadeArgs {
   #[arg(long)]
   pub autostash: bool,
 
+  /// Show the rebase plan without executing it
+  #[arg(long)]
+  pub preview: bool,
+
   /// Path to a specific repository
   #[arg(short, long, value_name = "PATH")]
   pub repo: Option<String>,
@@ -55,9 +59,10 @@ pub fn handle_cascade_command(args: CascadeArgs) -> Result<()> {
   let force = args.force;
   let show_graph = args.show_graph;
   let autostash = args.autostash;
+  let preview = args.preview;
 
   // Perform cascading rebase from current branch to children
-  rebase_downstream(&repo_path, max_depth, force, show_graph, autostash)
+  rebase_downstream(&repo_path, max_depth, force, show_graph, autostash, preview)
 }
 
 /// Perform cascading rebase from current branch to children
@@ -67,6 +72,7 @@ fn rebase_downstream(
   force: bool,
   show_graph: bool,
   autostash: bool,
+  preview: bool,
 ) -> Result<()> {
   // Open the repository
   let repo =
@@ -113,6 +119,25 @@ fn rebase_downstream(
 
   // Build a dependency graph to determine the order of rebasing
   let rebase_order = determine_rebase_order(&repo_state, &current_branch_name, &children);
+
+  // Preview mode: show the plan without executing
+  if preview {
+    println!();
+    print_info(&format!(
+      "Would rebase {} branch{}:",
+      rebase_order.len(),
+      if rebase_order.len() == 1 { "" } else { "es" }
+    ));
+    for branch in &rebase_order {
+      let parents = repo_state.get_dependency_parents(branch);
+      for parent in parents {
+        println!("  {} onto {}", branch, parent);
+      }
+    }
+    println!();
+    show_dependency_tree(repo_path, &current_branch_name)?;
+    return Ok(());
+  }
 
   // Perform the cascading rebase
   for branch in rebase_order {
