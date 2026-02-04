@@ -323,6 +323,72 @@ pub fn resolve_branch_base(
   }
 }
 
+/// Check if a remote branch exists for the given branch name.
+///
+/// Returns the remote branch name (e.g., `origin/feature`) if found, or `None`
+/// if the branch does not exist on any remote. This function does NOT create
+/// a local tracking branch or checkout - it only checks for existence.
+pub fn find_remote_branch(repo: &Repository, branch_name: &str) -> Result<Option<BranchName>> {
+  let remote_branch_name = format!("origin/{branch_name}");
+
+  // First check if we already know about this remote branch
+  if repo.find_branch(&remote_branch_name, git2::BranchType::Remote).is_ok() {
+    return Ok(Some(BranchName::from(remote_branch_name)));
+  }
+
+  // Try fetching from origin to see if the branch exists
+  if let Ok(mut remote) = repo.find_remote("origin") {
+    let mut fetch_options = git2::FetchOptions::new();
+    if let Err(err) = remote.fetch(&[branch_name], Some(&mut fetch_options), None) {
+      if err.code() == git2::ErrorCode::NotFound || err.class() == git2::ErrorClass::Reference {
+        return Ok(None);
+      }
+      // For other errors, just return None (branch not accessible)
+      return Ok(None);
+    }
+
+    // Check again after fetch
+    if repo.find_branch(&remote_branch_name, git2::BranchType::Remote).is_ok() {
+      return Ok(Some(BranchName::from(remote_branch_name)));
+    }
+  }
+
+  Ok(None)
+}
+
+/// Checkout a remote branch by creating a local tracking branch.
+///
+/// This function assumes the remote branch exists (e.g., after calling
+/// `find_remote_branch`). It creates a local branch that tracks the remote
+/// and checks it out.
+pub fn checkout_remote_branch(repo: &Repository, branch_name: &str, remote_branch: &str) -> Result<()> {
+  let remote_ref = repo
+    .find_branch(remote_branch, git2::BranchType::Remote)
+    .with_context(|| format!("Remote branch '{remote_branch}' not found"))?;
+
+  let commit = remote_ref
+    .into_reference()
+    .peel_to_commit()
+    .with_context(|| format!("Failed to resolve commit for '{remote_branch}'"))?;
+
+  repo
+    .branch(branch_name, &commit, false)
+    .with_context(|| format!("Failed to create local branch '{branch_name}' from {remote_branch}"))?;
+
+  let mut local_branch = repo
+    .find_branch(branch_name, git2::BranchType::Local)
+    .with_context(|| format!("Failed to reopen branch '{branch_name}'"))?;
+  local_branch
+    .set_upstream(Some(remote_branch))
+    .with_context(|| format!("Failed to set upstream for '{branch_name}'"))?;
+
+  drop(local_branch);
+
+  checkout_branch(repo, branch_name)?;
+
+  Ok(())
+}
+
 /// Attempt to create a local tracking branch from a remote and checkout.
 ///
 /// Returns `Ok(true)` when the remote branch was found and successfully
