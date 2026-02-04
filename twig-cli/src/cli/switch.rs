@@ -11,15 +11,14 @@ use directories::BaseDirs;
 use git2::Repository as Git2Repository;
 use tokio::runtime::Runtime;
 use twig_core::git::switch::{
-  BranchBaseResolution, SwitchInput, detect_switch_input, resolve_branch_base, store_github_pr_association,
-  store_jira_association, try_checkout_remote_branch,
+  BranchBaseResolution, PullRequestCheckoutRequest, PullRequestHeadInfo, SwitchInput, checkout_pr_branch,
+  detect_switch_input, resolve_branch_base, store_jira_association, try_checkout_remote_branch,
 };
 use twig_core::jira_parser::JiraTicketParser;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::state::RepoState;
 use twig_core::{checkout_branch, detect_repository, generate_branch_name_from_issue};
-use twig_gh::models::{GitHubPullRequest, RepositoryInfo};
-use twig_gh::{GitHubClient, GitHubRepo, GitRemoteScheme, create_github_client_from_netrc};
+use twig_gh::{GitHubClient, GitHubRepo, create_github_client_from_netrc};
 use twig_jira::{JiraClient, create_jira_client_from_netrc, get_jira_host};
 
 use crate::complete::switch_target_completer;
@@ -425,156 +424,47 @@ fn create_branch_from_github_pr(
 
     print_info(&format!("Creating branch from PR head: {branch_name}"));
 
-    let target_remote = resolve_pr_remote(repo, &pr, remote_url, &owner, &repo_name, pr_number)?;
+    // Map twig-gh types to core-native types
+    let head_info = PullRequestHeadInfo {
+      branch: branch_name,
+      repo_full_name: pr.head.repo.as_ref().and_then(|r| r.full_name.clone()),
+      owner_login: pr
+        .head
+        .repo
+        .as_ref()
+        .and_then(|r| r.owner.as_ref().map(|o| o.login.clone())),
+      ssh_url: pr.head.repo.as_ref().and_then(|r| r.ssh_url.clone()),
+      clone_url: pr.head.repo.as_ref().and_then(|r| r.clone_url.clone()),
+    };
 
-    fetch_remote_branch(repo, &target_remote, &branch_name)?;
+    let request = PullRequestCheckoutRequest {
+      pr_number,
+      head: head_info,
+      origin_url: remote_url.to_string(),
+      origin_owner: owner,
+      origin_repo: repo_name,
+      parent: parent_option.map(|s| s.to_string()),
+    };
 
-    let remote_branch_ref = format!("{target_remote}/{branch_name}");
-    let remote_branch = repo
-      .find_branch(&remote_branch_ref, git2::BranchType::Remote)
-      .with_context(|| format!("Failed to locate remote branch '{remote_branch_ref}' after fetch"))?;
+    let outcome = checkout_pr_branch(repo, repo_path, &request)?;
 
-    let commit = remote_branch
-      .into_reference()
-      .peel_to_commit()
-      .context("Failed to resolve PR head commit")?;
-
-    if repo.find_branch(&branch_name, git2::BranchType::Local).is_ok() {
-      print_warning(&format!(
-        "Branch '{branch_name}' already exists locally. Resetting it to match the PR head commit."
+    if outcome.fork_remote_created
+      && let Some(url) = &outcome.fork_remote_url
+    {
+      print_info(&format!(
+        "Added remote '{}' for PR head repository: {url}",
+        outcome.remote_name
       ));
     }
 
-    repo
-      .branch(&branch_name, &commit, true)
-      .with_context(|| format!("Failed to create local branch '{branch_name}'"))?;
-
-    let mut local_branch = repo
-      .find_branch(&branch_name, git2::BranchType::Local)
-      .with_context(|| format!("Failed to reopen branch '{branch_name}'"))?;
-    local_branch
-      .set_upstream(Some(&remote_branch_ref))
-      .with_context(|| format!("Failed to set upstream for '{branch_name}'"))?;
-
-    drop(local_branch);
-
-    switch_to_branch(repo, repo_path, &branch_name)?;
-
-    if let Some(parent) = parent_option {
-      add_branch_dependency(repo_path, &branch_name, parent)?;
-    }
-
-    // Store the association
-    store_github_pr_association(repo_path, &branch_name, pr_number)?;
-
     print_success(&format!(
-      "Created and switched to branch '{branch_name}' for GitHub PR #{pr_number}",
+      "Created and switched to branch '{}' for GitHub PR #{pr_number}",
+      outcome.branch_name,
     ));
     print_info(&format!("PR Title: {}", pr.title));
     print_info(&format!("PR URL: {}", pr.html_url));
     Ok(())
   })
-}
-
-fn fetch_remote_branch(repo: &Git2Repository, remote_name: &str, branch_name: &str) -> Result<()> {
-  let mut remote = repo
-    .find_remote(remote_name)
-    .with_context(|| format!("Failed to find remote '{remote_name}'"))?;
-  let mut fetch_options = git2::FetchOptions::new();
-  remote
-    .fetch(&[branch_name], Some(&mut fetch_options), None)
-    .with_context(|| format!("Failed to fetch '{branch_name}' from remote '{remote_name}'"))?;
-  Ok(())
-}
-
-fn resolve_pr_remote(
-  repo: &Git2Repository,
-  pr: &GitHubPullRequest,
-  origin_url: &str,
-  origin_owner: &str,
-  origin_repo: &str,
-  pr_number: u32,
-) -> Result<String> {
-  if let Some(repo_info) = pr.head.repo.as_ref() {
-    if let Some(full_name) = repo_info.full_name.as_deref() {
-      let normalized_origin = format!("{origin_owner}/{origin_repo}");
-      if full_name.eq_ignore_ascii_case(&normalized_origin) {
-        return Ok("origin".to_string());
-      }
-    }
-
-    let remote_url = select_repo_url(repo_info, origin_url)
-      .ok_or_else(|| anyhow::anyhow!("Pull request head repository does not expose a usable clone URL"))?;
-
-    let base_name = repo_info
-      .owner
-      .as_ref()
-      .map(|owner| owner.login.clone())
-      .or_else(|| {
-        repo_info
-          .full_name
-          .as_deref()
-          .map(|full| full.split('/').next().unwrap().to_string())
-      })
-      .unwrap_or_else(|| format!("pr-{pr_number}"));
-
-    let mut remote_name = format!("fork-{}", sanitize_remote_name(&base_name));
-    if remote_name == "origin" {
-      remote_name = format!("fork-pr-{pr_number}");
-    }
-
-    let mut candidate = remote_name.clone();
-    let mut suffix = 1;
-    loop {
-      match repo.find_remote(&candidate) {
-        Ok(existing_remote) => {
-          if existing_remote.url() == Some(remote_url.as_str()) {
-            return Ok(candidate);
-          }
-          suffix += 1;
-          candidate = format!("{remote_name}-{suffix}");
-        }
-        Err(_) => {
-          repo
-            .remote(&candidate, &remote_url)
-            .with_context(|| format!("Failed to create remote '{candidate}'"))?;
-          print_info(&format!(
-            "Added remote '{candidate}' for PR head repository: {remote_url}"
-          ));
-          return Ok(candidate);
-        }
-      }
-    }
-  }
-
-  Ok("origin".to_string())
-}
-
-fn select_repo_url(repo_info: &RepositoryInfo, origin_url: &str) -> Option<String> {
-  if GitRemoteScheme::detect(origin_url).prefers_ssh() {
-    repo_info.ssh_url.clone().or_else(|| repo_info.clone_url.clone())
-  } else {
-    repo_info.clone_url.clone().or_else(|| repo_info.ssh_url.clone())
-  }
-}
-
-fn sanitize_remote_name(name: &str) -> String {
-  let sanitized: String = name
-    .chars()
-    .map(|ch| {
-      if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
-        ch
-      } else {
-        '-'
-      }
-    })
-    .collect();
-  let trimmed = sanitized.trim_matches(|c| c == '-' || c == '_');
-  if trimmed.is_empty() {
-    "remote".to_string()
-  } else {
-    trimmed.to_string()
-  }
 }
 
 #[cfg(test)]

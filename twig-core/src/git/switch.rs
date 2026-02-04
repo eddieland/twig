@@ -15,9 +15,9 @@ use regex::Regex;
 
 use crate::git::checkout_branch;
 use crate::git::graph::BranchName;
-use crate::github::GitHubPr;
+use crate::github::{GitHubPr, GitRemoteScheme};
 use crate::jira_parser::JiraTicketParser;
-use crate::output::print_info;
+use crate::output::{print_info, print_warning};
 use crate::state::{BranchMetadata, RepoState};
 
 static JIRA_ISSUE_URL_REGEX: LazyLock<Regex> =
@@ -869,6 +869,246 @@ pub trait BranchSwitchService {
   ) -> anyhow::Result<BranchSwitchOutcome>;
 }
 
+// ---------------------------------------------------------------------------
+// PR branch checkout – types and logic shared by CLI and plugins
+// ---------------------------------------------------------------------------
+
+/// Subset of pull request head data needed for fork detection and remote setup.
+///
+/// This is a core-native type that avoids depending on `twig-gh` models so
+/// plugins can call checkout logic without pulling in the GitHub client crate.
+#[derive(Debug, Clone)]
+pub struct PullRequestHeadInfo {
+  /// Head branch name advertised by the pull request.
+  pub branch: String,
+  /// Full repository name for the head (e.g. `"forker/repo"`).
+  pub repo_full_name: Option<String>,
+  /// Login of the head repository owner (e.g. `"forker"`).
+  pub owner_login: Option<String>,
+  /// SSH clone URL for the head repository.
+  pub ssh_url: Option<String>,
+  /// HTTPS clone URL for the head repository.
+  pub clone_url: Option<String>,
+}
+
+/// Bundles all inputs required to checkout a pull request branch locally.
+#[derive(Debug, Clone)]
+pub struct PullRequestCheckoutRequest {
+  /// Pull request number.
+  pub pr_number: u32,
+  /// Head information extracted from the pull request.
+  pub head: PullRequestHeadInfo,
+  /// URL of the `origin` remote in the local repository.
+  pub origin_url: String,
+  /// Owner portion of the origin remote (e.g. `"example"`).
+  pub origin_owner: String,
+  /// Repository name portion of the origin remote (e.g. `"repo"`).
+  pub origin_repo: String,
+  /// Optional parent branch to record as a dependency.
+  pub parent: Option<String>,
+}
+
+/// Outcome returned by [`checkout_pr_branch`] with information the caller
+/// may use for user-facing messages.
+#[derive(Debug, Clone)]
+pub struct PullRequestCheckoutOutcome {
+  /// Local branch name that was checked out.
+  pub branch_name: String,
+  /// Name of the remote that was used to fetch the branch.
+  pub remote_name: String,
+  /// `true` when a new fork remote was created during checkout.
+  pub fork_remote_created: bool,
+  /// URL of the fork remote, when one was created.
+  pub fork_remote_url: Option<String>,
+}
+
+/// Sanitize a string for use as a Git remote name.
+///
+/// Non-alphanumeric characters (except `-` and `_`) are replaced with `-`.
+/// Leading/trailing `-` and `_` are stripped. An empty result maps to
+/// `"remote"`.
+pub fn sanitize_remote_name(name: &str) -> String {
+  let sanitized: String = name
+    .chars()
+    .map(|ch| {
+      if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+        ch
+      } else {
+        '-'
+      }
+    })
+    .collect();
+  let trimmed = sanitized.trim_matches(|c| c == '-' || c == '_');
+  if trimmed.is_empty() {
+    "remote".to_string()
+  } else {
+    trimmed.to_string()
+  }
+}
+
+/// Choose the best clone URL for a fork remote based on the origin URL scheme.
+///
+/// When the origin uses SSH the function prefers `ssh_url`, falling back to
+/// `clone_url`. For HTTPS origins the preference is reversed. Returns `None`
+/// when neither URL is available.
+pub fn select_repo_url(ssh_url: Option<&str>, clone_url: Option<&str>, origin_url: &str) -> Option<String> {
+  if GitRemoteScheme::detect(origin_url).prefers_ssh() {
+    ssh_url.map(String::from).or_else(|| clone_url.map(String::from))
+  } else {
+    clone_url.map(String::from).or_else(|| ssh_url.map(String::from))
+  }
+}
+
+/// Fetch a single branch from the named remote.
+pub fn fetch_remote_branch(repo: &Repository, remote_name: &str, branch_name: &str) -> Result<()> {
+  let mut remote = repo
+    .find_remote(remote_name)
+    .with_context(|| format!("Failed to find remote '{remote_name}'"))?;
+  let mut fetch_options = git2::FetchOptions::new();
+  remote
+    .fetch(&[branch_name], Some(&mut fetch_options), None)
+    .with_context(|| format!("Failed to fetch '{branch_name}' from remote '{remote_name}'"))?;
+  Ok(())
+}
+
+/// Determine the remote to use when checking out a pull request branch.
+///
+/// If the PR head belongs to the same repository as `origin` the function
+/// returns `"origin"`. Otherwise it creates (or reuses) a fork remote pointing
+/// at the head repository.
+///
+/// Returns `(remote_name, fork_remote_created, fork_remote_url)`.
+pub fn resolve_pr_remote(
+  repo: &Repository,
+  head: &PullRequestHeadInfo,
+  origin_url: &str,
+  origin_owner: &str,
+  origin_repo: &str,
+  pr_number: u32,
+) -> Result<(String, bool, Option<String>)> {
+  // When the head has repo information, check whether it's a fork.
+  if head.repo_full_name.is_some() || head.owner_login.is_some() {
+    if let Some(full_name) = head.repo_full_name.as_deref() {
+      let normalized_origin = format!("{origin_owner}/{origin_repo}");
+      if full_name.eq_ignore_ascii_case(&normalized_origin) {
+        return Ok(("origin".to_string(), false, None));
+      }
+    }
+
+    let remote_url = select_repo_url(head.ssh_url.as_deref(), head.clone_url.as_deref(), origin_url)
+      .ok_or_else(|| anyhow::anyhow!("Pull request head repository does not expose a usable clone URL"))?;
+
+    let base_name = head
+      .owner_login
+      .clone()
+      .or_else(|| {
+        head
+          .repo_full_name
+          .as_deref()
+          .and_then(|full| full.split('/').next())
+          .map(|s| s.to_string())
+      })
+      .unwrap_or_else(|| format!("pr-{pr_number}"));
+
+    let mut remote_name = format!("fork-{}", sanitize_remote_name(&base_name));
+    if remote_name == "origin" {
+      remote_name = format!("fork-pr-{pr_number}");
+    }
+
+    let mut candidate = remote_name.clone();
+    let mut suffix = 1;
+    loop {
+      match repo.find_remote(&candidate) {
+        Ok(existing_remote) => {
+          if existing_remote.url() == Some(remote_url.as_str()) {
+            return Ok((candidate, false, None));
+          }
+          suffix += 1;
+          candidate = format!("{remote_name}-{suffix}");
+        }
+        Err(_) => {
+          repo
+            .remote(&candidate, &remote_url)
+            .with_context(|| format!("Failed to create remote '{candidate}'"))?;
+          return Ok((candidate, true, Some(remote_url)));
+        }
+      }
+    }
+  }
+
+  Ok(("origin".to_string(), false, None))
+}
+
+/// Checkout a pull request branch locally.
+///
+/// This function handles fork detection, remote creation, fetching, branch
+/// creation/reset, upstream configuration, dependency recording and PR
+/// association storage. It is the core implementation shared by CLI and
+/// plugins.
+pub fn checkout_pr_branch(
+  repo: &Repository,
+  repo_path: &Path,
+  request: &PullRequestCheckoutRequest,
+) -> Result<PullRequestCheckoutOutcome> {
+  let (target_remote, fork_remote_created, fork_remote_url) = resolve_pr_remote(
+    repo,
+    &request.head,
+    &request.origin_url,
+    &request.origin_owner,
+    &request.origin_repo,
+    request.pr_number,
+  )?;
+
+  fetch_remote_branch(repo, &target_remote, &request.head.branch)?;
+
+  let remote_branch_ref = format!("{target_remote}/{}", request.head.branch);
+  let remote_branch = repo
+    .find_branch(&remote_branch_ref, git2::BranchType::Remote)
+    .with_context(|| format!("Failed to locate remote branch '{remote_branch_ref}' after fetch"))?;
+
+  let commit = remote_branch
+    .into_reference()
+    .peel_to_commit()
+    .context("Failed to resolve PR head commit")?;
+
+  // Create or force-update the local branch to match the PR head.
+  repo
+    .branch(&request.head.branch, &commit, true)
+    .with_context(|| format!("Failed to create local branch '{}'", request.head.branch))?;
+
+  // Set upstream tracking.
+  let mut local_branch = repo
+    .find_branch(&request.head.branch, git2::BranchType::Local)
+    .with_context(|| format!("Failed to reopen branch '{}'", request.head.branch))?;
+  local_branch
+    .set_upstream(Some(&remote_branch_ref))
+    .with_context(|| format!("Failed to set upstream for '{}'", request.head.branch))?;
+  drop(local_branch);
+
+  // Checkout.
+  checkout_branch(repo, &request.head.branch)?;
+
+  // Record dependency when a parent is specified.
+  if let Some(parent) = &request.parent {
+    let mut repo_state = RepoState::load(repo_path)?;
+    if let Err(e) = repo_state.add_dependency(request.head.branch.clone(), parent.clone()) {
+      print_warning(&format!("Failed to add dependency: {e}"));
+    } else {
+      repo_state.save(repo_path)?;
+    }
+  }
+
+  // Store the PR association.
+  store_github_pr_association(repo_path, &request.head.branch, request.pr_number)?;
+
+  Ok(PullRequestCheckoutOutcome {
+    branch_name: request.head.branch.clone(),
+    remote_name: target_remote,
+    fork_remote_created,
+    fork_remote_url,
+  })
+}
+
 #[cfg(test)]
 mod tests {
   use twig_test_utils::git::{GitRepoTestGuard, create_branch, create_commit};
@@ -1014,6 +1254,278 @@ mod tests {
     let state_after = RepoState::load(repo_path)?;
     let metadata = state_after.get_branch_metadata("proj-999").expect("metadata stored");
     assert_eq!(metadata.jira_issue.as_deref(), Some("PROJ-999"));
+
+    Ok(())
+  }
+
+  // -- PR branch checkout tests --
+
+  #[test]
+  fn test_sanitize_remote_name() {
+    assert_eq!(sanitize_remote_name("alice"), "alice");
+    assert_eq!(sanitize_remote_name("alice-bob"), "alice-bob");
+    assert_eq!(sanitize_remote_name("alice_bob"), "alice_bob");
+    assert_eq!(sanitize_remote_name("alice.bob"), "alice-bob");
+    assert_eq!(sanitize_remote_name("alice/bob"), "alice-bob");
+    assert_eq!(sanitize_remote_name("@lice!"), "lice");
+    assert_eq!(sanitize_remote_name("---"), "remote");
+    assert_eq!(sanitize_remote_name(""), "remote");
+  }
+
+  #[test]
+  fn test_select_repo_url_prefers_ssh_for_ssh_origin() {
+    let result = select_repo_url(
+      Some("git@github.com:fork/repo.git"),
+      Some("https://github.com/fork/repo.git"),
+      "git@github.com:origin/repo.git",
+    );
+    assert_eq!(result.as_deref(), Some("git@github.com:fork/repo.git"));
+  }
+
+  #[test]
+  fn test_select_repo_url_prefers_https_for_https_origin() {
+    let result = select_repo_url(
+      Some("git@github.com:fork/repo.git"),
+      Some("https://github.com/fork/repo.git"),
+      "https://github.com/origin/repo.git",
+    );
+    assert_eq!(result.as_deref(), Some("https://github.com/fork/repo.git"));
+  }
+
+  #[test]
+  fn test_select_repo_url_falls_back() {
+    // Only SSH available but origin is HTTPS → still returns SSH
+    let result = select_repo_url(
+      Some("git@github.com:fork/repo.git"),
+      None,
+      "https://github.com/origin/repo.git",
+    );
+    assert_eq!(result.as_deref(), Some("git@github.com:fork/repo.git"));
+
+    // Only clone_url available but origin is SSH → still returns clone_url
+    let result = select_repo_url(
+      None,
+      Some("https://github.com/fork/repo.git"),
+      "git@github.com:origin/repo.git",
+    );
+    assert_eq!(result.as_deref(), Some("https://github.com/fork/repo.git"));
+
+    // Neither available → None
+    let result = select_repo_url(None, None, "https://github.com/origin/repo.git");
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn test_resolve_pr_remote_same_repo_returns_origin() -> Result<()> {
+    let guard = GitRepoTestGuard::new();
+    create_commit(&guard.repo, "file.txt", "content", "initial")?;
+    guard.repo.remote("origin", "https://github.com/example/repo.git")?;
+
+    let head = PullRequestHeadInfo {
+      branch: "feature".to_string(),
+      repo_full_name: Some("example/repo".to_string()),
+      owner_login: Some("example".to_string()),
+      ssh_url: Some("git@github.com:example/repo.git".to_string()),
+      clone_url: Some("https://github.com/example/repo.git".to_string()),
+    };
+
+    let (remote, created, url) = resolve_pr_remote(
+      &guard.repo,
+      &head,
+      "https://github.com/example/repo.git",
+      "example",
+      "repo",
+      1,
+    )?;
+    assert_eq!(remote, "origin");
+    assert!(!created);
+    assert!(url.is_none());
+    Ok(())
+  }
+
+  #[test]
+  fn test_resolve_pr_remote_fork_creates_remote() -> Result<()> {
+    let guard = GitRepoTestGuard::new();
+    create_commit(&guard.repo, "file.txt", "content", "initial")?;
+    guard.repo.remote("origin", "https://github.com/example/repo.git")?;
+
+    let head = PullRequestHeadInfo {
+      branch: "feature".to_string(),
+      repo_full_name: Some("forker/repo".to_string()),
+      owner_login: Some("forker".to_string()),
+      ssh_url: None,
+      clone_url: Some("https://github.com/forker/repo.git".to_string()),
+    };
+
+    let (remote, created, url) = resolve_pr_remote(
+      &guard.repo,
+      &head,
+      "https://github.com/example/repo.git",
+      "example",
+      "repo",
+      42,
+    )?;
+    assert_eq!(remote, "fork-forker");
+    assert!(created);
+    assert_eq!(url.as_deref(), Some("https://github.com/forker/repo.git"));
+
+    // Verify the remote actually exists in the repo
+    let git_remote = guard.repo.find_remote("fork-forker")?;
+    assert_eq!(git_remote.url(), Some("https://github.com/forker/repo.git"));
+    Ok(())
+  }
+
+  #[test]
+  fn test_checkout_pr_branch_same_repo() -> Result<()> {
+    use std::fs;
+
+    use tempfile::TempDir;
+
+    // Create a "remote" repo that acts as origin
+    let remote_root = TempDir::new()?;
+    let remote_path = remote_root.path().join("repo");
+    fs::create_dir_all(&remote_path)?;
+    let remote_repo = git2::Repository::init(&remote_path)?;
+    let mut cfg = remote_repo.config()?;
+    cfg.set_str("user.name", "Test")?;
+    cfg.set_str("user.email", "test@example.com")?;
+
+    create_commit(&remote_repo, "base.txt", "base", "base commit")?;
+    let base = remote_repo.head()?.peel_to_commit()?;
+    remote_repo.branch("feature/pr-branch", &base, true)?;
+    twig_test_utils::git::checkout_branch(&remote_repo, "feature/pr-branch")?;
+    create_commit(&remote_repo, "feat.txt", "feat", "feature commit")?;
+    let pr_head_oid = remote_repo.head()?.peel_to_commit()?.id();
+
+    // Create the local repo pointing at the remote
+    let guard = GitRepoTestGuard::new();
+    guard.repo.remote("origin", remote_path.to_str().expect("path"))?;
+    create_commit(&guard.repo, "init.txt", "init", "init")?;
+
+    let repo_path = guard.repo.workdir().expect("workdir");
+
+    let request = PullRequestCheckoutRequest {
+      pr_number: 10,
+      head: PullRequestHeadInfo {
+        branch: "feature/pr-branch".to_string(),
+        repo_full_name: Some("example/repo".to_string()),
+        owner_login: Some("example".to_string()),
+        ssh_url: None,
+        clone_url: None,
+      },
+      origin_url: remote_path.to_str().expect("path").to_string(),
+      origin_owner: "example".to_string(),
+      origin_repo: "repo".to_string(),
+      parent: None,
+    };
+
+    let outcome = checkout_pr_branch(&guard.repo, repo_path, &request)?;
+
+    assert_eq!(outcome.branch_name, "feature/pr-branch");
+    assert_eq!(outcome.remote_name, "origin");
+    assert!(!outcome.fork_remote_created);
+
+    // Verify the branch is checked out at the correct commit
+    let refreshed = git2::Repository::open(repo_path)?;
+    assert_eq!(refreshed.head()?.shorthand(), Some("feature/pr-branch"));
+    let tip = refreshed.head()?.peel_to_commit()?.id();
+    assert_eq!(tip, pr_head_oid);
+
+    // Verify upstream is set
+    let branch = refreshed.find_branch("feature/pr-branch", git2::BranchType::Local)?;
+    let upstream = branch.upstream()?;
+    assert_eq!(upstream.name()?, Some("origin/feature/pr-branch"));
+
+    // Verify PR association is stored
+    let state = RepoState::load(repo_path)?;
+    let metadata = state.get_branch_metadata("feature/pr-branch").expect("metadata stored");
+    assert_eq!(metadata.github_pr, Some(10));
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_checkout_pr_branch_fork() -> Result<()> {
+    use std::fs;
+
+    use tempfile::TempDir;
+
+    // Create origin repo
+    let origin_root = TempDir::new()?;
+    let origin_path = origin_root.path().join("repo");
+    fs::create_dir_all(&origin_path)?;
+    let origin_repo = git2::Repository::init(&origin_path)?;
+    let mut cfg = origin_repo.config()?;
+    cfg.set_str("user.name", "Test")?;
+    cfg.set_str("user.email", "test@example.com")?;
+    create_commit(&origin_repo, "base.txt", "base", "base")?;
+
+    // Create fork repo with the PR branch
+    let fork_root = TempDir::new()?;
+    let fork_path = fork_root.path().join("repo");
+    fs::create_dir_all(&fork_path)?;
+    let fork_repo = git2::Repository::init(&fork_path)?;
+    let mut fork_cfg = fork_repo.config()?;
+    fork_cfg.set_str("user.name", "Test")?;
+    fork_cfg.set_str("user.email", "test@example.com")?;
+    create_commit(&fork_repo, "base.txt", "base", "base")?;
+    let fork_base = fork_repo.head()?.peel_to_commit()?;
+    fork_repo.branch("feature/fork-pr", &fork_base, true)?;
+    twig_test_utils::git::checkout_branch(&fork_repo, "feature/fork-pr")?;
+    create_commit(&fork_repo, "fork.txt", "fork", "fork commit")?;
+    let fork_head_oid = fork_repo.head()?.peel_to_commit()?.id();
+
+    // Create local repo pointing at origin
+    let guard = GitRepoTestGuard::new();
+    guard.repo.remote("origin", origin_path.to_str().expect("path"))?;
+    create_commit(&guard.repo, "init.txt", "init", "init")?;
+
+    let repo_path = guard.repo.workdir().expect("workdir");
+
+    let request = PullRequestCheckoutRequest {
+      pr_number: 55,
+      head: PullRequestHeadInfo {
+        branch: "feature/fork-pr".to_string(),
+        repo_full_name: Some("forker/repo".to_string()),
+        owner_login: Some("forker".to_string()),
+        ssh_url: None,
+        clone_url: Some(fork_path.to_str().expect("path").to_string()),
+      },
+      origin_url: origin_path.to_str().expect("path").to_string(),
+      origin_owner: "example".to_string(),
+      origin_repo: "repo".to_string(),
+      parent: Some("main".to_string()),
+    };
+
+    let outcome = checkout_pr_branch(&guard.repo, repo_path, &request)?;
+
+    assert_eq!(outcome.branch_name, "feature/fork-pr");
+    assert_eq!(outcome.remote_name, "fork-forker");
+    assert!(outcome.fork_remote_created);
+    assert_eq!(
+      outcome.fork_remote_url.as_deref(),
+      Some(fork_path.to_str().expect("path"))
+    );
+
+    // Verify the branch is checked out at the fork's head commit
+    let refreshed = git2::Repository::open(repo_path)?;
+    assert_eq!(refreshed.head()?.shorthand(), Some("feature/fork-pr"));
+    let tip = refreshed.head()?.peel_to_commit()?.id();
+    assert_eq!(tip, fork_head_oid);
+
+    // Verify fork remote was created
+    let fork_remote = refreshed.find_remote("fork-forker")?;
+    assert_eq!(fork_remote.url(), Some(fork_path.to_str().expect("path")));
+
+    // Verify upstream points to fork remote
+    let branch = refreshed.find_branch("feature/fork-pr", git2::BranchType::Local)?;
+    let upstream = branch.upstream()?;
+    assert_eq!(upstream.name()?, Some("fork-forker/feature/fork-pr"));
+
+    // Verify PR association
+    let state = RepoState::load(repo_path)?;
+    let metadata = state.get_branch_metadata("feature/fork-pr").expect("metadata stored");
+    assert_eq!(metadata.github_pr, Some(55));
 
     Ok(())
   }
