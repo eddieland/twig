@@ -42,6 +42,17 @@ enum BranchCreateChoice {
   Abort,
 }
 
+/// Result of attempting to fetch a Jira issue for branch creation.
+#[derive(Debug)]
+enum JiraFetchOutcome {
+  /// Successfully fetched the issue and generated a branch name.
+  Success(String),
+  /// The issue was not found in Jira (404).
+  IssueNotFound,
+  /// Jira is not configured or accessible (host, credentials, network, etc.).
+  Unavailable,
+}
+
 /// Handle the branch switching mode for the `twig flow` plugin.
 pub fn run(cli: &Cli) -> Result<()> {
   let Some(target) = cli.target.as_deref() else {
@@ -165,7 +176,16 @@ fn handle_jira_branch_creation(
   }
 
   // Try to fetch the Jira issue to show the actual branch name in the prompt
-  let jira_branch_name = fetch_jira_branch_name(issue_key);
+  let jira_branch_name = match try_fetch_jira_branch_name(issue_key) {
+    JiraFetchOutcome::Success(name) => Some(name),
+    JiraFetchOutcome::IssueNotFound => {
+      print_warning(&format!(
+        "Jira issue {issue_key} was not found. This may indicate a typo or Jira configuration issue."
+      ));
+      None
+    }
+    JiraFetchOutcome::Unavailable => None,
+  };
 
   print_info(&format!(
     "No branch found for Jira issue {issue_key}. How would you like to proceed?"
@@ -340,17 +360,45 @@ fn create_new_branch(
   Ok(())
 }
 
-/// Fetch the Jira issue and generate the branch name.
-/// Returns None if fetching fails (credentials missing, API error, etc.).
-fn fetch_jira_branch_name(issue_key: &str) -> Option<String> {
-  let jira_host = get_jira_host().ok()?;
-  let base_dirs = BaseDirs::new()?;
-  let jira_client = create_jira_client_from_netrc(base_dirs.home_dir(), &jira_host).ok()?;
+/// Attempt to fetch the Jira issue and generate the branch name.
+/// Returns a structured outcome to distinguish between different failure modes.
+fn try_fetch_jira_branch_name(issue_key: &str) -> JiraFetchOutcome {
+  let jira_host = match get_jira_host() {
+    Ok(host) => host,
+    Err(_) => return JiraFetchOutcome::Unavailable,
+  };
 
-  let rt = Runtime::new().ok()?;
+  let base_dirs = match BaseDirs::new() {
+    Some(dirs) => dirs,
+    None => return JiraFetchOutcome::Unavailable,
+  };
+
+  let jira_client = match create_jira_client_from_netrc(base_dirs.home_dir(), &jira_host) {
+    Ok(client) => client,
+    Err(_) => return JiraFetchOutcome::Unavailable,
+  };
+
+  let rt = match Runtime::new() {
+    Ok(rt) => rt,
+    Err(_) => return JiraFetchOutcome::Unavailable,
+  };
+
   rt.block_on(async {
-    let issue = jira_client.get_issue(issue_key).await.ok()?;
-    Some(generate_branch_name_from_issue(issue_key, &issue.fields.summary, false))
+    match jira_client.get_issue(issue_key).await {
+      Ok(issue) => {
+        let branch_name = generate_branch_name_from_issue(issue_key, &issue.fields.summary, false);
+        JiraFetchOutcome::Success(branch_name)
+      }
+      Err(err) => {
+        // Check if this is a "not found" error (404 from Jira API)
+        let err_str = err.to_string();
+        if err_str.contains("not found") {
+          JiraFetchOutcome::IssueNotFound
+        } else {
+          JiraFetchOutcome::Unavailable
+        }
+      }
+    }
   })
 }
 
