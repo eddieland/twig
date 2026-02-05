@@ -19,7 +19,9 @@ use crate::config::ConfigDirs;
 /// ignores every file within the directory. This keeps twig's metadata out of
 /// version control without mutating the repository's root `.gitignore` file.
 pub fn ensure_twig_internal_gitignore<P: AsRef<Path>>(repo_path: P) -> Result<()> {
-  let twig_dir = repo_path.as_ref().join(".twig");
+  let config_dirs = ConfigDirs::new()?;
+  let repo_root = config_dirs.repo_root_path(repo_path);
+  let twig_dir = repo_root.join(".twig");
   if !twig_dir.exists() {
     fs::create_dir_all(&twig_dir).context("Failed to create .twig directory")?;
   }

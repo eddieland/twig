@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
 
+use crate::git::resolve_repository_root;
 use crate::jira_parser::JiraParsingConfig;
 
 /// Represents the configuration directories for the twig application
@@ -74,12 +75,17 @@ impl ConfigDirs {
 
   /// Get the path to the repository-local state directory
   pub fn repo_state_dir<P: AsRef<Path>>(&self, repo_path: P) -> PathBuf {
-    repo_path.as_ref().join(".twig")
+    self.repo_root_path(repo_path).join(".twig")
   }
 
   /// Get the path to the repository-local state file
   pub fn repo_state_path<P: AsRef<Path>>(&self, repo_path: P) -> PathBuf {
     self.repo_state_dir(repo_path).join("state.json")
+  }
+
+  /// Resolve the repository root that should store shared metadata.
+  pub fn repo_root_path<P: AsRef<Path>>(&self, repo_path: P) -> PathBuf {
+    resolve_repository_root(repo_path.as_ref()).unwrap_or_else(|| repo_path.as_ref().to_path_buf())
   }
 
   /// Get the path to the Jira configuration file
