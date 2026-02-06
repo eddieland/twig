@@ -11,7 +11,7 @@ mod commit;
 mod completion;
 mod config;
 mod creds;
-mod dashboard;
+
 pub mod fixup;
 mod git;
 mod github;
@@ -38,7 +38,6 @@ use crate::plugin;
 #[command(
   long_about = "Twig helps developers manage multiple Git repositories and worktrees efficiently.\n\n\
         Quick pointers:\n\
-          • `twig dashboard` to review branches, pull requests, and issues together.\n\
           • `twig sync` to update branch stacks and keep them in order.\n\
           • `twig switch` to jump between your tracked worktrees.\n\
         If you haven't yet, check out the repository README on GitHub for a deeper tour."
@@ -129,20 +128,6 @@ pub enum Commands {
             in your .netrc file for security and compatibility with other tools.")]
   #[command(arg_required_else_help = true)]
   Creds(creds::CredsArgs),
-
-  /// Review branches, PRs, and issues together
-  #[command(
-    long_about = "Show a comprehensive dashboard of local branches, PRs, and issues.\n\n\
-            This command displays a unified view of your development context,\n\
-            including local branches, associated pull requests, and related Jira issues.\n\
-            It helps you keep track of your work across different systems.\n\n\
-            By default, only local branches are shown. Use --include-remote to include remote branches.\n\n\
-            Use --no-github or --no-jira to disable GitHub or Jira API requests respectively.\n\
-            Use --simple for a basic view that shows only branches without making any API requests."
-  )]
-  #[command(alias = "dash")]
-  #[command(alias = "v")]
-  Dashboard(dashboard::DashboardArgs),
 
   /// Speed through interactive fixup commits
   #[command(long_about = "Interactively select and create fixup commits for recent work.\n\n\
@@ -281,7 +266,7 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
       Commands::Cascade(cascade) => cascade::handle_cascade_command(cascade),
       Commands::Commit(args) => commit::handle_commit_command(args),
       Commands::Creds(creds) => creds::handle_creds_command(creds),
-      Commands::Dashboard(dashboard) => dashboard::handle_dashboard_command(dashboard),
+
       Commands::Fixup(fixup) => fixup::handle_fixup_command(fixup),
       Commands::Git(git) => git::handle_git_command(git),
       Commands::GitHub(github) => github::handle_github_command(github),
