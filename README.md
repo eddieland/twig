@@ -177,7 +177,6 @@ twig
 ├── creds                   # Credential management
 │   ├── check
 │   └── setup
-├── dashboard (dash, v)     # Unified view of branches, PRs, and issues
 ├── fixup (fix)             # Interactive fixup commit selector
 ├── git (g)                 # Git repository registry
 │   ├── add
@@ -276,7 +275,6 @@ Specifies the base directory for cache files.
 # Top-level command aliases
 alias tt='twig tree'           # Show branch tree
 alias tsw='twig switch'        # Magic branch switching
-alias td='twig dashboard'      # Show dashboard
 
 # Git subcommand aliases
 alias tgf='twig git fetch --all' # Fetch all repositories

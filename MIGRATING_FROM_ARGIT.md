@@ -85,7 +85,7 @@ Since twig doesn't import argit configuration, you'll need to sync branch metada
 twig sync
 
 # Verify the links were created correctly
-twig dashboard
+twig tree
 ```
 
 ### 6. Define branch dependencies (if needed)
@@ -106,9 +106,6 @@ twig branch root add develop
 ```bash
 # Show your branch tree with dependencies
 twig tree
-
-# Show comprehensive dashboard
-twig dashboard
 ```
 
 ## Understanding Branch Dependencies
@@ -244,29 +241,3 @@ twig self completion fish > ~/.config/fish/completions/twig.fish
 ```
 
 Unlike argit's `eval` approach, twig generates a static completion script that you can inspect before sourcing.
-
-## Dashboard Feature
-
-The `twig dashboard` command provides a comprehensive view of your development context:
-
-```bash
-# Basic dashboard
-twig dashboard
-
-# Include remote branches
-twig dashboard --include-remote
-
-# Disable GitHub or Jira API requests
-twig dashboard --no-github
-twig dashboard --no-jira
-
-# Simple view (branches only)
-twig dashboard --simple
-```
-
-This command shows:
-
-- Local branches with their current status
-- Associated pull requests with review status
-- Related Jira issues with their current state
-- Branch relationships

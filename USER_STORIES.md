@@ -167,15 +167,11 @@ Twig offers several features that weren't in the original argit:
    - `twig github pr status`
    - `twig github checks`
 
-3. **Comprehensive Dashboard**: View all branches, PRs, and issues in one place
-
-   - `twig dashboard`
-
-4. **Upward Rebasing**: Rebase current branch on its ancestors
+3. **Upward Rebasing**: Rebase current branch on its ancestors
 
    - `twig rebase`
 
-5. **Plugin Architecture**: Extensible kubectl/Docker-inspired plugin system for custom functionality
+4. **Plugin Architecture**: Extensible kubectl/Docker-inspired plugin system for custom functionality
 
    - Plugins are executable files named `twig-<plugin-name>` discovered via `$PATH`
    - Built-in commands take precedence over plugins
