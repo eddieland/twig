@@ -3,7 +3,7 @@
 //! Derive-based implementation of the sync command for automatically linking
 //! branches to Jira issues and GitHub PRs.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
@@ -89,6 +89,16 @@ fn sync_branches(
 
   // Load current repository state
   let mut repo_state = RepoState::load(repo_path)?;
+
+  // Evict metadata for branches that no longer exist locally
+  let branch_name_set: HashSet<String> = branch_names.iter().cloned().collect();
+  let eviction_stats = repo_state.evict_stale_branches(&branch_name_set);
+  if !eviction_stats.is_empty() {
+    print_info(&format!(
+      "Cleaned up {} stale branch entries and {} orphaned dependencies",
+      eviction_stats.branches_removed, eviction_stats.dependencies_removed
+    ));
+  }
 
   let mut detected_associations = Vec::new();
   let mut updated_associations = Vec::new();
@@ -193,7 +203,16 @@ fn sync_branches(
 
   // Apply changes if not dry run
   if !dry_run {
-    apply_sync_changes(&mut repo_state, repo_path, detected_associations, updated_associations)?;
+    apply_sync_changes(
+      &mut repo_state,
+      repo_path,
+      detected_associations,
+      updated_associations,
+      !eviction_stats.is_empty(),
+    )?;
+  } else if !eviction_stats.is_empty() {
+    // Eviction is background cleanup — save even in dry-run mode
+    repo_state.save(repo_path)?;
   }
 
   Ok(())
@@ -496,8 +515,9 @@ fn apply_sync_changes(
   repo_path: &std::path::Path,
   detected: Vec<BranchMetadata>,
   updated: Vec<(BranchMetadata, BranchMetadata)>,
+  eviction_occurred: bool,
 ) -> Result<()> {
-  let mut changes_made = false;
+  let mut changes_made = eviction_occurred;
 
   // Add new associations
   for association in detected {

@@ -177,6 +177,19 @@ pub struct BranchMetadata {
   pub created_at: String,
 }
 
+/// Statistics returned by stale branch eviction.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct EvictionStats {
+  pub branches_removed: usize,
+  pub dependencies_removed: usize,
+}
+
+impl EvictionStats {
+  pub fn is_empty(&self) -> bool {
+    self.branches_removed == 0 && self.dependencies_removed == 0
+  }
+}
+
 /// Represents the repository-local state
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct RepoState {
@@ -591,6 +604,36 @@ impl RepoState {
   /// Get all root branch names
   pub fn get_root_branches(&self) -> Vec<String> {
     self.root_branches.iter().map(|r| r.branch.clone()).collect()
+  }
+
+  /// Remove `branches` and `dependencies` entries that reference branches no
+  /// longer present locally. Root branches are never evicted — they are
+  /// explicitly user-managed.
+  ///
+  /// `local_branches` should contain the names of all branches that currently
+  /// exist in the local repository. Keeping git operations out of this method
+  /// makes it easy to test in isolation.
+  pub fn evict_stale_branches(&mut self, local_branches: &std::collections::HashSet<String>) -> EvictionStats {
+    let root_names: std::collections::HashSet<&str> = self.root_branches.iter().map(|r| r.branch.as_str()).collect();
+
+    let keep = |name: &str| local_branches.contains(name) || root_names.contains(name);
+
+    let branches_before = self.branches.len();
+    self.branches.retain(|name, _| keep(name));
+    let branches_removed = branches_before - self.branches.len();
+
+    let deps_before = self.dependencies.len();
+    self.dependencies.retain(|dep| keep(&dep.child));
+    let dependencies_removed = deps_before - self.dependencies.len();
+
+    if branches_removed > 0 || dependencies_removed > 0 {
+      self.rebuild_indices();
+    }
+
+    EvictionStats {
+      branches_removed,
+      dependencies_removed,
+    }
   }
 
   /// Find the root of a branch's dependency tree
@@ -1317,5 +1360,149 @@ mod tests {
     // Test case 5: Middle of chain should return root
     let root = state.find_dependency_tree_root("feature");
     assert_eq!(root, "main");
+  }
+
+  // === Eviction Tests ===
+
+  fn local_set(names: &[&str]) -> std::collections::HashSet<String> {
+    names.iter().map(|s| (*s).to_string()).collect()
+  }
+
+  #[test]
+  fn evict_removes_nonexistent_branches() {
+    let mut state = RepoState::default();
+    state.add_branch_issue(BranchMetadata {
+      branch: "exists".to_string(),
+      jira_issue: Some("PROJ-1".to_string()),
+      github_pr: None,
+      created_at: chrono::Utc::now().to_rfc3339(),
+    });
+    state.add_branch_issue(BranchMetadata {
+      branch: "gone".to_string(),
+      jira_issue: Some("PROJ-2".to_string()),
+      github_pr: None,
+      created_at: chrono::Utc::now().to_rfc3339(),
+    });
+
+    let stats = state.evict_stale_branches(&local_set(&["exists"]));
+
+    assert_eq!(stats.branches_removed, 1);
+    assert!(state.branches.contains_key("exists"));
+    assert!(!state.branches.contains_key("gone"));
+  }
+
+  #[test]
+  fn evict_preserves_root_branches() {
+    let mut state = RepoState::default();
+    state.add_root("main".to_string(), true).unwrap();
+    state.add_branch_issue(BranchMetadata {
+      branch: "main".to_string(),
+      jira_issue: None,
+      github_pr: None,
+      created_at: chrono::Utc::now().to_rfc3339(),
+    });
+
+    // "main" is NOT in the local set, but it's a root — should be kept
+    let stats = state.evict_stale_branches(&local_set(&[]));
+
+    assert_eq!(stats.branches_removed, 0);
+    assert!(state.branches.contains_key("main"));
+  }
+
+  #[test]
+  fn evict_dependencies_child_gone() {
+    let mut state = RepoState::default();
+    state
+      .add_dependency("gone-child".to_string(), "main".to_string())
+      .unwrap();
+
+    let stats = state.evict_stale_branches(&local_set(&["main"]));
+
+    assert_eq!(stats.dependencies_removed, 1);
+    assert!(state.dependencies.is_empty());
+  }
+
+  #[test]
+  fn evict_dependencies_parent_gone_child_exists() {
+    let mut state = RepoState::default();
+    state
+      .add_dependency("child".to_string(), "gone-parent".to_string())
+      .unwrap();
+
+    let stats = state.evict_stale_branches(&local_set(&["child"]));
+
+    // Parent being gone doesn't remove the dep — only the child matters
+    assert_eq!(stats.dependencies_removed, 0);
+    assert_eq!(state.dependencies.len(), 1);
+  }
+
+  #[test]
+  fn evict_dependencies_child_is_root() {
+    let mut state = RepoState::default();
+    state.add_root("release".to_string(), false).unwrap();
+    state.add_dependency("release".to_string(), "main".to_string()).unwrap();
+
+    // "release" is not local but IS a root branch
+    let stats = state.evict_stale_branches(&local_set(&["main"]));
+
+    assert_eq!(stats.dependencies_removed, 0);
+    assert_eq!(state.dependencies.len(), 1);
+  }
+
+  #[test]
+  fn evict_noop_when_all_exist() {
+    let mut state = RepoState::default();
+    state.add_branch_issue(BranchMetadata {
+      branch: "a".to_string(),
+      jira_issue: None,
+      github_pr: None,
+      created_at: chrono::Utc::now().to_rfc3339(),
+    });
+    state.add_dependency("a".to_string(), "main".to_string()).unwrap();
+
+    let stats = state.evict_stale_branches(&local_set(&["a", "main"]));
+
+    assert_eq!(stats, EvictionStats::default());
+    assert!(stats.is_empty());
+  }
+
+  #[test]
+  fn evict_rebuilds_indices() {
+    let mut state = RepoState::default();
+    state.add_branch_issue(BranchMetadata {
+      branch: "keep".to_string(),
+      jira_issue: Some("PROJ-1".to_string()),
+      github_pr: Some(10),
+      created_at: chrono::Utc::now().to_rfc3339(),
+    });
+    state.add_branch_issue(BranchMetadata {
+      branch: "gone".to_string(),
+      jira_issue: Some("PROJ-2".to_string()),
+      github_pr: Some(20),
+      created_at: chrono::Utc::now().to_rfc3339(),
+    });
+
+    state.evict_stale_branches(&local_set(&["keep"]));
+
+    // Jira indices should only have "keep"
+    assert_eq!(state.branch_to_jira_index.len(), 1);
+    assert!(state.branch_to_jira_index.contains_key("keep"));
+    assert_eq!(state.jira_to_branch_index.len(), 1);
+    assert!(state.jira_to_branch_index.contains_key("PROJ-1"));
+
+    // PR index should only have PR #10
+    assert_eq!(state.pr_to_branch_index.len(), 1);
+    assert!(state.pr_to_branch_index.contains_key(&10));
+    assert!(!state.pr_to_branch_index.contains_key(&20));
+  }
+
+  #[test]
+  fn evict_empty_state() {
+    let mut state = RepoState::default();
+
+    let stats = state.evict_stale_branches(&local_set(&[]));
+
+    assert_eq!(stats, EvictionStats::default());
+    assert!(stats.is_empty());
   }
 }
