@@ -85,6 +85,36 @@ twig --version
 twig --help
 ```
 
+### Shell Completions
+
+Twig provides tab completion for commands, flags, and dynamic values (branch names, Jira keys, PR IDs).
+
+**Bash** (add to `~/.bashrc`):
+
+```bash
+eval "$(twig self completion bash)"
+```
+
+**Zsh** (add to `~/.zshrc`):
+
+```zsh
+eval "$(twig self completion zsh)"
+```
+
+**Fish**:
+
+```fish
+twig self completion fish | source
+# Or persist it:
+twig self completion fish > ~/.config/fish/completions/twig.fish
+```
+
+**PowerShell** (add to `$PROFILE`):
+
+```powershell
+twig self completion powershell | Out-String | Invoke-Expression
+```
+
 ### For Contributors
 
 If you want to contribute to Twig, please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file for detailed development setup instructions.
