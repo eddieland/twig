@@ -92,27 +92,25 @@ Twig provides tab completion for commands, flags, and dynamic values (branch nam
 **Bash** (add to `~/.bashrc`):
 
 ```bash
-eval "$(twig self completion bash)"
+source <(COMPLETE=bash twig)
 ```
 
 **Zsh** (add to `~/.zshrc`):
 
 ```zsh
-eval "$(twig self completion zsh)"
+source <(COMPLETE=zsh twig)
 ```
 
 **Fish**:
 
 ```fish
-twig self completion fish | source
-# Or persist it:
-twig self completion fish > ~/.config/fish/completions/twig.fish
+source (COMPLETE=fish twig | psub)
 ```
 
 **PowerShell** (add to `$PROFILE`):
 
 ```powershell
-twig self completion powershell | Out-String | Invoke-Expression
+COMPLETE=powershell twig | Out-String | Invoke-Expression
 ```
 
 ### For Contributors
