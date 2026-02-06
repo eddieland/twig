@@ -294,7 +294,12 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
           let mut cmd = Cli::command();
           cmd.print_help()?;
           println!();
-          cmd.error(ErrorKind::InvalidSubcommand, cmd_name.to_string()).exit()
+          let msg = format!(
+            "'{cmd_name}' is not a twig command or installed plugin\n\n  \
+             tip: External plugins are executables named 'twig-<name>' on your PATH.\n  \
+             Run 'twig self plugins' to list installed plugins."
+          );
+          cmd.error(ErrorKind::InvalidSubcommand, msg).exit()
         }
       }
     },
