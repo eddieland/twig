@@ -202,19 +202,7 @@ pub fn suggest_similar_commands(unknown_command: &str, available_plugins: &[Stri
 
   // Built-in commands that might be similar
   let builtin_commands = [
-    "branch",
-    "cascade",
-    "commit",
-    "creds",
-    "dashboard",
-    "git",
-    "github",
-    "jira",
-    "self",
-    "rebase",
-    "switch",
-    "sync",
-    "tree",
+    "branch", "cascade", "commit", "creds", "git", "github", "jira", "self", "rebase", "switch", "sync", "tree",
     "worktree",
   ];
 
