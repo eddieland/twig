@@ -41,6 +41,7 @@ mod tests {
   fn collects_jira_keys_from_state() {
     let guard = GitRepoTestGuard::new_and_change_dir();
     twig_test_utils::create_commit(&guard.repo, "file.txt", "content", "initial").unwrap();
+    twig_test_utils::create_branch(&guard.repo, "feature/work", None).unwrap();
 
     let repo_path = guard.repo.workdir().unwrap();
     let mut state = RepoState::load(repo_path).unwrap();
@@ -63,6 +64,7 @@ mod tests {
   fn collects_github_pr_ids_from_state() {
     let guard = GitRepoTestGuard::new_and_change_dir();
     twig_test_utils::create_commit(&guard.repo, "file.txt", "content", "initial").unwrap();
+    twig_test_utils::create_branch(&guard.repo, "feature/pr", None).unwrap();
 
     let repo_path = guard.repo.workdir().unwrap();
     let mut state = RepoState::load(repo_path).unwrap();
