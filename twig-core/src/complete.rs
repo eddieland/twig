@@ -82,30 +82,34 @@ pub fn collect_typed_candidates() -> Vec<TypedCandidate> {
   let mut candidates = Vec::new();
   let mut seen = HashSet::new();
 
-  // Collect branch names
-  if let Ok(branches) = get_local_branches() {
-    for branch in branches {
-      if seen.insert(branch.clone()) {
-        candidates.push(TypedCandidate::new(branch, CandidateKind::Branch));
-      }
+  // Collect local branch names into a set for cross-referencing
+  let local_branches: HashSet<String> = get_local_branches().unwrap_or_default().into_iter().collect();
+
+  for branch in &local_branches {
+    if seen.insert(branch.clone()) {
+      candidates.push(TypedCandidate::new(branch.clone(), CandidateKind::Branch));
     }
   }
 
-  // Collect Jira keys and PR IDs from repo state
+  // Collect Jira keys and PR IDs from repo state, but only for branches
+  // that still exist locally. The state accumulates entries over time and
+  // stale associations would overwhelm the completion list.
   if let Some(repo) = get_repository()
     && let Some(workdir) = repo.workdir()
     && let Ok(state) = RepoState::load(workdir)
   {
-    // Add Jira issue keys
-    for jira_key in state.jira_to_branch_index.keys() {
-      if seen.insert(jira_key.clone()) {
+    // Add Jira issue keys only when the associated branch exists locally
+    for (jira_key, branch_name) in &state.jira_to_branch_index {
+      if local_branches.contains(branch_name) && seen.insert(jira_key.clone()) {
         candidates.push(TypedCandidate::new(jira_key.clone(), CandidateKind::JiraIssue));
       }
     }
 
-    // Add GitHub PR IDs (prefixed with # for clarity)
-    for metadata in state.branches.values() {
-      if let Some(pr_id) = metadata.github_pr {
+    // Add GitHub PR IDs only when the associated branch exists locally
+    for (branch_name, metadata) in &state.branches {
+      if local_branches.contains(branch_name)
+        && let Some(pr_id) = metadata.github_pr
+      {
         let with_hash = format!("#{pr_id}");
         let without_hash = pr_id.to_string();
 
