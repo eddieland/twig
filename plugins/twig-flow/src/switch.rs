@@ -7,8 +7,8 @@ use git2::Repository;
 use tokio::runtime::Runtime;
 use twig_core::git::get_repository;
 use twig_core::git::switch::{
-  BranchSwitchAction, SwitchExecutionOptions, SwitchInput, apply_branch_state_mutations, detect_switch_input,
-  resolve_branch_base, store_jira_association, switch_from_input,
+  BranchSwitchAction, SwitchExecutionOptions, SwitchInput, apply_branch_state_mutations, checkout_remote_branch,
+  detect_switch_input, find_remote_branch, resolve_branch_base, store_jira_association, switch_from_input,
 };
 use twig_core::jira_parser::{JiraTicketParser, create_jira_parser};
 use twig_core::output::{print_error, print_info, print_success, print_warning};
@@ -36,6 +36,19 @@ enum JiraBranchChoice {
 enum BranchCreateChoice {
   /// Create the branch with the given name.
   Create,
+  /// Let the user enter a custom branch name.
+  CustomName,
+  /// Abort the operation.
+  Abort,
+}
+
+/// Options when a remote tracking branch exists but no local branch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RemoteBranchChoice {
+  /// Checkout the remote branch as a local tracking branch.
+  CheckoutRemote,
+  /// Create a new local branch (ignoring the remote).
+  CreateLocal,
   /// Let the user enter a custom branch name.
   CustomName,
   /// Abort the operation.
@@ -93,6 +106,19 @@ pub fn run(cli: &Cli) -> Result<()> {
   // Check if this is a branch name (not Jira/PR) for potential branch creation prompt
   let switch_input = detect_switch_input(jira_parser.as_ref(), &target);
   let is_branch_name_input = matches!(switch_input, SwitchInput::BranchName(_));
+
+  // For branch name inputs, check if the branch exists locally first.
+  // If it doesn't exist locally but exists on remote, prompt the user.
+  if is_branch_name_input {
+    let branch_exists_locally = repo.find_branch(&target, git2::BranchType::Local).is_ok();
+
+    if !branch_exists_locally {
+      // Check for remote branch
+      if let Ok(Some(remote_branch)) = find_remote_branch(&repo, &target) {
+        return handle_remote_branch(&repo, repo_path, jira_parser.as_ref(), &target, remote_branch.as_str());
+      }
+    }
+  }
 
   // Standard switch flow for non-Jira inputs or Jira with existing association
   let options = SwitchExecutionOptions {
@@ -332,6 +358,83 @@ fn prompt_branch_create_choice(branch_name: &str) -> Result<BranchCreateChoice> 
     .unwrap_or(choice_map.len() - 1); // Default to abort on error
 
   Ok(choice_map.get(selection).copied().unwrap_or(BranchCreateChoice::Abort))
+}
+
+/// Prompt the user to choose how to handle a remote branch.
+fn prompt_remote_branch_choice(branch_name: &str, remote_branch: &str) -> Result<RemoteBranchChoice> {
+  let items = [
+    format!("Checkout remote branch: {remote_branch}"),
+    format!("Create new local branch: {branch_name}"),
+    "Enter custom branch name".to_string(),
+    "Abort".to_string(),
+  ];
+
+  let choice_map = [
+    RemoteBranchChoice::CheckoutRemote,
+    RemoteBranchChoice::CreateLocal,
+    RemoteBranchChoice::CustomName,
+    RemoteBranchChoice::Abort,
+  ];
+
+  let selection = dialoguer::Select::with_theme(&twig_theme())
+    .with_prompt("Select an option")
+    .items(&items)
+    .default(0)
+    .interact()
+    .unwrap_or(choice_map.len() - 1); // Default to abort on error
+
+  Ok(choice_map.get(selection).copied().unwrap_or(RemoteBranchChoice::Abort))
+}
+
+/// Handle the case when a remote branch exists but no local branch.
+fn handle_remote_branch(
+  repo: &Repository,
+  repo_path: &Path,
+  jira_parser: Option<&JiraTicketParser>,
+  branch_name: &str,
+  remote_branch: &str,
+) -> Result<()> {
+  // Check if we're in an interactive terminal
+  if !std::io::stdin().is_terminal() {
+    print_error(&format!(
+      "Branch '{branch_name}' exists on remote as '{remote_branch}' but not locally. \
+       Cannot prompt for input in non-interactive mode."
+    ));
+    print_info("Hint: Use 'git checkout' to checkout the remote branch, or specify a different branch name.");
+    return Ok(());
+  }
+
+  print_info(&format!(
+    "Branch '{branch_name}' was found on remote as '{remote_branch}'. How would you like to proceed?"
+  ));
+  println!();
+
+  let choice = prompt_remote_branch_choice(branch_name, remote_branch)?;
+
+  match choice {
+    RemoteBranchChoice::CheckoutRemote => {
+      checkout_remote_branch(repo, branch_name, remote_branch)?;
+      print_success(&format!(
+        "Checked out '{remote_branch}' from remote as local branch '{branch_name}'."
+      ));
+    }
+    RemoteBranchChoice::CreateLocal => {
+      create_new_branch(repo, repo_path, jira_parser, branch_name)?;
+    }
+    RemoteBranchChoice::CustomName => {
+      let custom_name = prompt_custom_branch_name()?;
+      if let Some(name) = custom_name {
+        create_new_branch(repo, repo_path, jira_parser, &name)?;
+      } else {
+        print_info("Aborted.");
+      }
+    }
+    RemoteBranchChoice::Abort => {
+      print_info("Aborted.");
+    }
+  }
+
+  Ok(())
 }
 
 /// Create a new branch with the given name.
