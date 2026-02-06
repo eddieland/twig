@@ -23,6 +23,8 @@ mod sync;
 mod tree;
 mod worktree;
 
+use std::ffi::OsString;
+
 use anyhow::Result;
 use clap::{ArgAction, Parser, Subcommand};
 use twig_core::output::{ColorMode, cli_styles};
@@ -76,10 +78,6 @@ pub struct Cli {
   /// Subcommands
   #[command(subcommand)]
   pub command: Option<Commands>,
-
-  /// Plugin name and arguments (when no subcommand matches)
-  #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-  pub plugin_args: Vec<String>,
 }
 
 /// Subcommands for the twig tool
@@ -241,6 +239,10 @@ pub enum Commands {
             incomplete work.")]
   #[command(alias = "wt")]
   Worktree(worktree::WorktreeArgs),
+
+  /// Run an external twig plugin
+  #[command(external_subcommand)]
+  External(Vec<OsString>),
 }
 
 pub fn handle_cli(cli: Cli) -> Result<()> {
@@ -281,38 +283,25 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
       Commands::Sync(sync) => sync::handle_sync_command(sync),
       Commands::Tree(tree) => tree::handle_tree_command(tree),
       Commands::Worktree(worktree) => worktree::handle_worktree_command(worktree),
+      Commands::External(args) => {
+        let cmd_name = args[0].to_string_lossy();
+        if plugin::plugin_is_available(&cmd_name)? {
+          let plugin_args: Vec<String> = args[1..].iter().map(|a| a.to_string_lossy().into_owned()).collect();
+          plugin::execute_plugin(&cmd_name, plugin_args, cli.verbose, cli.colors, cli.no_links)
+        } else {
+          use clap::CommandFactory;
+          use clap::error::ErrorKind;
+          let mut cmd = Cli::command();
+          cmd.print_help()?;
+          println!();
+          cmd.error(ErrorKind::InvalidSubcommand, cmd_name.to_string()).exit()
+        }
+      }
     },
-    None => handle_plugin_fallback(cli),
-  }
-}
-
-/// Handle plugin fallback when no built-in command matches
-///
-/// If no command text was provided at all, show the standard --help message.
-/// If there is a plugin available with the given name, execute it.
-/// If there is no plugin available, show the standard --help message and an
-/// error.
-fn handle_plugin_fallback(cli: Cli) -> Result<()> {
-  // No built-in command matched, try plugin discovery
-  if let Some(plugin_name) = cli.plugin_args.first() {
-    if plugin::plugin_is_available(plugin_name)? {
-      let plugin_args = cli.plugin_args[1..].to_vec();
-      plugin::execute_plugin(plugin_name, plugin_args, cli.verbose, cli.colors, cli.no_links)
-    } else {
+    None => {
       use clap::CommandFactory;
-      use clap::error::ErrorKind;
-
-      let mut cmd = Cli::command();
-      cmd.print_help()?;
-      println!();
-      let error = cmd.error(ErrorKind::InvalidSubcommand, plugin_name.as_str());
-      error.exit()
+      Cli::command().print_help()?;
+      Ok(())
     }
-  } else {
-    // No command provided at all, show help
-    use clap::CommandFactory;
-    let mut cmd = Cli::command();
-    cmd.print_help()?;
-    Ok(())
   }
 }

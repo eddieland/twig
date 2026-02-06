@@ -195,102 +195,6 @@ fn canonicalize_or_original(path: PathBuf) -> PathBuf {
   fs::canonicalize(&path).unwrap_or(path)
 }
 
-/// Generate suggestions for unknown commands
-#[allow(dead_code)]
-pub fn suggest_similar_commands(unknown_command: &str, available_plugins: &[String]) -> Vec<String> {
-  let mut suggestions = Vec::new();
-
-  // Built-in commands that might be similar
-  let builtin_commands = [
-    "branch", "cascade", "commit", "creds", "git", "github", "jira", "self", "rebase", "switch", "sync", "tree",
-    "worktree",
-  ];
-
-  // Combine built-in commands and plugins
-  let mut all_commands: Vec<&str> = builtin_commands.to_vec();
-  for plugin in available_plugins {
-    all_commands.push(plugin.as_str());
-  }
-
-  // Simple string distance matching
-  for command in all_commands.iter() {
-    if levenshtein_distance(unknown_command, command) <= 2 {
-      suggestions.push(command.to_string());
-    }
-  }
-
-  // If no close matches, suggest commands that start with the same letter
-  if suggestions.is_empty() {
-    let first_char = unknown_command
-      .chars()
-      .next()
-      .unwrap_or('\0')
-      .to_lowercase()
-      .next()
-      .unwrap_or('\0');
-    for command in all_commands.iter() {
-      if command
-        .chars()
-        .next()
-        .unwrap_or('\0')
-        .to_lowercase()
-        .next()
-        .unwrap_or('\0')
-        == first_char
-      {
-        suggestions.push(command.to_string());
-      }
-    }
-  }
-
-  suggestions.sort();
-  suggestions.dedup();
-  suggestions.truncate(5); // Limit to 5 suggestions
-  suggestions
-}
-
-/// Calculate Levenshtein distance between two strings
-#[allow(dead_code)]
-#[allow(clippy::needless_range_loop)] // iterator approach hurts readability
-fn levenshtein_distance(s1: &str, s2: &str) -> usize {
-  let len1 = s1.len();
-  let len2 = s2.len();
-
-  if len1 == 0 {
-    return len2;
-  }
-  if len2 == 0 {
-    return len1;
-  }
-
-  let mut matrix = vec![vec![0; len2 + 1]; len1 + 1];
-
-  for i in 0..=len1 {
-    matrix[i][0] = i;
-  }
-  for j in 0..=len2 {
-    matrix[0][j] = j;
-  }
-
-  let s1_chars: Vec<char> = s1.chars().collect();
-  let s2_chars: Vec<char> = s2.chars().collect();
-
-  for i in 1..=len1 {
-    for j in 1..=len2 {
-      let cost = if s1_chars[i - 1] == s2_chars[j - 1] { 0 } else { 1 };
-      matrix[i][j] = std::cmp::min(
-        std::cmp::min(
-          matrix[i - 1][j] + 1, // deletion
-          matrix[i][j - 1] + 1, // insertion
-        ),
-        matrix[i - 1][j - 1] + cost, // substitution
-      );
-    }
-  }
-
-  matrix[len1][len2]
-}
-
 #[cfg(test)]
 mod tests {
   use std::fs;
@@ -299,27 +203,6 @@ mod tests {
   use tempfile::TempDir;
 
   use super::*;
-
-  #[test]
-  fn test_levenshtein_distance() {
-    assert_eq!(levenshtein_distance("", ""), 0);
-    assert_eq!(levenshtein_distance("abc", "abc"), 0);
-    assert_eq!(levenshtein_distance("abc", "ab"), 1);
-    assert_eq!(levenshtein_distance("abc", "def"), 3);
-    assert_eq!(levenshtein_distance("branch", "brach"), 1);
-    assert_eq!(levenshtein_distance("deploy", "deploi"), 1);
-  }
-
-  #[test]
-  fn test_suggest_similar_commands() {
-    let plugins = vec!["deploy".to_string(), "backup".to_string()];
-
-    let suggestions = suggest_similar_commands("deploi", &plugins);
-    assert!(suggestions.contains(&"deploy".to_string()));
-
-    let suggestions = suggest_similar_commands("brach", &plugins);
-    assert!(suggestions.contains(&"branch".to_string()));
-  }
 
   #[test]
   fn list_available_plugins_collects_paths_and_sizes() {
