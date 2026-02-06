@@ -5,18 +5,27 @@
 //! These tests exercise the full config-persistence → parser-creation pipeline,
 //! paralleling the ratchet-with-modify pattern: configure a mode, perform
 //! operations, then tighten (or loosen) the mode and verify behaviour changes.
+//!
+//! `ConfigDirs` is constructed directly from the test temp paths (rather than
+//! via `ConfigDirs::new()`) so that tests are isolated on every platform.
+//! On macOS the `directories` crate ignores `XDG_CONFIG_HOME`, so relying on
+//! `EnvTestGuard` alone would read/write the real system config directory.
 
 use anyhow::Result;
-use twig_core::{ConfigDirs, JiraParsingConfig, JiraParsingMode, create_jira_parser};
+use twig_core::{ConfigDirs, JiraParsingConfig, JiraParsingMode, JiraTicketParser};
 use twig_test_utils::EnvTestGuard;
 
-/// Set up an isolated XDG environment and initialise real `ConfigDirs`.
+/// Set up an isolated config environment that works on both Linux and macOS.
 ///
-/// The returned `EnvTestGuard` keeps the overridden env vars alive; dropping it
-/// restores the original values.
+/// Constructs `ConfigDirs` directly from the temp paths created by
+/// `EnvTestGuard`, bypassing `ProjectDirs` platform resolution.
 fn setup_config_env() -> Result<(EnvTestGuard, ConfigDirs)> {
   let env_guard = EnvTestGuard::new();
-  let config_dirs = ConfigDirs::new()?;
+  let config_dirs = ConfigDirs {
+    config_dir: env_guard.config_dir().join("twig"),
+    data_dir: env_guard.data_dir().join("twig"),
+    cache_dir: Some(env_guard.cache_dir().join("twig")),
+  };
   config_dirs.init()?;
   Ok((env_guard, config_dirs))
 }
@@ -24,6 +33,13 @@ fn setup_config_env() -> Result<(EnvTestGuard, ConfigDirs)> {
 /// Save a Jira config with the given mode through the real persistence layer.
 fn save_mode(config_dirs: &ConfigDirs, mode: JiraParsingMode) -> Result<()> {
   config_dirs.save_jira_config(&JiraParsingConfig { mode })
+}
+
+/// Load config and create a parser — mirrors the `create_jira_parser()` pipeline
+/// but uses the test-controlled `ConfigDirs`.
+fn load_parser(config_dirs: &ConfigDirs) -> Result<JiraTicketParser> {
+  let config = config_dirs.load_jira_config()?;
+  Ok(JiraTicketParser::new(config))
 }
 
 // ---------------------------------------------------------------------------
@@ -38,8 +54,7 @@ fn test_default_config_is_flexible() -> Result<()> {
   let config = config_dirs.load_jira_config()?;
   assert_eq!(config.mode, JiraParsingMode::Flexible);
 
-  // create_jira_parser goes through get_config_dirs → load_jira_config.
-  let parser = create_jira_parser().expect("parser should be created with defaults");
+  let parser = load_parser(&config_dirs)?;
   // Flexible mode accepts lowercase.
   assert!(parser.is_valid("me-1234"));
   assert!(parser.is_valid("me1234"));
@@ -64,15 +79,15 @@ fn test_strict_config_round_trip() -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// 3. create_jira_parser() honours persisted strict config
+// 3. Parser honours persisted strict config
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_create_jira_parser_respects_strict_config() -> Result<()> {
+fn test_parser_respects_strict_config() -> Result<()> {
   let (_env, config_dirs) = setup_config_env()?;
   save_mode(&config_dirs, JiraParsingMode::Strict)?;
 
-  let parser = create_jira_parser().expect("parser should be created from strict config");
+  let parser = load_parser(&config_dirs)?;
 
   // Strict accepts canonical format only.
   assert!(parser.is_valid("ME-1234"));
@@ -95,7 +110,7 @@ fn test_ratchet_flexible_to_strict() -> Result<()> {
   let (_env, config_dirs) = setup_config_env()?;
 
   // --- Phase 1: flexible (default) ---
-  let parser_flex = create_jira_parser().expect("default flexible parser");
+  let parser_flex = load_parser(&config_dirs)?;
   assert!(parser_flex.is_valid("me-1234"), "flexible accepts lowercase");
   assert!(parser_flex.is_valid("ME1234"), "flexible accepts no-hyphen");
   assert!(parser_flex.parse("me1234").is_ok(), "flexible normalises me1234");
@@ -104,7 +119,7 @@ fn test_ratchet_flexible_to_strict() -> Result<()> {
   // --- Phase 2: ratchet to strict ---
   save_mode(&config_dirs, JiraParsingMode::Strict)?;
 
-  let parser_strict = create_jira_parser().expect("strict parser after ratchet");
+  let parser_strict = load_parser(&config_dirs)?;
   assert!(
     !parser_strict.is_valid("me-1234"),
     "strict rejects lowercase after ratchet"
@@ -128,12 +143,12 @@ fn test_ratchet_strict_to_flexible() -> Result<()> {
 
   // --- Phase 1: strict ---
   save_mode(&config_dirs, JiraParsingMode::Strict)?;
-  let parser_strict = create_jira_parser().expect("strict parser");
+  let parser_strict = load_parser(&config_dirs)?;
   assert!(!parser_strict.is_valid("me-1234"));
 
   // --- Phase 2: loosen to flexible ---
   save_mode(&config_dirs, JiraParsingMode::Flexible)?;
-  let parser_flex = create_jira_parser().expect("flexible parser after loosen");
+  let parser_flex = load_parser(&config_dirs)?;
   assert!(
     parser_flex.is_valid("me-1234"),
     "flexible accepts lowercase after loosen"
@@ -152,7 +167,7 @@ fn test_strict_commit_message_extraction_via_config() -> Result<()> {
   let (_env, config_dirs) = setup_config_env()?;
   save_mode(&config_dirs, JiraParsingMode::Strict)?;
 
-  let parser = create_jira_parser().expect("strict parser");
+  let parser = load_parser(&config_dirs)?;
 
   // Canonical prefix → extracted.
   assert_eq!(
@@ -178,7 +193,7 @@ fn test_strict_rejects_all_non_canonical_formats() -> Result<()> {
   let (_env, config_dirs) = setup_config_env()?;
   save_mode(&config_dirs, JiraParsingMode::Strict)?;
 
-  let parser = create_jira_parser().expect("strict parser");
+  let parser = load_parser(&config_dirs)?;
 
   let invalid_inputs = [
     "me-1234", // lowercase
@@ -242,7 +257,7 @@ fn test_flexible_commit_message_extraction_via_config() -> Result<()> {
   // Explicitly set flexible to be sure.
   save_mode(&config_dirs, JiraParsingMode::Flexible)?;
 
-  let parser = create_jira_parser().expect("flexible parser");
+  let parser = load_parser(&config_dirs)?;
 
   // Flexible extracts and normalises all supported prefixes.
   assert_eq!(
