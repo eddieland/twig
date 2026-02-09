@@ -7,8 +7,9 @@ use git2::Repository;
 use tokio::runtime::Runtime;
 use twig_core::git::get_repository;
 use twig_core::git::switch::{
-  BranchSwitchAction, SwitchExecutionOptions, SwitchInput, apply_branch_state_mutations, checkout_remote_branch,
-  detect_switch_input, find_remote_branch, resolve_branch_base, store_jira_association, switch_from_input,
+  BranchSwitchAction, ParentBranchOption, SwitchExecutionOptions, SwitchInput, apply_branch_state_mutations,
+  checkout_remote_branch, detect_switch_input, find_remote_branch, resolve_branch_base, store_jira_association,
+  switch_from_input,
 };
 use twig_core::jira_parser::{JiraTicketParser, create_jira_parser};
 use twig_core::output::{print_error, print_info, print_success, print_warning};
@@ -123,7 +124,7 @@ pub fn run(cli: &Cli) -> Result<()> {
   // Standard switch flow for non-Jira inputs or Jira with existing association
   let options = SwitchExecutionOptions {
     create_missing: true,
-    parent_option: Some("current".to_string()),
+    parent_option: ParentBranchOption::CurrentBranch,
   };
 
   match switch_from_input(&repo, repo_path, &repo_state, jira_parser.as_ref(), &target, &options) {
@@ -446,7 +447,7 @@ fn create_new_branch(
 ) -> Result<()> {
   print_info(&format!("Creating branch: {branch_name}"));
 
-  let branch_base = resolve_branch_base(repo, repo_path, Some("current"), jira_parser)?;
+  let branch_base = resolve_branch_base(repo, repo_path, &ParentBranchOption::CurrentBranch, jira_parser)?;
 
   let base_commit = repo
     .find_commit(branch_base.commit())
@@ -521,7 +522,7 @@ fn create_branch_with_name(
 ) -> Result<()> {
   print_info(&format!("Creating branch: {branch_name}"));
 
-  let branch_base = resolve_branch_base(repo, repo_path, Some("current"), jira_parser)?;
+  let branch_base = resolve_branch_base(repo, repo_path, &ParentBranchOption::CurrentBranch, jira_parser)?;
 
   let base_commit = repo
     .find_commit(branch_base.commit())
@@ -597,7 +598,7 @@ fn create_branch_from_jira(
     print_info(&format!("Creating branch: {branch_name}"));
 
     // Resolve branch base from the current branch
-    let branch_base = resolve_branch_base(repo, repo_path, Some("current"), jira_parser)?;
+    let branch_base = resolve_branch_base(repo, repo_path, &ParentBranchOption::CurrentBranch, jira_parser)?;
 
     // Create the branch
     let base_commit = repo
@@ -640,7 +641,7 @@ fn create_simple_branch(
 ) -> Result<()> {
   let options = SwitchExecutionOptions {
     create_missing: true,
-    parent_option: Some("current".to_string()),
+    parent_option: ParentBranchOption::CurrentBranch,
   };
 
   // Use the standard switch flow but with our chosen branch name
