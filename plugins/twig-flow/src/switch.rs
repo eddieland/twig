@@ -123,7 +123,7 @@ pub fn run(cli: &Cli) -> Result<()> {
   // Standard switch flow for non-Jira inputs or Jira with existing association
   let options = SwitchExecutionOptions {
     create_missing: true,
-    parent_option: None,
+    parent_option: Some("current".to_string()),
   };
 
   match switch_from_input(&repo, repo_path, &repo_state, jira_parser.as_ref(), &target, &options) {
@@ -446,7 +446,7 @@ fn create_new_branch(
 ) -> Result<()> {
   print_info(&format!("Creating branch: {branch_name}"));
 
-  let branch_base = resolve_branch_base(repo, repo_path, None, jira_parser)?;
+  let branch_base = resolve_branch_base(repo, repo_path, Some("current"), jira_parser)?;
 
   let base_commit = repo
     .find_commit(branch_base.commit())
@@ -457,6 +457,12 @@ fn create_new_branch(
     .with_context(|| format!("Failed to create branch '{branch_name}'"))?;
 
   checkout_branch(repo, branch_name)?;
+
+  if let Some(parent) = branch_base.parent_name() {
+    let mut repo_state = RepoState::load(repo_path)?;
+    repo_state.add_dependency(branch_name.to_string(), parent.to_string())?;
+    repo_state.save(repo_path)?;
+  }
 
   print_success(&format!("Created and switched to branch '{branch_name}'"));
 
@@ -515,7 +521,7 @@ fn create_branch_with_name(
 ) -> Result<()> {
   print_info(&format!("Creating branch: {branch_name}"));
 
-  let branch_base = resolve_branch_base(repo, repo_path, None, jira_parser)?;
+  let branch_base = resolve_branch_base(repo, repo_path, Some("current"), jira_parser)?;
 
   let base_commit = repo
     .find_commit(branch_base.commit())
@@ -526,6 +532,12 @@ fn create_branch_with_name(
     .with_context(|| format!("Failed to create branch '{branch_name}'"))?;
 
   checkout_branch(repo, branch_name)?;
+
+  if let Some(parent) = branch_base.parent_name() {
+    let mut repo_state = RepoState::load(repo_path)?;
+    repo_state.add_dependency(branch_name.to_string(), parent.to_string())?;
+    repo_state.save(repo_path)?;
+  }
 
   store_jira_association(repo_path, branch_name, issue_key)?;
 
@@ -584,8 +596,8 @@ fn create_branch_from_jira(
 
     print_info(&format!("Creating branch: {branch_name}"));
 
-    // Resolve branch base from HEAD
-    let branch_base = resolve_branch_base(repo, repo_path, None, jira_parser)?;
+    // Resolve branch base from the current branch
+    let branch_base = resolve_branch_base(repo, repo_path, Some("current"), jira_parser)?;
 
     // Create the branch
     let base_commit = repo
@@ -597,6 +609,13 @@ fn create_branch_from_jira(
       .with_context(|| format!("Failed to create branch '{branch_name}'"))?;
 
     checkout_branch(repo, &branch_name)?;
+
+    // Record parent dependency in repo state
+    if let Some(parent) = branch_base.parent_name() {
+      let mut repo_state = RepoState::load(repo_path)?;
+      repo_state.add_dependency(branch_name.to_string(), parent.to_string())?;
+      repo_state.save(repo_path)?;
+    }
 
     // Store the Jira association
     store_jira_association(repo_path, &branch_name, issue_key)?;
@@ -621,7 +640,7 @@ fn create_simple_branch(
 ) -> Result<()> {
   let options = SwitchExecutionOptions {
     create_missing: true,
-    parent_option: None,
+    parent_option: Some("current".to_string()),
   };
 
   // Use the standard switch flow but with our chosen branch name
@@ -700,6 +719,11 @@ mod tests {
     let refreshed = git2::Repository::open(repo_path)?;
     let head = refreshed.head()?;
     assert_eq!(head.shorthand(), Some("feature/new"));
+
+    // Verify the new branch is parented to the branch it was created from
+    let state = RepoState::load(repo_path)?;
+    let parents = state.get_dependency_parents("feature/new");
+    assert_eq!(parents, vec!["main"]);
 
     Ok(())
   }
