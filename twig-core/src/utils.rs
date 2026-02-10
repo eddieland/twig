@@ -283,7 +283,7 @@ pub fn filter_stop_words(text: &str) -> String {
 }
 
 /// Maximum character length for the summary portion of a branch name.
-const MAX_BRANCH_SUMMARY_LENGTH: usize = 60;
+const MAX_BRANCH_SUMMARY_LENGTH: usize = 80;
 
 /// Sanitize a summary string for use in a Git branch name.
 ///
@@ -353,7 +353,7 @@ fn sanitize_summary_for_branch(summary: &str) -> String {
 ///   generate_branch_name_from_issue("PROJ-123", "Add support for the new feature", true),
 ///   "PROJ-123/add-support-new-feature"
 /// );
-/// // Long summaries are truncated to 60 chars at word boundaries
+/// // Long summaries are truncated to 80 chars at word boundaries
 /// assert_eq!(
 ///   generate_branch_name_from_issue(
 ///     "PROJ-123",
