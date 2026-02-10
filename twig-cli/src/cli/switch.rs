@@ -11,8 +11,8 @@ use directories::BaseDirs;
 use git2::Repository as Git2Repository;
 use tokio::runtime::Runtime;
 use twig_core::git::switch::{
-  BranchBaseResolution, PullRequestCheckoutRequest, PullRequestHeadInfo, SwitchInput, checkout_pr_branch,
-  detect_switch_input, resolve_branch_base, store_jira_association, try_checkout_remote_branch,
+  BranchBaseResolution, ParentBranchOption, PullRequestCheckoutRequest, PullRequestHeadInfo, SwitchInput,
+  checkout_pr_branch, detect_switch_input, resolve_branch_base, store_jira_association, try_checkout_remote_branch,
 };
 use twig_core::jira_parser::JiraTicketParser;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
@@ -84,7 +84,7 @@ struct SwitchContext<'a> {
   repo_path: &'a Path,
   repo_state: &'a RepoState,
   create_if_missing: bool,
-  parent_option: Option<&'a str>,
+  parent_option: ParentBranchOption,
   jira_parser: Option<&'a JiraTicketParser>,
 }
 
@@ -95,7 +95,7 @@ struct SwitchContext<'a> {
 /// branch when the --root flag is used.
 pub(crate) fn handle_switch_command(switch: SwitchArgs) -> Result<()> {
   let create_if_missing = !switch.no_create;
-  let parent_option = switch.parent.as_deref();
+  let parent_option = ParentBranchOption::from_cli_value(switch.parent.as_deref());
 
   // Get the current repository
   let repo_path = detect_repository().context("Not in a git repository")?;
@@ -157,7 +157,7 @@ pub(crate) fn handle_switch_command(switch: SwitchArgs) -> Result<()> {
       ctx.repo_path,
       &branch_name,
       ctx.create_if_missing,
-      ctx.parent_option,
+      &ctx.parent_option,
       ctx.jira_parser,
     ),
     _ => unreachable!("Unhandled switch input variant"),
@@ -183,7 +183,7 @@ fn handle_jira_switch(jira: &JiraClient, ctx: &SwitchContext, issue_key: &str) -
       ctx.repo,
       ctx.repo_path,
       issue_key,
-      ctx.parent_option,
+      &ctx.parent_option,
       ctx.jira_parser,
     )
   } else {
@@ -212,7 +212,7 @@ fn handle_github_pr_switch(gh: &GitHubClient, ctx: &SwitchContext, pr_number: u3
   // No existing association found
   if ctx.create_if_missing {
     print_info("No associated branch found. Creating new branch from GitHub PR...");
-    create_branch_from_github_pr(gh, ctx.repo, ctx.repo_path, pr_number, ctx.parent_option)
+    create_branch_from_github_pr(gh, ctx.repo, ctx.repo_path, pr_number, &ctx.parent_option)
   } else {
     print_warning(&format!(
       "No branch found for GitHub PR #{pr_number}. Use --create to create a new branch.",
@@ -227,7 +227,7 @@ fn handle_branch_switch(
   repo_path: &std::path::Path,
   branch_name: &str,
   create_if_missing: bool,
-  parent_option: Option<&str>,
+  parent_option: &ParentBranchOption,
   jira_parser: Option<&JiraTicketParser>,
 ) -> Result<()> {
   // Check if branch exists
@@ -351,7 +351,7 @@ fn create_branch_from_jira_issue(
   repo: &Git2Repository,
   repo_path: &std::path::Path,
   issue_key: &str,
-  parent_option: Option<&str>,
+  parent_option: &ParentBranchOption,
   jira_parser: Option<&JiraTicketParser>,
 ) -> Result<()> {
   let rt = Runtime::new().context("Failed to create async runtime")?;
@@ -392,7 +392,7 @@ fn create_branch_from_github_pr(
   repo: &Git2Repository,
   repo_path: &Path,
   pr_number: u32,
-  parent_option: Option<&str>,
+  parent_option: &ParentBranchOption,
 ) -> Result<()> {
   let rt = Runtime::new().context("Failed to create async runtime")?;
   rt.block_on(async {
@@ -443,7 +443,11 @@ fn create_branch_from_github_pr(
       origin_url: remote_url.to_string(),
       origin_owner: owner,
       origin_repo: repo_name,
-      parent: parent_option.map(|s| s.to_string()),
+      parent: match parent_option {
+        ParentBranchOption::Head => None,
+        ParentBranchOption::CurrentBranch => repo.head().ok().and_then(|h| h.shorthand().map(|s| s.to_string())),
+        ParentBranchOption::Named(name) => Some(name.clone()),
+      },
     };
 
     let outcome = checkout_pr_branch(repo, repo_path, &request)?;
@@ -512,7 +516,12 @@ mod tests {
     create_commit(repo, "parent.txt", "parent", "parent commit")?;
     let parent_tip = repo.head()?.peel_to_commit()?.id();
 
-    let branch_base = resolve_branch_base(repo, repo_guard.path(), Some("parent"), None)?;
+    let branch_base = resolve_branch_base(
+      repo,
+      repo_guard.path(),
+      &ParentBranchOption::Named("parent".into()),
+      None,
+    )?;
     create_and_switch_to_branch(repo, repo_guard.path(), "feature/new", &branch_base)?;
 
     let created_branch = repo.find_branch("feature/new", BranchType::Local)?;
@@ -574,8 +583,13 @@ mod tests {
 
     create_commit(repo, "base.txt", "base", "initial commit")?;
 
-    let err = resolve_branch_base(repo, repo_guard.path(), Some("missing"), None)
-      .expect_err("expected missing parent to error");
+    let err = resolve_branch_base(
+      repo,
+      repo_guard.path(),
+      &ParentBranchOption::Named("missing".into()),
+      None,
+    )
+    .expect_err("expected missing parent to error");
     assert!(err.to_string().contains("twig branch depend"));
 
     Ok(())
@@ -622,7 +636,14 @@ mod tests {
       },
     );
 
-    create_branch_from_jira_issue(&jira_client, repo, repo_guard.path(), "PROJ-123", Some("parent"), None)?;
+    create_branch_from_jira_issue(
+      &jira_client,
+      repo,
+      repo_guard.path(),
+      "PROJ-123",
+      &ParentBranchOption::Named("parent".into()),
+      None,
+    )?;
 
     let created_branch = repo.find_branch("PROJ-123/example-feature", BranchType::Local)?;
     let created_tip = created_branch.into_reference().peel_to_commit()?.id();
@@ -727,7 +748,13 @@ mod tests {
     });
     github_client.set_base_url(mock_server.uri());
 
-    create_branch_from_github_pr(&github_client, repo, repo_guard.path(), 42, Some("parent"))?;
+    create_branch_from_github_pr(
+      &github_client,
+      repo,
+      repo_guard.path(),
+      42,
+      &ParentBranchOption::Named("parent".into()),
+    )?;
 
     let created_branch = repo.find_branch("feature/cool", BranchType::Local)?;
     let created_tip = created_branch.into_reference().peel_to_commit()?.id();
@@ -845,7 +872,13 @@ mod tests {
     });
     github_client.set_base_url(mock_server.uri());
 
-    create_branch_from_github_pr(&github_client, repo, repo_guard.path(), 99, Some("parent"))?;
+    create_branch_from_github_pr(
+      &github_client,
+      repo,
+      repo_guard.path(),
+      99,
+      &ParentBranchOption::Named("parent".into()),
+    )?;
 
     let created_branch = repo.find_branch("feature/cool", BranchType::Local)?;
     let created_tip = created_branch.into_reference().peel_to_commit()?.id();

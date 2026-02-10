@@ -73,13 +73,40 @@ pub fn detect_switch_input(jira_parser: Option<&JiraTicketParser>, input: &str) 
   SwitchInput::BranchName(input.to_string())
 }
 
+/// Specifies how the parent branch should be resolved when creating a new branch.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum ParentBranchOption {
+  /// Use the repository HEAD commit without recording a parent dependency.
+  #[default]
+  Head,
+  /// Use the currently checked-out branch as the parent.
+  CurrentBranch,
+  /// Use a specific branch by name, or resolve via a Jira issue key.
+  Named(String),
+}
+
+impl ParentBranchOption {
+  /// Parse a CLI `--parent` value into a [`ParentBranchOption`].
+  ///
+  /// - `None`, `Some("")`, or `Some("none")` → [`Head`](Self::Head)
+  /// - `Some("current")` → [`CurrentBranch`](Self::CurrentBranch)
+  /// - Any other value → [`Named`](Self::Named)
+  pub fn from_cli_value(value: Option<&str>) -> Self {
+    match value.map(str::trim) {
+      None | Some("") | Some("none") => Self::Head,
+      Some("current") => Self::CurrentBranch,
+      Some(other) => Self::Named(other.to_string()),
+    }
+  }
+}
+
 /// Options controlling how switch helpers behave.
 #[derive(Debug, Clone, Default)]
 pub struct SwitchExecutionOptions {
   /// Whether to create the target branch when it is missing.
   pub create_missing: bool,
   /// Parent selection hint when creating a new branch.
-  pub parent_option: Option<String>,
+  pub parent_option: ParentBranchOption,
 }
 
 /// Attempt to switch based on raw user input (branch/Jira/PR).
@@ -153,12 +180,7 @@ fn switch_to_branch_name(
     });
   }
 
-  let branch_base = resolve_branch_base(
-    repository,
-    repository_path,
-    options.parent_option.as_deref(),
-    jira_parser,
-  )?;
+  let branch_base = resolve_branch_base(repository, repository_path, &options.parent_option, jira_parser)?;
   create_branch_from_base(repository, branch_name, branch_base)
 }
 
@@ -273,11 +295,11 @@ pub fn extract_jira_issue_from_url(url: &str) -> Option<String> {
 pub fn resolve_branch_base(
   repo: &Repository,
   repo_path: &Path,
-  parent_option: Option<&str>,
+  parent_option: &ParentBranchOption,
   jira_parser: Option<&JiraTicketParser>,
 ) -> Result<BranchBaseResolution> {
-  match parent_option.map(str::trim) {
-    None | Some("") | Some("none") => {
+  match parent_option {
+    ParentBranchOption::Head => {
       let head_commit = repo
         .head()
         .context("Failed to resolve HEAD for branch creation")?
@@ -285,7 +307,7 @@ pub fn resolve_branch_base(
         .context("Failed to resolve HEAD commit for branch creation")?;
       Ok(BranchBaseResolution::head(head_commit.id()))
     }
-    Some("current") => {
+    ParentBranchOption::CurrentBranch => {
       let head = repo
         .head()
         .context("Failed to resolve current branch for --parent=current")?;
@@ -304,7 +326,7 @@ pub fn resolve_branch_base(
 
       Ok(BranchBaseResolution::parent(branch_name, commit))
     }
-    Some(parent) => {
+    ParentBranchOption::Named(parent) => {
       if let Some(parser) = jira_parser.as_ref()
         && let Some(normalized_key) = parse_jira_issue_key(parser, parent)
       {
@@ -1283,7 +1305,7 @@ mod tests {
 
     let options = SwitchExecutionOptions {
       create_missing: true,
-      parent_option: None,
+      parent_option: ParentBranchOption::Head,
     };
 
     let outcome = switch_from_input(&guard.repo, repo_path, &state, Some(&parser), "PROJ-123", &options)
@@ -1308,7 +1330,7 @@ mod tests {
 
     let options = SwitchExecutionOptions {
       create_missing: true,
-      parent_option: None,
+      parent_option: ParentBranchOption::Head,
     };
 
     let outcome = switch_from_input(&guard.repo, repo_path, &state, Some(&parser), "PROJ-999", &options)?;
