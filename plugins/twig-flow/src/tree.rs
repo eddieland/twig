@@ -22,6 +22,15 @@ pub fn run(cli: &Cli) -> Result<()> {
   };
 
   let repo_state = load_repo_state(&repo)?;
+
+  if repo_state.get_root_branches().is_empty() {
+    print_error(&format!(
+      "No root branches configured. Add one with {}.",
+      format_command("twig branch root add <branch>")
+    ));
+    return Ok(());
+  }
+
   let selection = if cli.root {
     select_root_branch(&repo, &repo_state)?
   } else if cli.parent {
@@ -110,7 +119,10 @@ fn select_root_branch(repo: &Repository, state: &RepoState) -> Result<Selection>
       message: Some(format!("Switched to branch \"{root_branch}\" (root)")),
     })
   } else {
-    print_warning("No root branches configured; staying on the current branch.");
+    print_error(&format!(
+      "No root branches configured. Add one with {}.",
+      format_command("twig branch root add <branch>")
+    ));
     Ok(Selection::default())
   }
 }

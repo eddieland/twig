@@ -45,6 +45,22 @@ fn renders_branch_tree_output() -> Result<()> {
 }
 
 #[test]
+fn errors_when_no_root_branch_configured() -> Result<()> {
+  let guard = GitRepoTestGuard::new();
+  create_commit(&guard.repo, "README.md", "hello", "initial commit")?;
+
+  // No root branch configured — twig flow should error
+  cargo_bin_cmd!("twig-flow")
+    .env("NO_COLOR", "1")
+    .current_dir(guard.path())
+    .assert()
+    .success()
+    .stderr(predicate::str::contains("No root branches configured"));
+
+  Ok(())
+}
+
+#[test]
 fn creates_and_switches_to_missing_branch() -> Result<()> {
   let guard = GitRepoTestGuard::new();
   create_commit(&guard.repo, "README.md", "hello", "initial commit")?;
