@@ -34,6 +34,7 @@ pub use git::switch::{
 };
 pub use git::{
   checkout_branch, current_branch, detect_repository, detect_repository_from_path, get_repository, in_git_repository,
+  resolve_to_main_repo_path,
 };
 pub use github::{GitHubPr, GitHubRepo, GitRemoteScheme};
 pub use jira_parser::{JiraParseError, JiraParsingConfig, JiraParsingMode, JiraTicketParser, create_jira_parser};

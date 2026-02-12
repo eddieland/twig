@@ -48,7 +48,11 @@ pub struct PruneSummary {
   pub errors: Vec<(String, String)>,
 }
 
-/// Add a repository to the registry
+/// Add a repository to the registry.
+///
+/// When called from inside a git worktree, this resolves the path to the main
+/// (non-worktree) repository so that worktrees of the same repo are not
+/// counted as separate repositories.
 pub fn add_repository<P: AsRef<Path>>(path: P) -> Result<()> {
   let config_dirs = ConfigDirs::new()?;
   let mut registry = Registry::load(&config_dirs)?;
@@ -57,10 +61,14 @@ pub fn add_repository<P: AsRef<Path>>(path: P) -> Result<()> {
   let canonical_path = std::fs::canonicalize(path_ref)
     .with_context(|| format!("Failed to resolve repository path {}", path_ref.display()))?;
 
-  registry.add(&canonical_path)?;
+  // Resolve through worktrees to the main repository path so that adding
+  // from a worktree registers the main repo, not the worktree directory.
+  let repo_path = twig_core::resolve_to_main_repo_path(&canonical_path).unwrap_or(canonical_path);
+
+  registry.add(&repo_path)?;
   registry.save(&config_dirs)?;
 
-  twig_core::state::ensure_twig_internal_gitignore(&canonical_path)?;
+  twig_core::state::ensure_twig_internal_gitignore(&repo_path)?;
 
   Ok(())
 }
