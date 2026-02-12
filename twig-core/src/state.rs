@@ -111,10 +111,14 @@ impl Registry {
     Ok(())
   }
 
-  /// Remove a repository from the registry
+  /// Remove a repository from the registry.
+  ///
+  /// Resolves worktree paths to the main repository before lookup so that
+  /// removing from inside a worktree works correctly.
   pub fn remove<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
     let path_buf = fs::canonicalize(path.as_ref()).context("Failed to resolve repository path")?;
-    let path_str = path_buf.to_string_lossy().to_string();
+    let resolved = crate::git::detection::resolve_to_main_repo_path(&path_buf).unwrap_or(path_buf);
+    let path_str = resolved.to_string_lossy().to_string();
 
     self.repositories.retain(|r| r.path != path_str);
     Ok(())
@@ -125,10 +129,14 @@ impl Registry {
     &self.repositories
   }
 
-  /// Update the last fetch time for a repository
+  /// Update the last fetch time for a repository.
+  ///
+  /// Resolves worktree paths to the main repository before lookup so that
+  /// fetching from inside a worktree updates the correct registry entry.
   pub fn update_fetch_time<P: AsRef<Path>>(&mut self, path: P, time: String) -> Result<()> {
     let path_buf = fs::canonicalize(path.as_ref()).context("Failed to resolve repository path")?;
-    let path_str = path_buf.to_string_lossy().to_string();
+    let resolved = crate::git::detection::resolve_to_main_repo_path(&path_buf).unwrap_or(path_buf);
+    let path_str = resolved.to_string_lossy().to_string();
 
     for repo in &mut self.repositories {
       if repo.path == path_str {
@@ -1504,5 +1512,89 @@ mod tests {
 
     assert_eq!(stats, EvictionStats::default());
     assert!(stats.is_empty());
+  }
+
+  #[test]
+  fn registry_remove_resolves_worktree_to_main_repo() {
+    use git2::Repository as GitRepository;
+
+    let temp_dir = TempDir::new().unwrap();
+    let config_dirs = ConfigDirs {
+      config_dir: temp_dir.path().join("config"),
+      data_dir: temp_dir.path().join("data"),
+      cache_dir: Some(temp_dir.path().join("cache")),
+    };
+    fs::create_dir_all(&config_dirs.data_dir).unwrap();
+
+    // Set up a git repo with a worktree
+    let main_path = temp_dir.path().join("main-repo");
+    fs::create_dir_all(&main_path).unwrap();
+    let repo = GitRepository::init(&main_path).unwrap();
+    let sig = git2::Signature::now("Test", "test@test.com").unwrap();
+    let tree_id = repo.index().unwrap().write_tree().unwrap();
+    let tree = repo.find_tree(tree_id).unwrap();
+    repo
+      .commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+      .unwrap();
+    let head = repo.head().unwrap();
+    let commit = head.peel_to_commit().unwrap();
+    repo.branch("wt-branch", &commit, false).unwrap();
+    let wt_path = temp_dir.path().join("my-worktree");
+    repo.worktree("my-worktree", &wt_path, None).unwrap();
+
+    // Add the main repo to the registry
+    let mut registry = Registry {
+      repositories: Vec::new(),
+    };
+    registry.add(&main_path).unwrap();
+    assert_eq!(registry.repositories.len(), 1);
+
+    // Remove using the worktree path — should resolve to the main repo
+    registry.remove(&wt_path).unwrap();
+    assert_eq!(
+      registry.repositories.len(),
+      0,
+      "removing via worktree path should remove the main repo entry"
+    );
+  }
+
+  #[test]
+  fn registry_update_fetch_time_resolves_worktree() {
+    use git2::Repository as GitRepository;
+
+    let temp_dir = TempDir::new().unwrap();
+
+    // Set up a git repo with a worktree
+    let main_path = temp_dir.path().join("main-repo");
+    fs::create_dir_all(&main_path).unwrap();
+    let repo = GitRepository::init(&main_path).unwrap();
+    let sig = git2::Signature::now("Test", "test@test.com").unwrap();
+    let tree_id = repo.index().unwrap().write_tree().unwrap();
+    let tree = repo.find_tree(tree_id).unwrap();
+    repo
+      .commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+      .unwrap();
+    let head = repo.head().unwrap();
+    let commit = head.peel_to_commit().unwrap();
+    repo.branch("wt-branch", &commit, false).unwrap();
+    let wt_path = temp_dir.path().join("my-worktree");
+    repo.worktree("my-worktree", &wt_path, None).unwrap();
+
+    // Add the main repo
+    let mut registry = Registry {
+      repositories: Vec::new(),
+    };
+    registry.add(&main_path).unwrap();
+
+    // Update fetch time using the worktree path
+    registry
+      .update_fetch_time(&wt_path, "2025-01-01T00:00:00Z".to_string())
+      .unwrap();
+
+    assert_eq!(
+      registry.repositories[0].last_fetch.as_deref(),
+      Some("2025-01-01T00:00:00Z"),
+      "update_fetch_time via worktree path should update the main repo entry"
+    );
   }
 }
