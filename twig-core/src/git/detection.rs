@@ -35,13 +35,18 @@ pub fn resolve_to_main_repo_path<P: AsRef<Path>>(path: P) -> Option<PathBuf> {
 
   let repo = Repository::discover(path).ok()?;
 
-  if repo.is_worktree() {
+  let raw = if repo.is_worktree() {
     // For linked worktrees, commondir() points to the main repo's .git
     // directory. Its parent is the main repo's working directory.
-    repo.commondir().parent().map(|p| p.to_path_buf())
+    repo.commondir().parent().map(|p| p.to_path_buf())?
   } else {
-    repo.workdir().map(|workdir| workdir.to_path_buf())
-  }
+    repo.workdir().map(|workdir| workdir.to_path_buf())?
+  };
+
+  // Canonicalize so the result matches paths stored via fs::canonicalize
+  // elsewhere (e.g. Registry). On Windows, canonicalize adds the \\?\ prefix
+  // that raw git2 paths lack.
+  std::fs::canonicalize(raw).ok()
 }
 
 /// Check if we're currently in a git repository.
