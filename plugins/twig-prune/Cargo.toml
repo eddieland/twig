@@ -14,7 +14,6 @@ clap = { workspace = true, features = ["derive"] }
 dialoguer = { workspace = true }
 directories = { workspace = true }
 git2 = { workspace = true }
-tokio = { workspace = true }
 twig-core = { path = "../../twig-core" }
 twig-gh = { path = "../../twig-gh" }
 

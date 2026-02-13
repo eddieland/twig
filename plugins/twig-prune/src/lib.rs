@@ -1,17 +1,15 @@
 mod cli;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use dialoguer::Confirm;
 use git2::BranchType;
 use twig_core::GitHubRepo;
-use twig_core::output::{print_error, print_info, print_success};
+use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::plugin::PluginContext;
 use twig_core::state::RepoState;
-use twig_gh::GitHubPullRequest;
-use twig_gh::endpoints::pulls::PaginationOptions;
 
 use crate::cli::Cli;
 
@@ -47,45 +45,13 @@ pub fn run() -> Result<()> {
     GitHubRepo::parse(remote_url).context("Could not parse GitHub owner/repo from the origin remote URL")?
   };
 
-  // Create GitHub client
-  let home = directories::BaseDirs::new().ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
-  let (rt, gh) = twig_gh::create_github_runtime_and_client(home.home_dir())?;
-
-  // Fetch recently merged PRs
-  print_info(&format!("Checking merged PRs for {}", github_repo.full_name()));
-
-  let merged_prs: Vec<GitHubPullRequest> = rt.block_on(async {
-    let pagination = PaginationOptions { per_page: 100, page: 1 };
-    let prs = gh
-      .list_pull_requests(&github_repo.owner, &github_repo.repo, Some("closed"), Some(pagination))
-      .await?;
-
-    Ok::<_, anyhow::Error>(prs.into_iter().filter(|pr| pr.merged_at.is_some()).collect())
-  })?;
-
-  if merged_prs.is_empty() {
-    print_info("No recently merged PRs found.");
-    return Ok(());
-  }
-
-  // Build lookups: head branch name -> PR, PR number -> PR
-  let mut branch_to_pr: HashMap<&str, &GitHubPullRequest> = HashMap::new();
-  let mut pr_number_to_pr: HashMap<u32, &GitHubPullRequest> = HashMap::new();
-  for pr in &merged_prs {
-    if let Some(ref_name) = &pr.head.ref_name {
-      branch_to_pr.insert(ref_name.as_str(), pr);
-    }
-    pr_number_to_pr.insert(pr.number, pr);
-  }
-
-  // Load repo state for additional PR associations
+  // Load repo state for PR associations
   let state = RepoState::load(repo_path).unwrap_or_default();
   let root_branches: HashSet<String> = state.get_root_branches().into_iter().collect();
 
-  // Match local branches to merged PRs
+  // Collect local branches that have an associated PR in twig state
   let branches = repo.branches(Some(BranchType::Local))?;
-  let mut candidates: Vec<Candidate> = Vec::new();
-  let mut seen: HashSet<String> = HashSet::new();
+  let mut branches_with_prs: Vec<(String, u32)> = Vec::new();
 
   for branch_result in branches {
     let (branch, _) = branch_result?;
@@ -94,39 +60,48 @@ pub fn run() -> Result<()> {
       None => continue,
     };
 
-    // Never prune the current branch
-    if current_branch.as_deref() == Some(name.as_str()) {
+    // Never prune the current branch or root branches
+    if current_branch.as_deref() == Some(name.as_str()) || root_branches.contains(&name) {
       continue;
     }
 
-    // Never prune root branches
-    if root_branches.contains(&name) {
-      continue;
-    }
-
-    // Match by head branch name
-    if let Some(pr) = branch_to_pr.get(name.as_str()) {
-      seen.insert(name.clone());
-      candidates.push(Candidate {
-        branch_name: name,
-        pr_number: pr.number,
-        pr_title: pr.title.clone(),
-      });
-      continue;
-    }
-
-    // Match by PR number from twig state
     if let Some(metadata) = state.get_branch_metadata(&name)
       && let Some(pr_number) = metadata.github_pr
-      && let Some(pr) = pr_number_to_pr.get(&pr_number)
-      && !seen.contains(&name)
     {
-      seen.insert(name.clone());
-      candidates.push(Candidate {
-        branch_name: name,
-        pr_number: pr.number,
-        pr_title: pr.title.clone(),
-      });
+      branches_with_prs.push((name, pr_number));
+    }
+  }
+
+  if branches_with_prs.is_empty() {
+    print_info("No local branches with associated PRs found.");
+    return Ok(());
+  }
+
+  // Create GitHub client and check each PR
+  let home = directories::BaseDirs::new().ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+  let (rt, gh) = twig_gh::create_github_runtime_and_client(home.home_dir())?;
+
+  print_info(&format!(
+    "Checking {} PR(s) for {}",
+    branches_with_prs.len(),
+    github_repo.full_name()
+  ));
+
+  let mut candidates: Vec<Candidate> = Vec::new();
+
+  for (branch_name, pr_number) in &branches_with_prs {
+    match rt.block_on(gh.get_pull_request(&github_repo.owner, &github_repo.repo, *pr_number)) {
+      Ok(pr) if pr.merged_at.is_some() => {
+        candidates.push(Candidate {
+          branch_name: branch_name.clone(),
+          pr_number: pr.number,
+          pr_title: pr.title,
+        });
+      }
+      Ok(_) => {} // PR exists but not merged
+      Err(e) => {
+        print_warning(&format!("Could not fetch PR #{pr_number} for '{branch_name}': {e}"));
+      }
     }
   }
 
