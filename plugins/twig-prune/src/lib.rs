@@ -6,12 +6,12 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use dialoguer::Confirm;
 use git2::BranchType;
+use twig_core::GitHubRepo;
 use twig_core::output::{print_error, print_info, print_success};
 use twig_core::plugin::PluginContext;
 use twig_core::state::RepoState;
-use twig_core::GitHubRepo;
-use twig_gh::endpoints::pulls::PaginationOptions;
 use twig_gh::GitHubPullRequest;
+use twig_gh::endpoints::pulls::PaginationOptions;
 
 use crate::cli::Cli;
 
@@ -48,31 +48,19 @@ pub fn run() -> Result<()> {
   };
 
   // Create GitHub client
-  let home =
-    directories::BaseDirs::new().ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+  let home = directories::BaseDirs::new().ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
   let (rt, gh) = twig_gh::create_github_runtime_and_client(home.home_dir())?;
 
   // Fetch recently merged PRs
-  print_info(&format!(
-    "Checking merged PRs for {}",
-    github_repo.full_name()
-  ));
+  print_info(&format!("Checking merged PRs for {}", github_repo.full_name()));
 
   let merged_prs: Vec<GitHubPullRequest> = rt.block_on(async {
-    let pagination = PaginationOptions {
-      per_page: 100,
-      page: 1,
-    };
+    let pagination = PaginationOptions { per_page: 100, page: 1 };
     let prs = gh
       .list_pull_requests(&github_repo.owner, &github_repo.repo, Some("closed"), Some(pagination))
       .await?;
 
-    Ok::<_, anyhow::Error>(
-      prs
-        .into_iter()
-        .filter(|pr| pr.merged_at.is_some())
-        .collect(),
-    )
+    Ok::<_, anyhow::Error>(prs.into_iter().filter(|pr| pr.merged_at.is_some()).collect())
   })?;
 
   if merged_prs.is_empty() {
@@ -149,10 +137,7 @@ pub fn run() -> Result<()> {
 
   candidates.sort_by(|a, b| a.branch_name.cmp(&b.branch_name));
 
-  print_info(&format!(
-    "Found {} branch(es) with merged PRs:\n",
-    candidates.len()
-  ));
+  print_info(&format!("Found {} branch(es) with merged PRs:\n", candidates.len()));
 
   if cli.dry_run {
     for candidate in &candidates {
@@ -192,10 +177,7 @@ pub fn run() -> Result<()> {
           deleted_count += 1;
         }
         Err(e) => {
-          print_error(&format!(
-            "  Failed to delete {}: {}",
-            candidate.branch_name, e
-          ));
+          print_error(&format!("  Failed to delete {}: {}", candidate.branch_name, e));
         }
       }
     } else {
