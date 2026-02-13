@@ -357,7 +357,7 @@ async fn detect_github_pr_from_branch(
 ) -> Option<u32> {
   // Search for PRs with this branch as head
   match github_client
-    .find_pull_requests_by_head_branch(owner, repo_name, branch_name, None)
+    .find_pull_requests_by_head_branch(owner, repo_name, branch_name, Some("all"))
     .await
   {
     Ok(prs) => {
