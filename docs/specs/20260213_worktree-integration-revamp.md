@@ -120,7 +120,7 @@ Options:
 
 ### 6. Dependency integration on worktree creation
 
-When `twig switch -w` or `twig wt create` creates a new branch, wire up the parent dependency just like `twig switch -p` does today. The `-p` / `--parent` flag should work with worktree creation.
+When `twig switch -w` creates a new branch, wire up the parent dependency just like `twig switch -p` does today. The `-p` / `--parent` flag should work with worktree creation.
 
 ### 7. Revised command surface
 
@@ -143,8 +143,8 @@ twig wt path <branch>     # New: scriptable path output
 twig wt remove <branch>   # New: intentional teardown
 twig wt clean             # Same as today
 
-# Deprecated / removed
-twig wt create <branch>   # Replaced by twig switch -w; keep as hidden alias for transition
+# Removed
+# twig wt create — replaced by twig switch -w
 
 # Jira integration (enhanced)
 twig jira create-branch --with-worktree   # Still works, now uses same code path as switch -w
@@ -239,7 +239,7 @@ The core worktree logic (`create_worktree` with dependency wiring, worktree exis
 | P1 | Compact worktree indicator in `BranchTableRenderer` | Branches with `twig.worktree` annotation show a `*` suffix (or similar) in the Branch column | Avoids adding a full column; keeps table width manageable. Indicator links to `twig wt list` for details. | |
 | P1 | Add worktree awareness to twig-flow switch | When `twig flow <target>` resolves to a branch checked out in a worktree, error with path instead of attempting checkout | Reuses same core check function as `twig switch` awareness. | |
 | P1 | Add `-w` flag to `twig flow` CLI | `twig flow -w <target>` creates/uses worktree instead of checkout | Mirrors `twig switch -w`; explicit opt-in, no prompt injection. | |
-| P1 | Deprecate `twig wt create` in favor of `twig switch -w` | `twig wt create` still works but prints deprecation notice pointing to `twig switch -w` | Keep as hidden alias for backwards compat. | |
+| P1 | Remove `twig wt create` | `twig wt create` subcommand is deleted; `twig switch -w` is the only creation path | Clean removal — no hidden alias, no deprecation notice. | |
 | P2 | Update `twig jira create-branch -w` to use unified code path | Jira create-branch worktree mode uses the same logic as `twig switch -w` | Reduces code duplication in jira.rs. | |
 | P2 | Improve worktree directory naming | Use branch name directly (preserving `/` as directory separators) instead of sanitizing to hyphens; e.g., `<repo>-worktrees/feature/foo/` | Evaluate git2 constraints — worktree names may not support `/`. If so, keep sanitized name as internal identifier but use full branch name for directory structure. | |
 | P3 | Shell integration helpers | Document shell aliases/functions for `cd $(twig wt path ...)` patterns; consider a `twig wt shell <branch>` that spawns a subshell in the worktree directory | Subprocess can't change parent shell's cwd; document the workaround patterns. | |
@@ -254,7 +254,7 @@ The core worktree logic (`create_worktree` with dependency wiring, worktree exis
 
 ### Open Questions
 
-- Should `twig switch -w` be the *only* way to create worktrees, or should `twig wt create` remain as a non-deprecated alternative? (Current proposal: deprecate `create`, keep as hidden alias.)
+- ~~Should `twig switch -w` be the *only* way to create worktrees?~~ **Resolved:** Yes. `twig wt create` is removed entirely.
 - Should `twig cascade` operate across worktrees (rebase branches that are checked out in worktrees)? This is technically possible since git rebase works on refs, not working directories, but could surprise users with changed worktree contents.
 
 ## Status Tracking (to be updated by subagent)
