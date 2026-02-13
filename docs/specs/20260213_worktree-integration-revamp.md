@@ -148,6 +148,106 @@ twig wt create <branch>   # Replaced by twig switch -w; keep as hidden alias for
 twig jira create-branch --with-worktree   # Still works, now uses same code path as switch -w
 ```
 
+## twig-flow Integration
+
+`twig flow` is the primary daily-driver command — it combines tree visualization with branch switching. Worktree support here has an outsized impact because this is where users actually live.
+
+### Current twig-flow behavior (no worktree awareness)
+
+**Tree mode** (`twig flow`): Renders the branch dependency graph via `BranchGraphBuilder` → `BranchTableRenderer`. The renderer supports an `annotations` map on each `BranchNodeMetadata` and already renders arbitrary `Annotation { key }` columns (used for PR numbers, lifecycle status). No worktree info is surfaced.
+
+**Switch mode** (`twig flow <target>`): Interactive branch switching with Jira/PR detection, remote branch prompts, and auto-creation with dependency wiring. All branch creation paths use `checkout_branch()` — none offer worktree creation. When creating a new branch from a Jira issue, the user gets a `dialoguer::Select` prompt with options like "Create branch from Jira" / "Create simple branch" / "Custom name" / "Abort" — but never "Create as worktree."
+
+### Proposed twig-flow changes
+
+#### 1. Worktree annotation column in tree output
+
+Add a `twig.worktree` annotation during `BranchGraphBuilder::apply_branch_metadata()`. The builder already has access to `RepoState` which contains worktree data:
+
+```rust
+// In BranchGraphBuilder::apply_branch_metadata()
+if let Some(wt) = repo_state.get_worktree_by_branch(branch) {
+    metadata.annotations.insert(
+        "twig.worktree".to_string(),
+        BranchAnnotationValue::Text(wt.path.clone()),
+    );
+}
+```
+
+The `BranchTableSchema::default()` would gain an optional "WT" column (or use a compact indicator like a `*` suffix on the branch name) to avoid making the table too wide. A compact indicator on the branch name itself is likely better UX:
+
+```
+  Branch                     Story      PR
+  main
+  ├─ feature/auth *          PROJ-123   #42
+  │  └─ feature/auth-tests   PROJ-124   —
+  └─ feature/payments        PROJ-125   draft
+```
+
+Where `*` means "has active worktree." The `twig wt list` command provides full paths; the tree just needs a nudge.
+
+#### 2. Worktree option in twig-flow switch prompts
+
+When `twig flow <target>` triggers branch creation (Jira issue without association, or missing branch name), add a worktree option to the interactive prompts:
+
+**Jira prompt (current):**
+```
+No branch found for Jira issue PROJ-123. How would you like to proceed?
+> Create branch from Jira: PROJ-123/example-feature
+  Create simple branch: proj-123
+  Enter custom branch name
+  Abort
+```
+
+**Jira prompt (proposed):**
+```
+No branch found for Jira issue PROJ-123. How would you like to proceed?
+> Create branch from Jira: PROJ-123/example-feature
+  Create branch as worktree: PROJ-123/example-feature
+  Create simple branch: proj-123
+  Enter custom branch name
+  Abort
+```
+
+Similarly for the `BranchCreateChoice` and `RemoteBranchChoice` prompts. When the worktree option is chosen, call `create_worktree()` with dependency setup instead of `checkout_branch()`.
+
+#### 3. Worktree awareness in twig-flow switch
+
+When `twig flow <target>` resolves to a branch that already has a worktree, show the path before switching:
+
+```
+ℹ Branch 'feature/auth' has an active worktree at ~/repos/twig-worktrees/feature-auth
+Switched to branch "feature/auth".
+```
+
+This reuses the same awareness logic proposed for `twig switch`.
+
+#### 4. `twig flow --worktree` / `-w` flag (stretch)
+
+For non-interactive usage and scripts, add a `-w` flag to `twig flow` that creates/uses a worktree instead of checking out:
+
+```bash
+twig flow -w PROJ-123    # Create worktree for Jira issue
+twig flow -w feature/foo # Create worktree for branch
+```
+
+This mirrors the `twig switch -w` behavior but within the flow plugin's interactive context.
+
+### Implementation approach for twig-flow
+
+The core worktree logic (`create_worktree` with dependency wiring, worktree existence checks) lives in `twig-core`. The twig-flow plugin consumes it — no worktree logic should be duplicated in the plugin.
+
+**Key integration points:**
+
+| File | Change |
+|------|--------|
+| `twig-core/src/git/graph.rs` : `apply_branch_metadata()` | Add `twig.worktree` annotation from `RepoState` worktree data |
+| `twig-core/src/git/renderer.rs` | Add compact worktree indicator to branch name rendering (or optional column) |
+| `twig-core/src/state.rs` | Add `get_worktree_by_branch(&str) -> Option<&Worktree>` lookup method |
+| `plugins/twig-flow/src/switch.rs` | Add worktree options to `JiraBranchChoice`, `BranchCreateChoice`, `RemoteBranchChoice` enums and prompts |
+| `plugins/twig-flow/src/switch.rs` | Add worktree awareness check after resolving target branch |
+| `plugins/twig-flow/src/cli.rs` | Add `-w`/`--worktree` flag (stretch goal) |
+
 ## Subagent Execution Plan
 
 ### Task Backlog
@@ -158,8 +258,13 @@ twig jira create-branch --with-worktree   # Still works, now uses same code path
 | P0 | Add worktree awareness to `twig switch` (without `-w`) | When switching to a branch that has an existing worktree, print an info message with the worktree path | Query `RepoState::get_worktree()` after checkout. Non-blocking — checkout still proceeds. | |
 | P0 | Implement `twig wt remove <branch>` | Can remove a specific worktree by branch name; validates no uncommitted changes; `--force` overrides; `--delete-branch` option | Use `git2` worktree prune + fs removal. Update `RepoState`. | |
 | P1 | Implement `twig wt path <branch>` | Outputs raw worktree path to stdout; exit 1 if none exists | Simple lookup in `RepoState` + validate path still exists on disk. | |
-| P1 | Add worktree indicators to `twig tree` | Branches with active worktrees show an annotation in tree output | Extend `UserDefinedDependencyResolver` or tree renderer to include worktree info. | |
+| P1 | Add `get_worktree_by_branch()` to `RepoState` | Lookup worktree by original branch name (not sanitized name); used by graph builder and switch awareness | Current `get_worktree()` takes the sanitized name. Need branch-based lookup for all downstream consumers. | |
+| P1 | Add `twig.worktree` annotation in `BranchGraphBuilder` | `apply_branch_metadata()` populates worktree annotation from `RepoState` | Feeds into both `twig tree` and `twig flow` tree rendering automatically. | |
+| P1 | Compact worktree indicator in `BranchTableRenderer` | Branches with `twig.worktree` annotation show a `*` suffix (or similar) in the Branch column | Avoids adding a full column; keeps table width manageable. Indicator links to `twig wt list` for details. | |
+| P1 | Add worktree options to twig-flow interactive prompts | `JiraBranchChoice`, `BranchCreateChoice`, and `RemoteBranchChoice` enums gain worktree variants; prompts show "Create as worktree" option | Calls `create_worktree()` with dependency wiring when selected. Only shown in interactive mode. | |
+| P1 | Add worktree awareness to twig-flow switch | When `twig flow <target>` resolves to a branch with an existing worktree, print info message with path | Reuses same core logic as `twig switch` awareness. | |
 | P1 | Deprecate `twig wt create` in favor of `twig switch -w` | `twig wt create` still works but prints deprecation notice pointing to `twig switch -w` | Keep as hidden alias for backwards compat. | |
+| P2 | Add `-w` flag to `twig flow` CLI | `twig flow -w <target>` creates/uses worktree instead of checkout | Mirrors `twig switch -w` within twig-flow's interactive context. | |
 | P2 | Update `twig jira create-branch -w` to use unified code path | Jira create-branch worktree mode uses the same logic as `twig switch -w` | Reduces code duplication in jira.rs. | |
 | P2 | Improve worktree directory naming | Use branch name directly (preserving `/` as directory separators) instead of sanitizing to hyphens; e.g., `<repo>-worktrees/feature/foo/` | Evaluate git2 constraints — worktree names may not support `/`. If so, keep sanitized name as internal identifier but use full branch name for directory structure. | |
 | P3 | Shell integration helpers | Document shell aliases/functions for `cd $(twig wt path ...)` patterns; consider a `twig wt shell <branch>` that spawns a subshell in the worktree directory | Subprocess can't change parent shell's cwd; document the workaround patterns. | |
