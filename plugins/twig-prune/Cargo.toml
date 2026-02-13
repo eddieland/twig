@@ -1,0 +1,24 @@
+[package]
+name = "twig-prune"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Twig plugin to delete local branches whose GitHub PRs have been merged"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+dialoguer = { workspace = true }
+directories = { workspace = true }
+git2 = { workspace = true }
+tokio = { workspace = true }
+twig-core = { path = "../../twig-core" }
+twig-gh = { path = "../../twig-gh" }
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
+twig-test-utils = { path = "../../twig-test-utils" }

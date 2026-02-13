@@ -15,7 +15,7 @@ pub struct GitHubAuth {
 }
 
 /// Represents a GitHub user
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct GitHubUser {
   pub login: String,
   pub id: u64,
@@ -23,7 +23,7 @@ pub struct GitHubUser {
 }
 
 /// Represents a GitHub pull request
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct GitHubPullRequest {
   pub number: u32,
   pub title: String,
@@ -37,10 +37,12 @@ pub struct GitHubPullRequest {
   pub mergeable: Option<bool>,
   pub mergeable_state: Option<String>,
   pub draft: Option<bool>,
+  /// Timestamp when the PR was merged. `None` if the PR was not merged.
+  pub merged_at: Option<String>,
 }
 
 /// Represents a GitHub pull request reference (head or base)
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PullRequestRef {
   pub label: String,
   #[serde(rename = "ref")]
@@ -50,7 +52,7 @@ pub struct PullRequestRef {
 }
 
 /// Represents repository metadata returned as part of a pull request reference
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RepositoryInfo {
   pub full_name: Option<String>,
   pub clone_url: Option<String>,
