@@ -28,6 +28,7 @@ lint-all: ## Run clippy with all features
 test: build ## Run tests
 	cargo nextest run --workspace
 	cd plugins/twig-flow && cargo nextest run
+	cd plugins/twig-prune && cargo nextest run
 
 .PHONY: test-all
 test-all: ## Run tests with all features
@@ -98,6 +99,7 @@ coverage-report: ## Generate LCOV report
 build: ## Build the project
 	cargo build --workspace
 	cd plugins/twig-flow && cargo build
+	cd plugins/twig-prune && cargo build
 
 .PHONY: release
 release: ## Build release version
@@ -126,6 +128,10 @@ install: ## Install twig locally
 .PHONY: install-flow-plugin
 install-flow-plugin: ## Install twig flow plugin
 	cargo install --path plugins/twig-flow
+
+.PHONY: install-prune-plugin
+install-prune-plugin: ## Install twig prune plugin
+	cargo install --path plugins/twig-prune
 
 .PHONY: install-dev-tools
 install-dev-tools: ## Install development tools
