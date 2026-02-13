@@ -68,6 +68,13 @@ pub fn run() -> Result<()> {
     eligible_branches.push(name);
   }
 
+  if eligible_branches.is_empty() {
+    print_info("No eligible local branches found (all are root or current).");
+    return Ok(());
+  }
+
+  print_info(&format!("Found {} eligible local branch(es)", eligible_branches.len()));
+
   // Partition into branches with PRs
   let branches_with_prs: Vec<(String, u32)> = eligible_branches
     .iter()
@@ -83,7 +90,9 @@ pub fn run() -> Result<()> {
   let mut candidates: Vec<Candidate> = Vec::new();
 
   // --- GitHub PR check ---
-  if !branches_with_prs.is_empty() {
+  if branches_with_prs.is_empty() {
+    print_info("No branches with associated GitHub PRs.");
+  } else {
     match twig_gh::create_github_runtime_and_client(home.home_dir()) {
       Ok((rt, gh)) => {
         print_info(&format!(
@@ -127,8 +136,9 @@ pub fn run() -> Result<()> {
     })
     .collect();
 
-  if !branches_with_jira.is_empty()
-    && let Ok(jira_host) = twig_jira::get_jira_host()
+  if branches_with_jira.is_empty() {
+    print_info("No branches with associated Jira issues.");
+  } else if let Ok(jira_host) = twig_jira::get_jira_host()
     && let Ok((jira_rt, jira)) = twig_jira::create_jira_runtime_and_client(home.home_dir(), &jira_host)
   {
     const DONE_STATUSES: &[&str] = &["done", "closed", "resolved"];
@@ -153,6 +163,11 @@ pub fn run() -> Result<()> {
         }
       }
     }
+  } else {
+    print_info(&format!(
+      "Skipping {} branch(es) with Jira issues (JIRA_HOST not set or credentials unavailable).",
+      branches_with_jira.len()
+    ));
   }
 
   if candidates.is_empty() {
