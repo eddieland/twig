@@ -11,31 +11,31 @@ use crate::fixup::commit_collector::CommitCandidate;
 
 /// Scores and sorts commit candidates based on relevance criteria.
 ///
-/// This function implements a weighted scoring algorithm that evaluates commits
-/// based on four main factors:
+/// Uses a **hard partition** approach: branch-unique commits ALWAYS rank above
+/// shared commits, regardless of other factors. Within each tier, commits are
+/// ordered by secondary factors.
 ///
-/// - **Branch Uniqueness (50% weight)**: Commits unique to current branch score higher
-/// - **Recency (25% weight)**: More recent commits score higher
-/// - **Authorship (15% weight)**: Commits by the current user score higher
-/// - **Jira Association (10% weight)**: Commits with matching Jira issues score higher
+/// ## Tier 1: Branch-unique commits (score >= 10.0)
+/// Commits that exist only on the current branch (not reachable from the
+/// parent/root branch). These are almost always the correct fixup targets.
 ///
-/// Branch uniqueness is the dominant factor because when working on a feature
-/// branch, commits that exist only on that branch (not reachable from the
-/// parent/root branch) are almost always the correct fixup targets.
+/// ## Tier 2: Shared commits (score < 10.0)
+/// Commits reachable from both the current and comparison branches.
 ///
-/// After scoring, candidates are sorted in descending order by their total
-/// score, with the most relevant commits appearing first.
+/// ## Secondary factors (within each tier)
+/// - **Recency (50%)**: More recent commits score higher
+/// - **Authorship (30%)**: Commits by the current user score higher
+/// - **Jira Association (20%)**: Commits with matching Jira issues score higher
 ///
-/// # Scoring Algorithm
+/// # Scoring Formula
 ///
-/// The total score is calculated as:
 /// ```text
-/// score = (branch_unique_bonus * 0.50) + (recency_factor * 0.25)
-///       + (authorship_bonus * 0.15) + (jira_bonus * 0.10)
+/// score = tier_bonus + (recency_factor * 0.50) + (authorship_bonus * 0.30)
+///       + (jira_bonus * 0.20)
 /// ```
 ///
 /// Where:
-/// - `branch_unique_bonus` = 1.0 if commit is unique to current branch, 0.0 otherwise
+/// - `tier_bonus` = 10.0 if branch-unique, 0.0 otherwise
 /// - `recency_factor` = (max_days - days_ago) / max_days, clamped to [0.0, 1.0]
 /// - `authorship_bonus` = 1.0 if current user, 0.0 otherwise
 /// - `jira_bonus` = 1.0 if Jira issues match, 0.0 otherwise
@@ -62,26 +62,27 @@ pub fn score_commits(
   for candidate in candidates.iter_mut() {
     let mut score = 0.0;
 
-    // Branch uniqueness score (50% weight) - dominant factor
-    // Commits that exist only on the current branch are highly relevant
-    let branch_unique_score = if candidate.is_branch_unique { 0.50 } else { 0.0 };
-    score += branch_unique_score;
+    // Hard partition: branch-unique commits ALWAYS rank above shared commits.
+    // The tier bonus of 10.0 is unreachable by secondary factors alone (max ~1.0),
+    // guaranteeing that any branch-unique commit outranks any shared commit.
+    let tier_bonus = if candidate.is_branch_unique { 10.0 } else { 0.0 };
+    score += tier_bonus;
 
-    // Recency score (25% weight)
+    // Recency score (50% of secondary weight)
     let days_ago = (now - candidate.date).num_days() as f64;
     let max_days = args.days as f64;
     let recency_score = ((max_days - days_ago) / max_days).max(0.0);
-    score += recency_score * 0.25;
+    score += recency_score * 0.50;
 
-    // Authorship score (15% weight)
-    let authorship_score = if candidate.is_current_user { 0.15 } else { 0.0 };
+    // Authorship score (30% of secondary weight)
+    let authorship_score = if candidate.is_current_user { 0.30 } else { 0.0 };
     score += authorship_score;
 
-    // Jira association score (10% weight)
+    // Jira association score (20% of secondary weight)
     let jira_score = if let (Some(current_issue), Some(commit_issue)) = (&current_jira_issue, &candidate.jira_issue)
       && current_issue == commit_issue
     {
-      0.10
+      0.20
     } else {
       0.0
     };
@@ -90,10 +91,11 @@ pub fn score_commits(
     candidate.score = score;
 
     tracing::trace!(
-      "Scored commit {}: branch_unique={:.2}, recency={:.3}, authorship={:.2}, jira={:.2}, total={:.3}",
+      "Scored commit {}: branch_unique={}, tier={:.1}, recency={:.3}, authorship={:.2}, jira={:.2}, total={:.3}",
       candidate.short_hash,
-      branch_unique_score,
-      recency_score * 0.25,
+      candidate.is_branch_unique,
+      tier_bonus,
+      recency_score * 0.50,
       authorship_score,
       jira_score,
       score
@@ -168,10 +170,9 @@ mod tests {
 
     score_commits(&mut candidates, &args, current_jira_issue).unwrap();
 
-    // Verify scores are calculated
+    // Verify scores are calculated and non-negative
     for candidate in &candidates {
       assert!(candidate.score >= 0.0);
-      assert!(candidate.score <= 1.0);
     }
 
     // Verify sorting (highest score first)
@@ -242,14 +243,14 @@ mod tests {
   }
 
   #[test]
-  fn test_branch_uniqueness_scoring() {
-    // Create candidates: one branch-unique, one not
-    // The branch-unique commit should score higher even if other factors favor the
-    // non-unique commit
+  fn test_branch_uniqueness_hard_partition() {
+    // Create candidates: one branch-unique, one not.
+    // The branch-unique commit should ALWAYS score higher, even when every
+    // other factor favors the non-unique commit (hard partition guarantee).
     let mut candidates = vec![
-      // Branch-unique commit, but older and from different author
+      // Branch-unique commit, but older and from different author, no Jira
       create_test_candidate_full("unique", 5, false, None, true),
-      // Not branch-unique, but recent and from current author with matching Jira
+      // Not branch-unique, but recent, current author, matching Jira
       create_test_candidate_full("shared", 1, true, Some("PROJ-123".to_string()), false),
     ];
 
@@ -265,17 +266,21 @@ mod tests {
     let current_jira_issue = Some("PROJ-123".to_string());
     score_commits(&mut candidates, &args, current_jira_issue).unwrap();
 
-    // The branch-unique commit should rank first despite other factors
-    // Branch-unique gets 0.50 base score, which should dominate
+    // The branch-unique commit must rank first — hard partition means no
+    // combination of secondary factors can overcome the tier bonus.
     assert_eq!(
       candidates[0].short_hash, "unique",
-      "Branch-unique commits should rank first"
+      "Branch-unique commits must always rank above shared commits"
     );
     assert!(
-      candidates[0].score > candidates[1].score,
-      "Branch-unique score {} should be higher than non-unique score {}",
+      candidates[0].score >= 10.0,
+      "Branch-unique score {} should include tier bonus (>= 10.0)",
       candidates[0].score,
-      candidates[1].score
+    );
+    assert!(
+      candidates[1].score < 10.0,
+      "Shared commit score {} should be below tier threshold (< 10.0)",
+      candidates[1].score,
     );
   }
 

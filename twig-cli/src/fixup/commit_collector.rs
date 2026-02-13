@@ -5,6 +5,7 @@
 //! retrieve commit history and extracts relevant metadata for scoring and
 //! selection.
 
+use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -79,6 +80,12 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
     comparison_tip
   );
 
+  // Pre-compute the set of branch-unique OIDs using revwalk.hide().
+  // This is more robust than per-commit graph_descendant_of() checks:
+  // it correctly handles merge commits and complex graph topologies.
+  let branch_unique_oids = compute_branch_unique_oids(&repo, comparison_tip);
+  tracing::debug!("Found {} branch-unique commits", branch_unique_oids.len());
+
   // Calculate the cutoff timestamp for filtering by days
   let since_timestamp = (Utc::now() - Duration::days(args.days as i64)).timestamp();
 
@@ -137,16 +144,9 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
       .as_ref()
       .and_then(|parser| extract_jira_issue_from_message(parser, &message));
 
-    // Determine if this commit is unique to the current branch
-    // A commit is branch-unique if it's NOT reachable from the comparison branch tip
-    // (i.e., the comparison tip is NOT a descendant of this commit, and they're not equal)
-    let is_branch_unique = comparison_tip.is_some_and(|tip| {
-      // The commit is reachable from the comparison tip if:
-      // - The tip is a descendant of the commit (commit is an ancestor of tip), OR
-      // - The commit equals the tip
-      // So branch-unique means: tip is NOT a descendant AND not equal
-      oid != tip && !repo.graph_descendant_of(tip, oid).unwrap_or(true)
-    });
+    // Determine if this commit is unique to the current branch.
+    // Uses the pre-computed set of branch-unique OIDs for O(1) lookup.
+    let is_branch_unique = branch_unique_oids.contains(&oid);
 
     let candidate = CommitCandidate {
       hash,
@@ -237,7 +237,16 @@ fn resolve_comparison_branch(repo: &Repository, repo_path: &Path, current_branch
     }
   }
 
-  // Priority 3: Fallback to origin/main or origin/master
+  // Priority 3: Use origin/HEAD (remote's default branch, set by git clone)
+  if let Ok(reference) = repo.find_reference("refs/remotes/origin/HEAD")
+    && let Some(target) = reference.symbolic_target()
+    && let Some(short_name) = target.strip_prefix("refs/remotes/")
+  {
+    tracing::debug!("Using origin/HEAD -> '{}' as comparison branch", short_name);
+    return Some(short_name.to_string());
+  }
+
+  // Priority 4: Fallback to origin/main or origin/master
   for fallback in &["origin/main", "origin/master"] {
     if repo.find_reference(&format!("refs/remotes/{fallback}")).is_ok() {
       tracing::debug!("Using fallback '{}' as comparison branch", fallback);
@@ -282,6 +291,52 @@ fn get_current_branch_name(repo: &Repository) -> Option<String> {
   } else {
     None
   }
+}
+
+/// Pre-computes the set of commit OIDs that are unique to the current branch.
+///
+/// Uses `revwalk.hide()` to exclude the comparison branch tip and all its
+/// ancestors, leaving only commits that exist on the current branch but not
+/// on the comparison branch. This is more robust than per-commit
+/// `graph_descendant_of()` checks because it correctly handles merge commits
+/// and complex graph topologies.
+///
+/// Returns an empty set if the comparison tip cannot be resolved.
+fn compute_branch_unique_oids(repo: &Repository, comparison_tip: Option<Oid>) -> HashSet<Oid> {
+  let Some(tip) = comparison_tip else {
+    tracing::debug!("No comparison tip available; cannot detect branch-unique commits");
+    return HashSet::new();
+  };
+
+  let head_oid = match repo.head().ok().and_then(|h| h.peel_to_commit().ok()) {
+    Some(commit) => commit.id(),
+    None => {
+      tracing::debug!("Cannot resolve HEAD to a commit");
+      return HashSet::new();
+    }
+  };
+
+  let mut unique_walk = match repo.revwalk() {
+    Ok(walk) => walk,
+    Err(e) => {
+      tracing::debug!("Failed to create revwalk for branch-unique detection: {e}");
+      return HashSet::new();
+    }
+  };
+
+  if let Err(e) = unique_walk.push(head_oid) {
+    tracing::debug!("Failed to push HEAD to branch-unique revwalk: {e}");
+    return HashSet::new();
+  }
+
+  // Hide the comparison tip and all its ancestors. The remaining commits
+  // in the walk are exactly those unique to the current branch.
+  if let Err(e) = unique_walk.hide(tip) {
+    tracing::debug!("Failed to hide comparison tip in branch-unique revwalk: {e}");
+    return HashSet::new();
+  }
+
+  unique_walk.flatten().collect()
 }
 
 #[cfg(test)]
