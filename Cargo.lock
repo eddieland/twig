@@ -3302,6 +3302,7 @@ dependencies = [
  "predicates",
  "twig-core",
  "twig-gh",
+ "twig-jira",
  "twig-test-utils",
 ]
 

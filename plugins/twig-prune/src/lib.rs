@@ -13,11 +13,11 @@ use twig_core::state::RepoState;
 
 use crate::cli::Cli;
 
-/// A local branch matched to a merged PR.
+/// A local branch eligible for pruning.
 struct Candidate {
   branch_name: String,
-  pr_number: u32,
-  pr_title: String,
+  /// Human-readable reason, e.g. "PR #42 (Add feature)" or "PROJ-123 (Done)".
+  description: String,
 }
 
 /// Execute the plugin with the provided command-line arguments.
@@ -49,9 +49,9 @@ pub fn run() -> Result<()> {
   let state = RepoState::load(repo_path).unwrap_or_default();
   let root_branches: HashSet<String> = state.get_root_branches().into_iter().collect();
 
-  // Collect local branches that have an associated PR in twig state
+  // Collect local branch names eligible for pruning (not current, not root)
   let branches = repo.branches(Some(BranchType::Local))?;
-  let mut branches_with_prs: Vec<(String, u32)> = Vec::new();
+  let mut eligible_branches: Vec<String> = Vec::new();
 
   for branch_result in branches {
     let (branch, _) = branch_result?;
@@ -65,61 +65,108 @@ pub fn run() -> Result<()> {
       continue;
     }
 
-    if let Some(metadata) = state.get_branch_metadata(&name)
-      && let Some(pr_number) = metadata.github_pr
-    {
-      branches_with_prs.push((name, pr_number));
+    eligible_branches.push(name);
+  }
+
+  // Partition into branches with PRs
+  let branches_with_prs: Vec<(String, u32)> = eligible_branches
+    .iter()
+    .filter_map(|name| {
+      state
+        .get_branch_metadata(name)
+        .and_then(|m| m.github_pr)
+        .map(|pr| (name.clone(), pr))
+    })
+    .collect();
+
+  let home = directories::BaseDirs::new().ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+  let mut candidates: Vec<Candidate> = Vec::new();
+
+  // --- GitHub PR check ---
+  if !branches_with_prs.is_empty() {
+    match twig_gh::create_github_runtime_and_client(home.home_dir()) {
+      Ok((rt, gh)) => {
+        print_info(&format!(
+          "Checking {} PR(s) for {}",
+          branches_with_prs.len(),
+          github_repo.full_name()
+        ));
+
+        for (branch_name, pr_number) in &branches_with_prs {
+          match rt.block_on(gh.get_pull_request(&github_repo.owner, &github_repo.repo, *pr_number)) {
+            Ok(pr) if pr.merged_at.is_some() => {
+              candidates.push(Candidate {
+                branch_name: branch_name.clone(),
+                description: format!("PR #{} ({})", pr.number, pr.title),
+              });
+            }
+            Ok(_) => {} // PR exists but not merged
+            Err(e) => {
+              print_warning(&format!("Could not fetch PR #{pr_number} for '{branch_name}': {e}"));
+            }
+          }
+        }
+      }
+      Err(e) => {
+        print_warning(&format!("Could not create GitHub client, skipping PR checks: {e}"));
+      }
     }
   }
 
-  if branches_with_prs.is_empty() {
-    print_info("No local branches with associated PRs found.");
-    return Ok(());
-  }
+  // --- Jira issue check ---
+  let matched: HashSet<&str> = candidates.iter().map(|c| c.branch_name.as_str()).collect();
 
-  // Create GitHub client and check each PR
-  let home = directories::BaseDirs::new().ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
-  let (rt, gh) = twig_gh::create_github_runtime_and_client(home.home_dir())?;
+  let branches_with_jira: Vec<(String, String)> = eligible_branches
+    .iter()
+    .filter(|name| !matched.contains(name.as_str()))
+    .filter_map(|name| {
+      state
+        .get_branch_metadata(name)
+        .and_then(|m| m.jira_issue.clone())
+        .map(|issue| (name.clone(), issue))
+    })
+    .collect();
 
-  print_info(&format!(
-    "Checking {} PR(s) for {}",
-    branches_with_prs.len(),
-    github_repo.full_name()
-  ));
+  if !branches_with_jira.is_empty()
+    && let Ok(jira_host) = twig_jira::get_jira_host()
+    && let Ok((jira_rt, jira)) = twig_jira::create_jira_runtime_and_client(home.home_dir(), &jira_host)
+  {
+    const DONE_STATUSES: &[&str] = &["done", "closed", "resolved"];
 
-  let mut candidates: Vec<Candidate> = Vec::new();
+    print_info(&format!("Checking {} Jira issue(s)", branches_with_jira.len()));
 
-  for (branch_name, pr_number) in &branches_with_prs {
-    match rt.block_on(gh.get_pull_request(&github_repo.owner, &github_repo.repo, *pr_number)) {
-      Ok(pr) if pr.merged_at.is_some() => {
-        candidates.push(Candidate {
-          branch_name: branch_name.clone(),
-          pr_number: pr.number,
-          pr_title: pr.title,
-        });
-      }
-      Ok(_) => {} // PR exists but not merged
-      Err(e) => {
-        print_warning(&format!("Could not fetch PR #{pr_number} for '{branch_name}': {e}"));
+    for (branch_name, issue_key) in &branches_with_jira {
+      match jira_rt.block_on(jira.get_issue(issue_key)) {
+        Ok(issue) => {
+          let status = issue.fields.status.name.to_lowercase();
+          if DONE_STATUSES.contains(&status.as_str()) {
+            candidates.push(Candidate {
+              branch_name: branch_name.clone(),
+              description: format!("{} ({})", issue_key, issue.fields.status.name),
+            });
+          }
+        }
+        Err(e) => {
+          print_warning(&format!(
+            "Could not fetch Jira issue {issue_key} for '{branch_name}': {e}"
+          ));
+        }
       }
     }
   }
 
   if candidates.is_empty() {
-    print_info("No local branches with merged PRs found.");
+    print_info("No local branches with merged PRs or done Jira issues found.");
     return Ok(());
   }
 
   candidates.sort_by(|a, b| a.branch_name.cmp(&b.branch_name));
 
-  print_info(&format!("Found {} branch(es) with merged PRs:\n", candidates.len()));
+  print_info(&format!("Found {} branch(es) to prune:\n", candidates.len()));
 
   if cli.dry_run {
     for candidate in &candidates {
-      println!(
-        "  {} \u{2014} PR #{} ({})",
-        candidate.branch_name, candidate.pr_number, candidate.pr_title
-      );
+      println!("  {} \u{2014} {}", candidate.branch_name, candidate.description);
     }
     println!();
     print_info("Dry run \u{2014} no branches were deleted.");
@@ -130,10 +177,7 @@ pub fn run() -> Result<()> {
   let mut skipped_count: u32 = 0;
 
   for candidate in &candidates {
-    println!(
-      "  {} \u{2014} PR #{} ({})",
-      candidate.branch_name, candidate.pr_number, candidate.pr_title
-    );
+    println!("  {} \u{2014} {}", candidate.branch_name, candidate.description);
 
     let should_delete = if cli.skip_prompts {
       true

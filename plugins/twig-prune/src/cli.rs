@@ -4,7 +4,7 @@ use twig_core::output::cli_styles;
 #[derive(Parser, Debug)]
 #[command(
   name = "twig-prune",
-  about = "Delete local branches whose GitHub PRs have been merged",
+  about = "Delete local branches whose GitHub PRs have been merged or Jira issues are done",
   styles = cli_styles(),
 )]
 pub struct Cli {

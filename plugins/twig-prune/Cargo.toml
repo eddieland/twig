@@ -6,7 +6,7 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Twig plugin to delete local branches whose GitHub PRs have been merged"
+description = "Twig plugin to delete local branches whose GitHub PRs have been merged or Jira issues are done"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -16,6 +16,7 @@ directories = { workspace = true }
 git2 = { workspace = true }
 twig-core = { path = "../../twig-core" }
 twig-gh = { path = "../../twig-gh" }
+twig-jira = { path = "../../twig-jira" }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }

@@ -9,7 +9,7 @@ fn help_output_shows_usage() {
     .assert()
     .success()
     .stdout(predicate::str::contains(
-      "Delete local branches whose GitHub PRs have been merged",
+      "Delete local branches whose GitHub PRs have been merged or Jira issues are done",
     ))
     .stdout(predicate::str::contains("--yes-i-really-want-to-skip-prompts"))
     .stdout(predicate::str::contains("--dry-run"));
