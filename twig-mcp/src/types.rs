@@ -52,6 +52,13 @@ pub struct ToolError {
   pub hint: Option<String>,
 }
 
+impl ToolError {
+  /// Convert this error into a tool handler result for direct `return` from handlers.
+  pub fn into_result(self) -> Result<CallToolResult, rmcp::ErrorData> {
+    Ok(ToolResponse::<()>::Error { error: self }.to_call_tool_result())
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Local state responses
 // ---------------------------------------------------------------------------

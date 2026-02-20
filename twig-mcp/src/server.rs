@@ -42,7 +42,7 @@ impl TwigMcpServer {
   async fn get_current_branch(&self) -> Result<CallToolResult, McpError> {
     let repo_path = match self.context.require_repo() {
       Ok(p) => p,
-      Err(e) => return Ok(ToolResponse::<BranchMetadataResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
 
     let branch_name = match get_current_branch_name(repo_path) {
@@ -86,11 +86,11 @@ impl TwigMcpServer {
   async fn get_branch_metadata(&self, params: Parameters<BranchMetadataParams>) -> Result<CallToolResult, McpError> {
     let _repo_path = match self.context.require_repo() {
       Ok(p) => p,
-      Err(e) => return Ok(ToolResponse::<BranchMetadataResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
     let state = match self.context.require_repo_state() {
       Ok(s) => s,
-      Err(e) => return Ok(ToolResponse::<BranchMetadataResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
 
     let branch_name = &params.0.branch;
@@ -126,7 +126,7 @@ impl TwigMcpServer {
   async fn get_branch_tree(&self, params: Parameters<BranchTreeParams>) -> Result<CallToolResult, McpError> {
     let repo_path = match self.context.require_repo() {
       Ok(p) => p,
-      Err(e) => return Ok(ToolResponse::<BranchTreeResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
 
     let repo = match git2::Repository::open(repo_path) {
@@ -166,11 +166,15 @@ impl TwigMcpServer {
     let root_name = if let Some(ref branch) = params.0.branch {
       branch.clone()
     } else {
-      graph
-        .root_candidates()
-        .first()
-        .map(|b| b.as_str().to_string())
-        .unwrap_or_default()
+      match graph.root_candidates().first() {
+        Some(b) => b.as_str().to_string(),
+        None => {
+          return Ok(
+            ToolResponse::<BranchTreeResponse>::err("not_found", "No root branch found in repository", None)
+              .to_call_tool_result(),
+          );
+        }
+      }
     };
 
     let root_branch_name = BranchName::from(root_name.as_str());
@@ -195,11 +199,11 @@ impl TwigMcpServer {
   async fn get_branch_stack(&self, params: Parameters<BranchStackParams>) -> Result<CallToolResult, McpError> {
     let repo_path = match self.context.require_repo() {
       Ok(p) => p,
-      Err(e) => return Ok(ToolResponse::<BranchStackResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
     let state = match self.context.require_repo_state() {
       Ok(s) => s,
-      Err(e) => return Ok(ToolResponse::<BranchStackResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
 
     let start_branch = match &params.0.branch {
@@ -258,11 +262,11 @@ impl TwigMcpServer {
   async fn list_branches(&self) -> Result<CallToolResult, McpError> {
     let _repo_path = match self.context.require_repo() {
       Ok(p) => p,
-      Err(e) => return Ok(ToolResponse::<ListBranchesResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
     let state = match self.context.require_repo_state() {
       Ok(s) => s,
-      Err(e) => return Ok(ToolResponse::<ListBranchesResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
 
     let branches: Vec<BranchMetadataResponse> = state
@@ -317,11 +321,11 @@ impl TwigMcpServer {
   async fn get_worktrees(&self) -> Result<CallToolResult, McpError> {
     let _repo_path = match self.context.require_repo() {
       Ok(p) => p,
-      Err(e) => return Ok(ToolResponse::<ListWorktreesResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
     let state = match self.context.require_repo_state() {
       Ok(s) => s,
-      Err(e) => return Ok(ToolResponse::<ListWorktreesResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
 
     let worktrees: Vec<WorktreeInfo> = state
@@ -348,16 +352,16 @@ impl TwigMcpServer {
   async fn get_pull_request(&self, params: Parameters<GetPullRequestParams>) -> Result<CallToolResult, McpError> {
     let gh = match self.context.get_github_client().await {
       Ok(c) => c,
-      Err(e) => return Ok(ToolResponse::<PullRequestResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
     let gh_repo = match self.context.get_github_repo() {
       Ok(r) => r,
-      Err(e) => return Ok(ToolResponse::<PullRequestResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
 
     let pr_number = match resolve_pr_number(&self.context, params.0.pr_number) {
       Ok(n) => n,
-      Err(e) => return Ok(ToolResponse::<PullRequestResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
 
     match gh.get_pull_request(&gh_repo.owner, &gh_repo.repo, pr_number).await {
@@ -376,16 +380,16 @@ impl TwigMcpServer {
   async fn get_pr_status(&self, params: Parameters<GetPrStatusParams>) -> Result<CallToolResult, McpError> {
     let gh = match self.context.get_github_client().await {
       Ok(c) => c,
-      Err(e) => return Ok(ToolResponse::<PrStatusResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
     let gh_repo = match self.context.get_github_repo() {
       Ok(r) => r,
-      Err(e) => return Ok(ToolResponse::<PrStatusResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
 
     let pr_number = match resolve_pr_number(&self.context, params.0.pr_number) {
       Ok(n) => n,
-      Err(e) => return Ok(ToolResponse::<PrStatusResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
 
     let status = match gh.get_pr_status(&gh_repo.owner, &gh_repo.repo, pr_number).await {
@@ -434,11 +438,11 @@ impl TwigMcpServer {
   async fn list_pull_requests(&self, params: Parameters<ListPullRequestsParams>) -> Result<CallToolResult, McpError> {
     let gh = match self.context.get_github_client().await {
       Ok(c) => c,
-      Err(e) => return Ok(ToolResponse::<ListPullRequestsResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
     let gh_repo = match self.context.get_github_repo() {
       Ok(r) => r,
-      Err(e) => return Ok(ToolResponse::<ListPullRequestsResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
 
     let state = params.0.state.as_deref();
@@ -465,12 +469,12 @@ impl TwigMcpServer {
   async fn get_jira_issue(&self, params: Parameters<GetJiraIssueParams>) -> Result<CallToolResult, McpError> {
     let jira = match self.context.get_jira_client().await {
       Ok(c) => c,
-      Err(e) => return Ok(ToolResponse::<JiraIssueResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
 
     let issue_key = match resolve_jira_key(&self.context, params.0.issue_key) {
       Ok(k) => k,
-      Err(e) => return Ok(ToolResponse::<JiraIssueResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
 
     match jira.get_issue(&issue_key).await {
@@ -489,7 +493,7 @@ impl TwigMcpServer {
   async fn list_jira_issues(&self, params: Parameters<ListJiraIssuesParams>) -> Result<CallToolResult, McpError> {
     let jira = match self.context.get_jira_client().await {
       Ok(c) => c,
-      Err(e) => return Ok(ToolResponse::<ListJiraIssuesResponse>::Error { error: e }.to_call_tool_result()),
+      Err(e) => return e.into_result(),
     };
 
     let p = &params.0;
