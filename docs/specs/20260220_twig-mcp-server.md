@@ -154,8 +154,9 @@ twig-core = { path = "../twig-core" }
 twig-gh = { path = "../twig-gh" }
 twig-jira = { path = "../twig-jira" }
 
-# MCP SDK
+# MCP SDK (official Rust SDK: github.com/modelcontextprotocol/rust-sdk)
 rmcp = { version = "0.15", features = ["server", "transport-io"] }
+schemars = "0.8"   # JSON Schema generation for tool parameters
 
 # Async runtime (rmcp requires tokio)
 tokio = { workspace = true }
@@ -174,43 +175,50 @@ tracing-subscriber = { workspace = true }
 
 ### Tool implementation pattern
 
-Using `rmcp` macros, each tool is a method on the server struct:
+Using `rmcp` macros, each tool is a method on the server struct. The `#[tool(tool_box)]` macro is applied to both the impl block (defining tools) and the `ServerHandler` impl (wiring up protocol handling):
 
 ```rust
-use rmcp::{ServerHandler, tool, tool_router, tool_handler, model::*};
+use rmcp::{ServerHandler, ServiceExt, model::*, schemars, tool, transport::stdio};
 
-#[derive(Clone)]
-pub struct TwigMcpServer {
-    context: Arc<ServerContext>,
-    tool_router: ToolRouter<Self>,
+/// Parameter types use schemars for automatic JSON Schema generation.
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct BranchMetadataParams {
+    /// The branch name to look up
+    #[schemars(description = "Branch name (defaults to current branch if omitted)")]
+    pub branch: Option<String>,
 }
 
-#[tool_router]
+#[derive(Debug, Clone)]
+pub struct TwigMcpServer {
+    context: Arc<ServerContext>,
+}
+
+/// All tools are annotated with read_only_hint = true since this is a
+/// read-only server. The idempotent_hint tells clients that repeated
+/// calls with the same params produce the same result.
+#[tool(tool_box)]
 impl TwigMcpServer {
     pub fn new(context: ServerContext) -> Self {
-        let context = Arc::new(context);
-        Self {
-            context,
-            tool_router: Self::tool_router(),
-        }
+        Self { context: Arc::new(context) }
     }
 
-    #[tool(description = "Get the current git branch and its linked Jira issue and GitHub PR")]
-    async fn get_current_branch(&self) -> Result<CallToolResult, McpError> {
-        let branch = twig_core::git::current_branch()
-            .map_err(|e| McpError::internal_error(e.to_string()))?;
-
-        let Some(branch_name) = branch else {
-            return Ok(CallToolResult::success(vec![
-                Content::text("Not on any branch (detached HEAD state)")
-            ]));
+    #[tool(
+        description = "Get the current git branch and its linked Jira issue and GitHub PR",
+        annotations(read_only_hint = true, idempotent_hint = true)
+    )]
+    async fn get_current_branch(&self) -> String {
+        let branch = twig_core::git::current_branch();
+        let Ok(Some(branch_name)) = branch else {
+            return "Not on any branch (detached HEAD state)".into();
         };
 
-        // Load fresh state
-        let state = self.context.load_repo_state()?;
-        let metadata = state.branches.get(&branch_name);
+        // Load fresh state on every call
+        let state = self.context.load_repo_state();
+        let Ok(state) = state else {
+            return format!("Branch: {branch_name}\n(could not load twig state)");
+        };
 
-        // Format response
+        let metadata = state.branches.get(&branch_name);
         let mut lines = vec![format!("Branch: {branch_name}")];
         if let Some(meta) = metadata {
             if let Some(ref issue) = meta.jira_issue {
@@ -220,19 +228,37 @@ impl TwigMcpServer {
                 lines.push(format!("PR: #{pr}"));
             }
         }
-
-        Ok(CallToolResult::success(vec![Content::text(lines.join("\n"))]))
+        lines.join("\n")
     }
 
-    // ... more tools
+    #[tool(
+        description = "Get metadata for a specific branch (Jira issue, PR number, creation date)",
+        annotations(read_only_hint = true, idempotent_hint = true)
+    )]
+    async fn get_branch_metadata(
+        &self,
+        #[tool(aggr)] params: BranchMetadataParams,
+    ) -> String {
+        // ... resolve branch name, load state, return metadata
+        todo!()
+    }
+
+    // ... more tools follow the same pattern
 }
 
-#[tool_handler]
+#[tool(tool_box)]
 impl ServerHandler for TwigMcpServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new("twig-mcp", env!("CARGO_PKG_VERSION"))
-            .with_instructions("Twig MCP server. Provides read-only access to branch metadata, Jira issues, and GitHub PRs for the current repository.")
-            .enable_tools()
+        ServerInfo {
+            instructions: Some(
+                "Twig MCP server. Provides read-only access to branch metadata, \
+                 Jira issues, and GitHub PRs for the current repository.".into()
+            ),
+            capabilities: ServerCapabilities::builder()
+                .enable_tools()
+                .build(),
+            ..Default::default()
+        }
     }
 }
 ```
