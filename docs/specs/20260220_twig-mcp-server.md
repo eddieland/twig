@@ -19,7 +19,9 @@
 - **Credential reuse.** Auth uses the same `~/.netrc` credentials that `twig` already relies on. No new auth configuration.
 - **Stdio transport.** The server communicates over stdin/stdout using JSON-RPC 2.0 (MCP standard). This is the default transport for local MCP servers in Claude Code and Claude Desktop.
 - **Workspace lints.** `twig-mcp` inherits the workspace clippy lints (no unwrap, no panic, no print_stdout/stderr, etc.). All user-facing output goes through the MCP protocol, never raw stdout.
-- **Graceful degradation.** If Jira or GitHub credentials are missing, those tools should still be listed but return clear error messages when called. The server should not crash on missing config.
+- **Structured responses.** Every tool returns a JSON-serialized `ToolResponse<T>` envelope — either `{ "status": "ok", "data": ... }` or `{ "status": "error", "error": { "code", "message", "hint?" } }`. This lets MCP clients reliably parse and reuse data instead of ad-hoc text parsing.
+- **Consistent error shape.** All errors use the same `ToolError` struct with a machine-readable `code`, a human-readable `message`, and an optional `hint`. See the _Error codes_ table for the standardized code vocabulary.
+- **Graceful degradation.** If Jira or GitHub credentials are missing, or the server is started outside a repo, all tools are still listed. Each tool handles missing context individually — returning structured errors with actionable hints — rather than crashing. See the _Degraded Context Behavior_ section for the full context dependency matrix.
 
 ## Context: MCP Protocol Primitives
 
@@ -35,34 +37,34 @@ For v1, **tools are the main surface area**. Resources and prompts are stretch g
 
 ### 1. Tools (P0 — core surface area)
 
-Each tool receives JSON parameters and returns structured text content. The AI assistant calls these tools as needed during conversation.
+Each tool receives JSON parameters and returns structured JSON content. The AI assistant calls these tools as needed during conversation.
 
 #### Local state tools (no network, fast)
 
 | Tool | Description | Parameters | Returns |
 |------|-------------|------------|---------|
-| `get_current_branch` | Current git branch name and associated metadata | _none_ | Branch name, linked Jira issue key (if any), linked PR number (if any) |
-| `get_branch_metadata` | Metadata for a specific branch | `branch: string` | Branch name, Jira issue, PR number, creation date |
-| `get_branch_tree` | Dependency tree for the current repo | `branch?: string` (optional root) | Text rendering of the branch dependency graph (same format as `twig tree`) |
-| `get_branch_stack` | Ancestor chain from a branch to its root | `branch?: string` (defaults to current) | Ordered list: branch → parent → ... → root, with metadata per branch |
-| `list_branches` | All twig-tracked branches in current repo | _none_ | List of branch names with their Jira/PR associations |
-| `list_repositories` | All twig-registered repositories | _none_ | List of repo names and paths from the global registry |
-| `get_worktrees` | Active worktrees for current repo | _none_ | List of worktree name, path, branch |
+| `get_current_branch` | Current git branch name and associated metadata | _none_ | `BranchMetadataResponse` |
+| `get_branch_metadata` | Metadata for a specific branch | `branch: string` | `BranchMetadataResponse` |
+| `get_branch_tree` | Dependency tree for the current repo | `branch?: string` (optional root) | `BranchTreeResponse` |
+| `get_branch_stack` | Ancestor chain from a branch to its root | `branch?: string` (defaults to current) | `BranchStackResponse` |
+| `list_branches` | All twig-tracked branches in current repo | _none_ | `ListBranchesResponse` |
+| `list_repositories` | All twig-registered repositories | _none_ | `ListRepositoriesResponse` |
+| `get_worktrees` | Active worktrees for current repo | _none_ | `ListWorktreesResponse` |
 
 #### GitHub tools (network, requires credentials)
 
 | Tool | Description | Parameters | Returns |
 |------|-------------|------------|---------|
-| `get_pull_request` | Full PR details | `pr_number?: u32` (defaults to current branch's PR) | Title, state, author, base/head, draft status, mergeable, created/updated timestamps |
-| `get_pr_status` | PR with reviews and CI checks | `pr_number?: u32` (defaults to current branch's PR) | PR details + review states + check run results |
-| `list_pull_requests` | Open PRs for current repo | `state?: string` (default "open") | List of PRs with number, title, author, state |
+| `get_pull_request` | Full PR details | `pr_number?: u32` (defaults to current branch's PR) | `PullRequestResponse` |
+| `get_pr_status` | PR with reviews and CI checks | `pr_number?: u32` (defaults to current branch's PR) | `PrStatusResponse` |
+| `list_pull_requests` | Open PRs for current repo | `state?: string` (default "open") | `ListPullRequestsResponse` |
 
 #### Jira tools (network, requires credentials)
 
 | Tool | Description | Parameters | Returns |
 |------|-------------|------------|---------|
-| `get_jira_issue` | Full issue details | `issue_key?: string` (defaults to current branch's issue) | Key, summary, description, status, assignee |
-| `list_jira_issues` | Issues for a project | `project: string`, `status?: string`, `assignee?: string` | List of issues with key, summary, status |
+| `get_jira_issue` | Full issue details | `issue_key?: string` (defaults to current branch's issue) | `JiraIssueResponse` |
+| `list_jira_issues` | Issues for a project | `project: string`, `status?: string`, `assignee?: string` | `ListJiraIssuesResponse` |
 
 ### 2. Resources (P2 — stretch goal)
 
@@ -90,6 +92,7 @@ twig/
 │   └── src/
 │       ├── main.rs           # Entry point: init tracing, detect repo, start MCP server
 │       ├── server.rs         # TwigMcpServer struct, ServerHandler impl
+│       ├── types.rs          # ToolResponse<T>, ToolError, all response/error structs
 │       ├── tools/
 │       │   ├── mod.rs
 │       │   ├── local.rs      # get_current_branch, get_branch_tree, etc.
@@ -207,28 +210,42 @@ impl TwigMcpServer {
         annotations(read_only_hint = true, idempotent_hint = true)
     )]
     async fn get_current_branch(&self) -> String {
+        let repo_path = self.context.require_repo()?;
+
         let branch = twig_core::git::current_branch();
         let Ok(Some(branch_name)) = branch else {
-            return "Not on any branch (detached HEAD state)".into();
+            return serde_json::to_string(&ToolResponse::<BranchMetadataResponse>::Error {
+                error: ToolError {
+                    code: "not_found".into(),
+                    message: "Not on any branch (detached HEAD state)".into(),
+                    hint: None,
+                },
+            })?;
         };
 
-        // Load fresh state on every call
-        let state = self.context.load_repo_state();
-        let Ok(state) = state else {
-            return format!("Branch: {branch_name}\n(could not load twig state)");
-        };
+        // Load fresh state on every call — degrade gracefully if missing
+        let (jira_issue, pr_number, parent_branch) =
+            match self.context.load_repo_state() {
+                Ok(state) => {
+                    let meta = state.branches.get(&branch_name);
+                    (
+                        meta.and_then(|m| m.jira_issue.clone()),
+                        meta.and_then(|m| m.github_pr),
+                        meta.and_then(|m| m.parent.clone()),
+                    )
+                }
+                Err(_) => (None, None, None),
+            };
 
-        let metadata = state.branches.get(&branch_name);
-        let mut lines = vec![format!("Branch: {branch_name}")];
-        if let Some(meta) = metadata {
-            if let Some(ref issue) = meta.jira_issue {
-                lines.push(format!("Jira: {issue}"));
-            }
-            if let Some(pr) = meta.github_pr {
-                lines.push(format!("PR: #{pr}"));
-            }
-        }
-        lines.join("\n")
+        serde_json::to_string(&ToolResponse::Ok {
+            data: BranchMetadataResponse {
+                branch: branch_name,
+                jira_issue,
+                pr_number,
+                parent_branch,
+                created_at: None,
+            },
+        })?
     }
 
     #[tool(
@@ -288,6 +305,232 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 ```
+
+## Structured Response Types
+
+All tools return JSON-serialized response structs rather than ad-hoc formatted strings. This allows MCP clients to reliably parse and reuse data without text parsing. Responses are serialized to JSON and returned as MCP `text` content.
+
+### Response structs
+
+```rust
+/// Standard wrapper for all tool responses. Every tool returns either
+/// a typed `data` payload or a structured error.
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+#[serde(tag = "status")]
+pub enum ToolResponse<T: serde::Serialize> {
+    #[serde(rename = "ok")]
+    Ok { data: T },
+    #[serde(rename = "error")]
+    Error { error: ToolError },
+}
+
+/// Consistent error shape returned by all tools.
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct ToolError {
+    /// Machine-readable error code (e.g., "no_repo", "credentials_missing",
+    /// "not_found", "network_error", "invalid_params").
+    pub code: String,
+    /// Human-readable error description.
+    pub message: String,
+    /// Optional actionable suggestion for resolving the error.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
+}
+
+/// Response for `get_current_branch` and `get_branch_metadata`.
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct BranchMetadataResponse {
+    pub branch: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jira_issue: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pr_number: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_branch: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+}
+
+/// Response for `get_branch_tree`.
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct BranchTreeResponse {
+    pub root: String,
+    pub tree_text: String,
+    pub branches: Vec<BranchTreeNode>,
+}
+
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct BranchTreeNode {
+    pub branch: String,
+    pub children: Vec<BranchTreeNode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jira_issue: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pr_number: Option<u32>,
+}
+
+/// Response for `get_branch_stack`.
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct BranchStackResponse {
+    /// Ordered from the queried branch (index 0) up to the root.
+    pub stack: Vec<BranchMetadataResponse>,
+}
+
+/// Response for `list_branches`.
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct ListBranchesResponse {
+    pub branches: Vec<BranchMetadataResponse>,
+}
+
+/// Response for `list_repositories`.
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct ListRepositoriesResponse {
+    pub repositories: Vec<RepositoryInfo>,
+}
+
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct RepositoryInfo {
+    pub name: String,
+    pub path: String,
+}
+
+/// Response for `get_worktrees`.
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct ListWorktreesResponse {
+    pub worktrees: Vec<WorktreeInfo>,
+}
+
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct WorktreeInfo {
+    pub name: String,
+    pub path: String,
+    pub branch: String,
+}
+
+/// Response for `get_pull_request`.
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct PullRequestResponse {
+    pub number: u32,
+    pub title: String,
+    pub state: String,
+    pub author: String,
+    pub base: String,
+    pub head: String,
+    pub draft: bool,
+    pub mergeable: Option<bool>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Response for `get_pr_status`.
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct PrStatusResponse {
+    pub pull_request: PullRequestResponse,
+    pub reviews: Vec<ReviewInfo>,
+    pub checks: Vec<CheckRunInfo>,
+}
+
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct ReviewInfo {
+    pub author: String,
+    pub state: String,
+}
+
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct CheckRunInfo {
+    pub name: String,
+    pub status: String,
+    pub conclusion: Option<String>,
+}
+
+/// Response for `list_pull_requests`.
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct ListPullRequestsResponse {
+    pub pull_requests: Vec<PullRequestResponse>,
+}
+
+/// Response for `get_jira_issue`.
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct JiraIssueResponse {
+    pub key: String,
+    pub summary: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assignee: Option<String>,
+}
+
+/// Response for `list_jira_issues`.
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct ListJiraIssuesResponse {
+    pub issues: Vec<JiraIssueResponse>,
+}
+```
+
+### Error codes
+
+All tools use the `ToolError` struct with the following standardized error codes:
+
+| Code | Meaning | Typical hint |
+|------|---------|-------------|
+| `no_repo` | twig-mcp was started outside a git repository, or the repo was deleted | "Run twig-mcp from within a git repository, or pass `--repo <path>`." |
+| `no_twig_state` | Repository exists but has no `.twig/state.json` | "Run `twig init` in this repository first." |
+| `credentials_missing` | `~/.netrc` does not contain credentials for the required service | "Add credentials for {host} to `~/.netrc`. See `twig auth --help`." |
+| `not_found` | The requested branch, PR, or issue does not exist | (varies) |
+| `invalid_params` | The caller provided invalid or missing parameters | (varies, describes the specific validation failure) |
+| `network_error` | A request to GitHub or Jira failed due to connectivity or HTTP error | "Check your network connection. HTTP status: {status}." |
+| `rate_limited` | GitHub or Jira API rate limit exceeded | "Rate limited by {service}. Retry after {retry_after}." |
+| `internal` | Unexpected error within twig-mcp | "This is a bug. Please report it." |
+
+When a tool encounters an error, it returns `ToolResponse::Error` with the `is_error: true` flag set on the MCP `CallToolResult`, so that MCP clients can distinguish success from failure without inspecting the payload.
+
+## Degraded Context Behavior
+
+`twig-mcp` may be started in environments where some context is unavailable — no git repo, no twig state, missing credentials, etc. Rather than failing to start, the server always starts and lists all tools. Each tool handles missing context individually according to the matrix below.
+
+### Context dependency matrix
+
+| Tool | Requires repo? | Requires twig state? | Requires GitHub creds? | Requires Jira creds? |
+|------|:---:|:---:|:---:|:---:|
+| `get_current_branch` | Yes | Partial (degrades) | No | No |
+| `get_branch_metadata` | Yes | Yes | No | No |
+| `get_branch_tree` | Yes | Yes | No | No |
+| `get_branch_stack` | Yes | Yes | No | No |
+| `list_branches` | Yes | Yes | No | No |
+| `list_repositories` | No | No | No | No |
+| `get_worktrees` | Yes | Yes | No | No |
+| `get_pull_request` | Partial (needs repo for default PR) | Partial (needs state for default PR) | Yes | No |
+| `get_pr_status` | Partial (needs repo for default PR) | Partial (needs state for default PR) | Yes | No |
+| `list_pull_requests` | Yes (needs remote URL) | No | Yes | No |
+| `get_jira_issue` | Partial (needs state for default issue) | Partial (needs state for default issue) | No | Yes |
+| `list_jira_issues` | No | No | No | Yes |
+
+**Legend:**
+- **Yes** — tool returns `ToolError` with the appropriate code if this context is missing.
+- **Partial (degrades)** — tool still works but with reduced information. For example, `get_current_branch` without twig state returns just the branch name without Jira/PR associations; `get_pull_request` with explicit `pr_number` works without a repo context.
+- **No** — tool does not need this context at all.
+
+### Behavior by context scenario
+
+**No git repository (started outside a repo, no `--repo` flag):**
+- `list_repositories` and `list_jira_issues` (with explicit `project`) work normally.
+- `get_pull_request` and `get_pr_status` work if `pr_number` is provided explicitly (repo owner/name inferred from explicit params or returns error).
+- All other tools return `ToolError { code: "no_repo", ... }`.
+
+**Repository exists but no `.twig/state.json`:**
+- `get_current_branch` returns the branch name only (no Jira/PR metadata).
+- `list_repositories`, `get_worktrees` work normally.
+- GitHub tools with explicit `pr_number` work normally.
+- Tools that need branch metadata return `ToolError { code: "no_twig_state", ... }`.
+
+**Missing GitHub credentials:**
+- All local and Jira tools work normally.
+- GitHub tools return `ToolError { code: "credentials_missing", ... }` with a hint to configure `~/.netrc`.
+
+**Missing Jira credentials:**
+- All local and GitHub tools work normally.
+- Jira tools return `ToolError { code: "credentials_missing", ... }` with a hint to configure `~/.netrc`.
 
 ## User Configuration
 
@@ -357,7 +600,7 @@ The binary name `twig-mcp` follows the existing plugin naming convention (`twig-
 
 | Priority | Task | Definition of Done | Notes | Status |
 | -------- | ---- | ------------------ | ----- | ------ |
-| P0 | Scaffold `twig-mcp` crate | Cargo.toml with correct dependencies, added to workspace members, `main.rs` compiles and starts an empty MCP server over stdio | Use rmcp with `server` + `transport-io` features. Verify `cargo build -p twig-mcp` succeeds. | |
+| P0 | Scaffold `twig-mcp` crate | Cargo.toml with correct dependencies, added to workspace members, `main.rs` compiles and starts an empty MCP server over stdio. Includes `types.rs` with `ToolResponse<T>`, `ToolError`, and all response structs. | Use rmcp with `server` + `transport-io` features. Verify `cargo build -p twig-mcp` succeeds. | |
 | P0 | Implement `get_current_branch` tool | Returns branch name + linked Jira/PR from RepoState | First tool — validates the full rmcp macro pipeline works end-to-end. | |
 | P0 | Implement `get_branch_metadata` tool | Given a branch name, returns its metadata from RepoState | | |
 | P0 | Implement `get_branch_tree` tool | Returns text rendering of the dependency tree | Reuse `twig_core::git::graph` and `renderer` modules. Need to check if renderer can output to a String rather than stdout. | |
