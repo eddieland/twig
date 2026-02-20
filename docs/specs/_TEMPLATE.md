@@ -14,24 +14,25 @@
 ## Target Capabilities
 
 1. {{First major capability or outcome with a short description.}}
-2. {{Second capability; continue enumerating as needed.}}
-3. {{Optional additional capabilities or stretch goals.}}
+1. {{Second capability; continue enumerating as needed.}}
+1. {{Optional additional capabilities or stretch goals.}}
 
 ## Subagent Execution Plan
 
-The following backlog is prioritized for a single subagent (or small group) to implement iteratively. Update the _Status_ and _Lessons Learned_ sections while working.
+The following backlog is prioritized for a single subagent (or small group) to implement iteratively. Update the
+_Status_ and _Lessons Learned_ sections while working.
 
 ### Task Backlog
 
-| Priority | Task | Definition of Done | Notes | Status |
-| -------- | ---- | ------------------ | ----- | ------ |
-| P0 | {{Highest-priority task description.}} | {{Objective criteria for completion.}} | {{Links, clarifications, or blockers.}} | {{Leave blank until updated.}} |
-| P0 | {{Next critical task.}} | {{Definition of done.}} | {{Supporting context.}} | {{Status placeholder.}} |
-| P1 | {{Subsequent task.}} | {{DoD details.}} | {{Additional notes.}} | {{Status placeholder.}} |
-| P2 | {{Longer-term or stretch task.}} | {{DoD details.}} | {{Additional notes.}} | {{Status placeholder.}} |
-| P3 | {{Nice-to-have or future consideration.}} | {{DoD details.}} | {{Additional notes.}} | {{Status placeholder.}} |
+| Priority | Task                                      | Definition of Done                     | Notes                                   | Status                         |
+| -------- | ----------------------------------------- | -------------------------------------- | --------------------------------------- | ------------------------------ |
+| P0       | {{Highest-priority task description.}}    | {{Objective criteria for completion.}} | {{Links, clarifications, or blockers.}} | {{Leave blank until updated.}} |
+| P0       | {{Next critical task.}}                   | {{Definition of done.}}                | {{Supporting context.}}                 | {{Status placeholder.}}        |
+| P1       | {{Subsequent task.}}                      | {{DoD details.}}                       | {{Additional notes.}}                   | {{Status placeholder.}}        |
+| P2       | {{Longer-term or stretch task.}}          | {{DoD details.}}                       | {{Additional notes.}}                   | {{Status placeholder.}}        |
+| P3       | {{Nice-to-have or future consideration.}} | {{DoD details.}}                       | {{Additional notes.}}                   | {{Status placeholder.}}        |
 
-_Add or remove rows as necessary while keeping priorities sorted (P0 highest)._ 
+_Add or remove rows as necessary while keeping priorities sorted (P0 highest)._
 
 ### Risks & Mitigations
 

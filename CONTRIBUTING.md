@@ -6,7 +6,8 @@ This document provides guidelines and instructions for contributing to the proje
 
 ### Installing Rustup
 
-[Rustup](https://rustup.rs/) is the official Rust toolchain installer that makes it easy to install Rust and switch between different versions.
+[Rustup](https://rustup.rs/) is the official Rust toolchain installer that makes it easy to install Rust and switch
+between different versions.
 
 1. **Linux/macOS**:
 
@@ -14,7 +15,7 @@ This document provides guidelines and instructions for contributing to the proje
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    ```
 
-2. **Verify installation**:
+1. **Verify installation**:
 
    ```bash
    rustup --version
@@ -24,7 +25,8 @@ This document provides guidelines and instructions for contributing to the proje
 
 ### Setting Up the Right Toolchain
 
-Twig requires Rust 1.91.0 or later and uses the **nightly** toolchain for unstable rustfmt features. The project includes a `rust-toolchain.toml` file that specifies the exact requirements.
+Twig requires Rust 1.91.0 or later and uses the **nightly** toolchain for unstable rustfmt features. The project
+includes a `rust-toolchain.toml` file that specifies the exact requirements.
 
 ```bash
 # Simply navigate to the project directory and Rustup will automatically detect the toolchain file
@@ -69,7 +71,8 @@ make test
 cargo nextest run
 ```
 
-**Important**: This project uses [nextest](https://nexte.st/) for running tests instead of the standard `cargo test`. The test suite will only work correctly with nextest. Running `cargo test` directly will not execute tests properly.
+**Important**: This project uses [nextest](https://nexte.st/) for running tests instead of the standard `cargo test`.
+The test suite will only work correctly with nextest. Running `cargo test` directly will not execute tests properly.
 
 ## Code Quality Standards
 
@@ -79,13 +82,15 @@ All contributions should pass the following checks:
 - **Linting**: Run `cargo clippy` to check for common mistakes and improve code quality
 - **Testing**: Run `make test` or `cargo nextest run` to ensure all tests pass
 
-**Note**: This project requires [nextest](https://nexte.st/) for testing. The standard `cargo test` command will not work correctly.
+**Note**: This project requires [nextest](https://nexte.st/) for testing. The standard `cargo test` command will not
+work correctly.
 
 These checks are automatically enforced by pre-commit hooks and our CI pipeline.
 
 ### Pre-commit Hooks
 
-This project uses pre-commit hooks to ensure code quality standards are met before each commit. Pre-commit is installed using [uv tool](https://github.com/astral-sh/uv), which installs Python tools without requiring a virtual environment.
+This project uses pre-commit hooks to ensure code quality standards are met before each commit. Pre-commit is installed
+using [uv tool](https://github.com/astral-sh/uv), which installs Python tools without requiring a virtual environment.
 
 The hooks will:
 
@@ -106,7 +111,8 @@ To temporarily bypass the hooks (not recommended), use the `--no-verify` flag wi
 
 ## Makefile
 
-The project includes a Makefile to simplify common development tasks. The Makefile is self-documenting and provides a helpful overview of available commands:
+The project includes a Makefile to simplify common development tasks. The Makefile is self-documenting and provides a
+helpful overview of available commands:
 
 ```bash
 make help
@@ -119,29 +125,33 @@ Key Makefile targets include:
 - **Installation**: `install`, `install-dev-tools`, `pre-commit-setup`
 - **Snapshot Testing**: `insta-review`, `insta-accept`, `insta-reject`, `update-snapshots`
 
-**Important**: All test-related targets use [nextest](https://nexte.st/) instead of the standard `cargo test`. This provides better performance and additional features for test execution.
+**Important**: All test-related targets use [nextest](https://nexte.st/) instead of the standard `cargo test`. This
+provides better performance and additional features for test execution.
 
 ## Snapshot Testing
 
-Twig uses [Insta](https://insta.rs/) for snapshot testing, which helps ensure consistent output across changes. Snapshot tests capture the output of components and compare them against previously saved "snapshots" to detect unintended changes.
+Twig uses [Insta](https://insta.rs/) for snapshot testing, which helps ensure consistent output across changes. Snapshot
+tests capture the output of components and compare them against previously saved "snapshots" to detect unintended
+changes.
 
 ### Workflow
 
 1. **Running Tests**: When you run tests with `make test`, any snapshot tests will be executed
-2. **Reviewing Changes**: If snapshots change or new ones are created, use `make insta-review` to interactively review them
-3. **Accepting Changes**: Accept all pending snapshots with `make insta-accept`
-4. **Rejecting Changes**: Reject all pending snapshots with `make insta-reject`
-5. **Updating Snapshots**: Run tests and automatically update snapshots with `make test-update-snapshots`
+1. **Reviewing Changes**: If snapshots change or new ones are created, use `make insta-review` to interactively review
+   them
+1. **Accepting Changes**: Accept all pending snapshots with `make insta-accept`
+1. **Rejecting Changes**: Reject all pending snapshots with `make insta-reject`
+1. **Updating Snapshots**: Run tests and automatically update snapshots with `make test-update-snapshots`
 
 ## Development Workflow
 
 1. Sync your fork with the upstream repository (`git fetch upstream && git checkout main && git merge upstream/main`)
-2. Create a feature branch off your fork (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Ensure all tests pass and code quality checks succeed
-5. Commit your changes (`git commit -m 'Add some amazing feature'`)
-6. Push the branch to your fork (`git push origin feature/amazing-feature`)
-7. Open a Pull Request from your fork's branch to `eddieland/twig`'s `main`
+1. Create a feature branch off your fork (`git checkout -b feature/amazing-feature`)
+1. Make your changes
+1. Ensure all tests pass and code quality checks succeed
+1. Commit your changes (`git commit -m 'Add some amazing feature'`)
+1. Push the branch to your fork (`git push origin feature/amazing-feature`)
+1. Open a Pull Request from your fork's branch to `eddieland/twig`'s `main`
 
 ## Implementation Guidelines
 
@@ -154,7 +164,8 @@ Twig uses [Insta](https://insta.rs/) for snapshot testing, which helps ensure co
 
 ## CLI Implementation Guidelines
 
-Twig uses [Clap](https://docs.rs/clap/latest/clap/) with the Derive-style approach for defining the command-line interface. This section explains how to work with the CLI structure when adding or modifying commands.
+Twig uses [Clap](https://docs.rs/clap/latest/clap/) with the Derive-style approach for defining the command-line
+interface. This section explains how to work with the CLI structure when adding or modifying commands.
 
 ### Benefits of Clap's Derive Pattern
 
@@ -162,38 +173,44 @@ The Derive-style approach offers several advantages over other CLI definition me
 
 1. **Type Safety**: Command arguments are strongly typed, catching errors at compile time rather than runtime.
 
-2. **Maintainability**: Command structure is defined declaratively alongside the data structures that hold the parsed values, making the code more maintainable and self-documenting.
+1. **Maintainability**: Command structure is defined declaratively alongside the data structures that hold the parsed
+   values, making the code more maintainable and self-documenting.
 
-3. **Automatic Help Generation**: Clap automatically generates comprehensive help text, usage information, and error messages based on the struct definitions and doc comments.
+1. **Automatic Help Generation**: Clap automatically generates comprehensive help text, usage information, and error
+   messages based on the struct definitions and doc comments.
 
-4. **Reduced Boilerplate**: Compared to the Builder pattern, Derive requires less code to define commands and arguments, leading to cleaner, more readable code.
+1. **Reduced Boilerplate**: Compared to the Builder pattern, Derive requires less code to define commands and arguments,
+   leading to cleaner, more readable code.
 
-5. **IDE Support**: The Derive approach works well with IDE features like code completion and refactoring tools.
+1. **IDE Support**: The Derive approach works well with IDE features like code completion and refactoring tools.
 
-6. **Validation**: Argument validation is handled through Clap's attribute system, keeping validation logic close to the argument definition.
+1. **Validation**: Argument validation is handled through Clap's attribute system, keeping validation logic close to the
+   argument definition.
 
-7. **Extensibility**: The command structure can be easily extended with new subcommands or arguments without modifying existing code.
+1. **Extensibility**: The command structure can be easily extended with new subcommands or arguments without modifying
+   existing code.
 
-This approach aligns well with Rust's emphasis on type safety and declarative programming, making it the preferred choice for Twig's CLI implementation.
+This approach aligns well with Rust's emphasis on type safety and declarative programming, making it the preferred
+choice for Twig's CLI implementation.
 
 ### CLI Architecture
 
 The CLI is structured as follows:
 
 1. The top-level `Cli` struct in `twig-cli/src/cli/mod.rs` defines global options and the command enum
-2. The `Commands` enum defines all top-level subcommands
-3. Each subcommand has its own module in `twig-cli/src/cli/` with argument structs and handler functions
-4. Some commands have their own subcommands, creating a nested command structure
+1. The `Commands` enum defines all top-level subcommands
+1. Each subcommand has its own module in `twig-cli/src/cli/` with argument structs and handler functions
+1. Some commands have their own subcommands, creating a nested command structure
 
 ### Adding a New Command
 
 To add a new top-level command:
 
 1. Create a new module in `twig-cli/src/cli/` (e.g., `my_command.rs`)
-2. Define the command's arguments using a struct with `#[derive(Args)]`
-3. Add the command to the `Commands` enum in `twig-cli/src/cli/mod.rs`
-4. Implement a handler function in your module
-5. Add the handler to the match statement in `handle_cli()` in `twig-cli/src/cli/mod.rs`
+1. Define the command's arguments using a struct with `#[derive(Args)]`
+1. Add the command to the `Commands` enum in `twig-cli/src/cli/mod.rs`
+1. Implement a handler function in your module
+1. Add the handler to the match statement in `handle_cli()` in `twig-cli/src/cli/mod.rs`
 
 Example:
 
@@ -236,8 +253,8 @@ match cli.command {
 For commands with their own subcommands:
 
 1. Define a subcommand enum with `#[derive(Subcommand)]`
-2. Create argument structs for each subcommand
-3. Use a nested match statement in your handler function
+1. Create argument structs for each subcommand
+1. Use a nested match statement in your handler function
 
 Example:
 
@@ -340,17 +357,17 @@ This creates a command structure like:
 The execution flow for commands follows this pattern:
 
 1. `main.rs` parses CLI arguments with `Cli::parse()`
-2. `handle_cli()` in `cli/mod.rs` matches the top-level command
-3. Command-specific handler functions process the arguments
-4. Handler functions return `Result<()>` with `anyhow` for error handling
+1. `handle_cli()` in `cli/mod.rs` matches the top-level command
+1. Command-specific handler functions process the arguments
+1. Handler functions return `Result<()>` with `anyhow` for error handling
 
 ### Testing Commands
 
 When adding new commands, consider adding tests:
 
 1. Unit tests for command handler logic
-2. Integration tests for command execution
-3. Snapshot tests for command output using Insta
+1. Integration tests for command execution
+1. Snapshot tests for command output using Insta
 
 For example, to test a new command:
 
@@ -417,11 +434,14 @@ These utilities help ensure tests are isolated, deterministic, and don't interfe
 
 ### RAII Pattern for Test Resource Management
 
-The test utilities in Twig follow the RAII (Resource Acquisition Is Initialization) pattern, which is particularly well-suited for Rust's ownership model:
+The test utilities in Twig follow the RAII (Resource Acquisition Is Initialization) pattern, which is particularly
+well-suited for Rust's ownership model:
 
-- **Resource management through ownership**: Resources (like temporary directories and environment variables) are acquired during initialization and automatically cleaned up when the guard object is dropped.
+- **Resource management through ownership**: Resources (like temporary directories and environment variables) are
+  acquired during initialization and automatically cleaned up when the guard object is dropped.
 - **Automatic cleanup**: The `Drop` trait implementation ensures resources are properly released even if tests panic.
-- **Scope-based lifetime**: Test resources exist precisely for the scope where they're needed and are automatically cleaned up when they go out of scope.
+- **Scope-based lifetime**: Test resources exist precisely for the scope where they're needed and are automatically
+  cleaned up when they go out of scope.
 
 For example, when using `HomeEnvTestGuard`:
 
@@ -438,11 +458,13 @@ For example, when using `HomeEnvTestGuard`:
 }
 ```
 
-This pattern eliminates the need for explicit cleanup code and ensures resources are properly managed even in the presence of errors or early returns.
+This pattern eliminates the need for explicit cleanup code and ensures resources are properly managed even in the
+presence of errors or early returns.
 
 ## Platform-Specific Code
 
-Twig primarily targets Unix-based systems (Linux and macOS), but also supports Windows. This section explains how to handle platform-specific code and testing.
+Twig primarily targets Unix-based systems (Linux and macOS), but also supports Windows. This section explains how to
+handle platform-specific code and testing.
 
 ### Marking Code as Platform-Specific
 
@@ -521,7 +543,8 @@ mod unix_tests {
 }
 ```
 
-2. **CI Integration**: Our CI pipeline runs tests on multiple platforms to ensure platform-specific code works correctly:
+2. **CI Integration**: Our CI pipeline runs tests on multiple platforms to ensure platform-specific code works
+   correctly:
    - Linux runners test Unix-specific code
    - Windows runners test Windows-specific code
    - Cross-platform code is tested on all platforms
@@ -529,13 +552,14 @@ mod unix_tests {
 When adding Windows-specific functionality, ensure:
 
 1. The core functionality works across all platforms
-2. Platform-specific optimizations or implementations are properly isolated
-3. Tests are added for both the common interface and platform-specific implementations
-4. Documentation clearly indicates any platform-specific behavior
+1. Platform-specific optimizations or implementations are properly isolated
+1. Tests are added for both the common interface and platform-specific implementations
+1. Documentation clearly indicates any platform-specific behavior
 
 ### Windows Cross-Compilation from Linux
 
-You can cross-compile and run the Windows test suite from Linux using `scripts/windows-cross-test.sh`. The script invokes `cargo nextest run` with the `ci-windows` profile for `x86_64-pc-windows-gnu` and executes tests via `wine`.
+You can cross-compile and run the Windows test suite from Linux using `scripts/windows-cross-test.sh`. The script
+invokes `cargo nextest run` with the `ci-windows` profile for `x86_64-pc-windows-gnu` and executes tests via `wine`.
 
 Prerequisites:
 
@@ -547,4 +571,5 @@ Prerequisites:
 Examples:
 
 - `./scripts/windows-cross-test.sh` — build the full workspace and run all tests under wine with nextest
-- `./scripts/windows-cross-test.sh -p twig-core -- --ignored` — focus on a single crate and forward flags to the test binaries
+- `./scripts/windows-cross-test.sh -p twig-core -- --ignored` — focus on a single crate and forward flags to the test
+  binaries

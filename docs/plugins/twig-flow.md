@@ -18,10 +18,13 @@ twig flow feature/auth-refresh
 ```
 
 What to expect:
-- The default `twig flow` renders a tree-plus-table with headers `Branch | Story | PR | Notes`, highlighting the current branch.
+
+- The default `twig flow` renders a tree-plus-table with headers `Branch | Story | PR | Notes`, highlighting the current
+  branch.
 - `--root` switches to the configured root (e.g., `main`) before rendering.
 - `--parent` switches to the primary parent branch (errors if multiple parents exist).
-- Supplying a target runs the shared switch engine: checkout existing, create new when allowed, resolve Jira keys, and track PR references.
+- Supplying a target runs the shared switch engine: checkout existing, create new when allowed, resolve Jira keys, and
+  track PR references.
 
 ## Reading the Output
 

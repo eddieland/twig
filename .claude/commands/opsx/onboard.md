@@ -1,13 +1,11 @@
----
-name: "OPSX: Onboard"
-description: Guided onboarding - walk through a complete OpenSpec workflow cycle with narration
-category: Workflow
-tags: [workflow, onboarding, tutorial, learning]
----
+______________________________________________________________________
 
-Guide the user through their first complete OpenSpec workflow cycle. This is a teaching experience—you'll do real work in their codebase while explaining each step.
+## name: "OPSX: Onboard" description: Guided onboarding - walk through a complete OpenSpec workflow cycle with narration category: Workflow tags: [workflow, onboarding, tutorial, learning]
 
----
+Guide the user through their first complete OpenSpec workflow cycle. This is a teaching experience—you'll do real work
+in their codebase while explaining each step.
+
+______________________________________________________________________
 
 ## Preflight
 
@@ -18,11 +16,12 @@ openspec status --json 2>&1 || echo "NOT_INITIALIZED"
 ```
 
 **If not initialized:**
+
 > OpenSpec isn't set up in this project yet. Run `openspec init` first, then come back to `/opsx:onboard`.
 
 Stop here if not initialized.
 
----
+______________________________________________________________________
 
 ## Phase 1: Welcome
 
@@ -46,7 +45,7 @@ I'll walk you through a complete change cycle—from idea to implementation—us
 Let's start by finding something to work on.
 ```
 
----
+______________________________________________________________________
 
 ## Phase 2: Task Selection
 
@@ -55,13 +54,14 @@ Let's start by finding something to work on.
 Scan the codebase for small improvement opportunities. Look for:
 
 1. **TODO/FIXME comments** - Search for `TODO`, `FIXME`, `HACK`, `XXX` in code files
-2. **Missing error handling** - `catch` blocks that swallow errors, risky operations without try-catch
-3. **Functions without tests** - Cross-reference `src/` with test directories
-4. **Type issues** - `any` types in TypeScript files (`: any`, `as any`)
-5. **Debug artifacts** - `console.log`, `console.debug`, `debugger` statements in non-debug code
-6. **Missing validation** - User input handlers without validation
+1. **Missing error handling** - `catch` blocks that swallow errors, risky operations without try-catch
+1. **Functions without tests** - Cross-reference `src/` with test directories
+1. **Type issues** - `any` types in TypeScript files (`: any`, `as any`)
+1. **Debug artifacts** - `console.log`, `console.debug`, `debugger` statements in non-debug code
+1. **Missing validation** - User input handlers without validation
 
 Also check recent git activity:
+
 ```bash
 git log --oneline -10 2>/dev/null || echo "No git history"
 ```
@@ -97,6 +97,7 @@ Which task interests you? (Pick a number or describe your own)
 ```
 
 **If nothing found:** Fall back to asking what the user wants to build:
+
 > I didn't find obvious quick wins in your codebase. What's something small you've been meaning to add or fix?
 
 ### Scope Guardrail
@@ -118,7 +119,7 @@ What would you prefer?
 
 Let the user override if they insist—this is a soft guardrail.
 
----
+______________________________________________________________________
 
 ## Phase 3: Explore Demo
 
@@ -129,6 +130,7 @@ Before we create a change, let me quickly show you **explore mode**—it's how y
 ```
 
 Spend 1-2 minutes investigating the relevant code:
+
 - Read the file(s) involved
 - Draw a quick ASCII diagram if it helps
 - Note any considerations
@@ -149,11 +151,12 @@ Now let's create a change to hold our work.
 
 **PAUSE** - Wait for user acknowledgment before proceeding.
 
----
+______________________________________________________________________
 
 ## Phase 4: Create the Change
 
 **EXPLAIN:**
+
 ```
 ## Creating a Change
 
@@ -163,31 +166,33 @@ Let me create one for our task.
 ```
 
 **DO:** Create the change with a derived kebab-case name:
+
 ```bash
 openspec new change "<derived-name>"
 ```
 
 **SHOW:**
+
 ```
 Created: `openspec/changes/<name>/`
 
 The folder structure:
 ```
-openspec/changes/<name>/
-├── proposal.md    ← Why we're doing this (empty, we'll fill it)
-├── design.md      ← How we'll build it (empty)
-├── specs/         ← Detailed requirements (empty)
-└── tasks.md       ← Implementation checklist (empty)
+
+openspec/changes/<name>/ ├── proposal.md ← Why we're doing this (empty, we'll fill it) ├── design.md ← How we'll build
+it (empty) ├── specs/ ← Detailed requirements (empty) └── tasks.md ← Implementation checklist (empty)
+
 ```
 
 Now let's fill in the first artifact—the proposal.
 ```
 
----
+______________________________________________________________________
 
 ## Phase 5: Proposal
 
 **EXPLAIN:**
+
 ```
 ## The Proposal
 
@@ -232,9 +237,11 @@ Does this capture the intent? I can adjust before we save it.
 **PAUSE** - Wait for user approval/feedback.
 
 After approval, save the proposal:
+
 ```bash
 openspec instructions proposal --change "<name>" --json
 ```
+
 Then write the content to `openspec/changes/<name>/proposal.md`.
 
 ```
@@ -243,11 +250,12 @@ Proposal saved. This is your "why" document—you can always come back and refin
 Next up: specs.
 ```
 
----
+______________________________________________________________________
 
 ## Phase 6: Specs
 
 **EXPLAIN:**
+
 ```
 ## Specs
 
@@ -257,6 +265,7 @@ For a small task like this, we might only need one spec file.
 ```
 
 **DO:** Create the spec file:
+
 ```bash
 mkdir -p openspec/changes/<name>/specs/<capability-name>
 ```
@@ -287,11 +296,12 @@ This format—WHEN/THEN/AND—makes requirements testable. You can literally rea
 
 Save to `openspec/changes/<name>/specs/<capability>/spec.md`.
 
----
+______________________________________________________________________
 
 ## Phase 7: Design
 
 **EXPLAIN:**
+
 ```
 ## Design
 
@@ -332,11 +342,12 @@ For a small task, this captures the key decisions without over-engineering.
 
 Save to `openspec/changes/<name>/design.md`.
 
----
+______________________________________________________________________
 
 ## Phase 8: Tasks
 
 **EXPLAIN:**
+
 ```
 ## Tasks
 
@@ -370,11 +381,12 @@ Each checkbox becomes a unit of work in the apply phase. Ready to implement?
 
 Save to `openspec/changes/<name>/tasks.md`.
 
----
+______________________________________________________________________
 
 ## Phase 9: Apply (Implementation)
 
 **EXPLAIN:**
+
 ```
 ## Implementation
 
@@ -384,10 +396,10 @@ Now we implement each task, checking them off as we go. I'll announce each one a
 **DO:** For each task:
 
 1. Announce: "Working on task N: [description]"
-2. Implement the change in the codebase
-3. Reference specs/design naturally: "The spec says X, so I'm doing Y"
-4. Mark complete in tasks.md: `- [ ]` → `- [x]`
-5. Brief status: "✓ Task N complete"
+1. Implement the change in the codebase
+1. Reference specs/design naturally: "The spec says X, so I'm doing Y"
+1. Mark complete in tasks.md: `- [ ]` → `- [x]`
+1. Brief status: "✓ Task N complete"
 
 Keep narration light—don't over-explain every line of code.
 
@@ -404,11 +416,12 @@ All tasks done:
 The change is implemented! One more step—let's archive it.
 ```
 
----
+______________________________________________________________________
 
 ## Phase 10: Archive
 
 **EXPLAIN:**
+
 ```
 ## Archiving
 
@@ -418,18 +431,20 @@ Archived changes become your project's decision history—you can always find th
 ```
 
 **DO:**
+
 ```bash
 openspec archive "<name>"
 ```
 
 **SHOW:**
+
 ```
 Archived to: `openspec/changes/archive/YYYY-MM-DD-<name>/`
 
 The change is now part of your project's history. The code is in your codebase, the decision record is preserved.
 ```
 
----
+______________________________________________________________________
 
 ## Phase 11: Recap & Next Steps
 
@@ -470,7 +485,7 @@ This same rhythm works for any size change—a small fix or a major feature.
 Try `/opsx:new` or `/opsx:ff` on something you actually want to build. You've got the rhythm now!
 ```
 
----
+______________________________________________________________________
 
 ## Graceful Exit Handling
 
@@ -512,11 +527,12 @@ Try `/opsx:new` to start your first change, or `/opsx:ff` if you want to move fa
 
 Exit gracefully.
 
----
+______________________________________________________________________
 
 ## Guardrails
 
-- **Follow the EXPLAIN → DO → SHOW → PAUSE pattern** at key transitions (after explore, after proposal draft, after tasks, after archive)
+- **Follow the EXPLAIN → DO → SHOW → PAUSE pattern** at key transitions (after explore, after proposal draft, after
+  tasks, after archive)
 - **Keep narration light** during implementation—teach without lecturing
 - **Don't skip phases** even if the change is small—the goal is teaching the workflow
 - **Pause for acknowledgment** at marked points, but don't over-pause

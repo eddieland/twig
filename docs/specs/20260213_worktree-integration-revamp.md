@@ -4,7 +4,8 @@
 
 - Make worktrees a first-class part of the twig workflow instead of an isolated side feature.
 - Reduce friction so that reaching for a worktree is as easy as checking out a branch.
-- Unify the mental model: "I want to work on branch X" should surface worktree options naturally rather than requiring the user to think about `twig worktree` as a separate concept.
+- Unify the mental model: "I want to work on branch X" should surface worktree options naturally rather than requiring
+  the user to think about `twig worktree` as a separate concept.
 
 ### Non-goals
 
@@ -26,26 +27,34 @@ Additional integration: `twig jira create-branch --with-worktree` calls `create_
 
 ### Problems identified
 
-1. **Worktrees are siloed.** They live in their own command group and don't integrate with the commands you use most (`switch`, `tree`, `cascade`). You have to actively remember they exist.
+1. **Worktrees are siloed.** They live in their own command group and don't integrate with the commands you use most
+   (`switch`, `tree`, `cascade`). You have to actively remember they exist.
 
-2. **`twig switch` is worktree-unaware.** If you already have a worktree for branch X and run `twig switch X`, twig does a checkout instead of telling you about the worktree or helping you navigate to it.
+1. **`twig switch` is worktree-unaware.** If you already have a worktree for branch X and run `twig switch X`, twig does
+   a checkout instead of telling you about the worktree or helping you navigate to it.
 
-3. **No navigation aid.** After `twig worktree create`, twig prints the path but doesn't help you get there. There's no `twig wt cd <branch>` or even `twig wt path <branch>` to script with.
+1. **No navigation aid.** After `twig worktree create`, twig prints the path but doesn't help you get there. There's no
+   `twig wt cd <branch>` or even `twig wt path <branch>` to script with.
 
-4. **`twig tree` doesn't show worktree status.** When viewing your branch dependency graph, there's no indication of which branches have active worktrees — exactly the info that would remind you to use them.
+1. **`twig tree` doesn't show worktree status.** When viewing your branch dependency graph, there's no indication of
+   which branches have active worktrees — exactly the info that would remind you to use them.
 
-5. **No targeted removal.** `twig wt clean` only prunes stale references (directory gone). There's no way to intentionally tear down a specific worktree when you're done with a branch.
+1. **No targeted removal.** `twig wt clean` only prunes stale references (directory gone). There's no way to
+   intentionally tear down a specific worktree when you're done with a branch.
 
-6. **Worktree creation doesn't set up dependencies.** Unlike `twig switch -p`, creating a worktree for a new branch doesn't wire up the parent dependency, so you lose the stacked-PR workflow.
+1. **Worktree creation doesn't set up dependencies.** Unlike `twig switch -p`, creating a worktree for a new branch
+   doesn't wire up the parent dependency, so you lose the stacked-PR workflow.
 
-7. **Directory naming is opaque.** `feature/foo` → `<repo>-worktrees/feature-foo` — the slash-to-hyphen sanitization isn't obvious and can conflict if you have branches like `feature-foo` and `feature/foo`.
+1. **Directory naming is opaque.** `feature/foo` → `<repo>-worktrees/feature-foo` — the slash-to-hyphen sanitization
+   isn't obvious and can conflict if you have branches like `feature-foo` and `feature/foo`.
 
 ## Guiding Constraints
 
 - Breaking changes to command names, flags, and group structure are acceptable.
 - Must preserve backwards compatibility of `.twig/state.json` worktree data (or migrate it).
 - Worktree features should degrade gracefully — if you never use worktrees, they shouldn't add noise.
-- Shell integration (cd to worktree) is fundamentally limited by subprocess restrictions; the best we can do is emit a path for the user to consume.
+- Shell integration (cd to worktree) is fundamentally limited by subprocess restrictions; the best we can do is emit a
+  path for the user to consume.
 
 ## Target Capabilities
 
@@ -66,11 +75,14 @@ twig switch -w feature/existing
 # → Run: cd ~/repos/twig-worktrees/feature-existing
 ```
 
-This makes the creation path `twig switch -w` rather than `twig worktree create`, putting it right where the user's fingers already are.
+This makes the creation path `twig switch -w` rather than `twig worktree create`, putting it right where the user's
+fingers already are.
 
 ### 2. `twig switch` worktree awareness (without `-w`)
 
-Git enforces that a branch can only be checked out in one worktree at a time. If you try to checkout a branch that's already checked out in a worktree, git will error. Rather than letting the user hit a confusing git error, twig should detect this upfront and give a clear, actionable message.
+Git enforces that a branch can only be checked out in one worktree at a time. If you try to checkout a branch that's
+already checked out in a worktree, git will error. Rather than letting the user hit a confusing git error, twig should
+detect this upfront and give a clear, actionable message.
 
 When running `twig switch <branch>` (no `-w`), if a worktree already exists for that branch:
 
@@ -79,7 +91,8 @@ When running `twig switch <branch>` (no `-w`), if a worktree already exists for 
   Run: cd ~/repos/twig-worktrees/feature-foo
 ```
 
-This is a hard error — the checkout is not attempted. The same check applies to `twig flow <target>`. This is not about gatekeeping; git literally won't let you do it, so we surface the right answer instead of a cryptic failure.
+This is a hard error — the checkout is not attempted. The same check applies to `twig flow <target>`. This is not about
+gatekeeping; git literally won't let you do it, so we surface the right answer instead of a cryptic failure.
 
 ### 3. Worktree indicators in `twig tree`
 
@@ -115,16 +128,19 @@ twig wt remove feature/done-with-this
 ```
 
 Options:
+
 - `--delete-branch` / `-d`: also delete the local branch after removing the worktree.
 - Refuses to remove if there are uncommitted changes (override with `--force`).
 
 ### 6. Dependency integration on worktree creation
 
-When `twig switch -w` creates a new branch, wire up the parent dependency just like `twig switch -p` does today. The `-p` / `--parent` flag should work with worktree creation.
+When `twig switch -w` creates a new branch, wire up the parent dependency just like `twig switch -p` does today. The
+`-p` / `--parent` flag should work with worktree creation.
 
 ### 7. Revised command surface
 
 **Before (current):**
+
 ```
 twig worktree create <branch>
 twig worktree list
@@ -133,6 +149,7 @@ twig jira create-branch --with-worktree
 ```
 
 **After (proposed):**
+
 ```
 # Primary creation path (new)
 twig switch -w <branch> [-p <parent>]
@@ -152,19 +169,25 @@ twig jira create-branch --with-worktree   # Still works, now uses same code path
 
 ## twig-flow Integration
 
-`twig flow` is the primary daily-driver command — it combines tree visualization with branch switching. Worktree support here has an outsized impact because this is where users actually live.
+`twig flow` is the primary daily-driver command — it combines tree visualization with branch switching. Worktree support
+here has an outsized impact because this is where users actually live.
 
 ### Current twig-flow behavior (no worktree awareness)
 
-**Tree mode** (`twig flow`): Renders the branch dependency graph via `BranchGraphBuilder` → `BranchTableRenderer`. The renderer supports an `annotations` map on each `BranchNodeMetadata` and already renders arbitrary `Annotation { key }` columns (used for PR numbers, lifecycle status). No worktree info is surfaced.
+**Tree mode** (`twig flow`): Renders the branch dependency graph via `BranchGraphBuilder` → `BranchTableRenderer`. The
+renderer supports an `annotations` map on each `BranchNodeMetadata` and already renders arbitrary `Annotation { key }`
+columns (used for PR numbers, lifecycle status). No worktree info is surfaced.
 
-**Switch mode** (`twig flow <target>`): Interactive branch switching with Jira/PR detection, remote branch prompts, and auto-creation with dependency wiring. All branch creation paths use `checkout_branch()` — none offer worktree creation, and there's no awareness of existing worktrees when switching to a branch that has one.
+**Switch mode** (`twig flow <target>`): Interactive branch switching with Jira/PR detection, remote branch prompts, and
+auto-creation with dependency wiring. All branch creation paths use `checkout_branch()` — none offer worktree creation,
+and there's no awareness of existing worktrees when switching to a branch that has one.
 
 ### Proposed twig-flow changes
 
 #### 1. Worktree annotation column in tree output
 
-Add a `twig.worktree` annotation during `BranchGraphBuilder::apply_branch_metadata()`. The builder already has access to `RepoState` which contains worktree data:
+Add a `twig.worktree` annotation during `BranchGraphBuilder::apply_branch_metadata()`. The builder already has access to
+`RepoState` which contains worktree data:
 
 ```rust
 // In BranchGraphBuilder::apply_branch_metadata()
@@ -176,7 +199,8 @@ if let Some(wt) = repo_state.get_worktree_by_branch(branch) {
 }
 ```
 
-The `BranchTableSchema::default()` would gain an optional "WT" column (or use a compact indicator like a `*` suffix on the branch name) to avoid making the table too wide. A compact indicator on the branch name itself is likely better UX:
+The `BranchTableSchema::default()` would gain an optional "WT" column (or use a compact indicator like a `*` suffix on
+the branch name) to avoid making the table too wide. A compact indicator on the branch name itself is likely better UX:
 
 ```
   Branch                     Story      PR
@@ -190,14 +214,16 @@ Where `*` means "has active worktree." The `twig wt list` command provides full 
 
 #### 2. Worktree awareness in twig-flow switch
 
-When `twig flow <target>` resolves to a branch that's already checked out in a worktree, error with the path instead of attempting checkout (which git would reject anyway):
+When `twig flow <target>` resolves to a branch that's already checked out in a worktree, error with the path instead of
+attempting checkout (which git would reject anyway):
 
 ```
 ✗ Branch 'feature/auth' is already checked out in a worktree at ~/repos/twig-worktrees/feature-auth
   Run: cd ~/repos/twig-worktrees/feature-auth
 ```
 
-This reuses the same check proposed for `twig switch` — a shared function in `twig-core` that both consumers call before attempting checkout.
+This reuses the same check proposed for `twig switch` — a shared function in `twig-core` that both consumers call before
+attempting checkout.
 
 #### 3. `twig flow --worktree` / `-w` flag
 
@@ -208,54 +234,64 @@ twig flow -w PROJ-123    # Create worktree for Jira issue
 twig flow -w feature/foo # Create worktree for branch
 ```
 
-This mirrors the `twig switch -w` behavior but within the flow plugin's context. Worktree creation is always an explicit opt-in via the flag — never injected into interactive prompts.
+This mirrors the `twig switch -w` behavior but within the flow plugin's context. Worktree creation is always an explicit
+opt-in via the flag — never injected into interactive prompts.
 
 ### Implementation approach for twig-flow
 
-The core worktree logic (`create_worktree` with dependency wiring, worktree existence checks) lives in `twig-core`. The twig-flow plugin consumes it — no worktree logic should be duplicated in the plugin.
+The core worktree logic (`create_worktree` with dependency wiring, worktree existence checks) lives in `twig-core`. The
+twig-flow plugin consumes it — no worktree logic should be duplicated in the plugin.
 
 **Key integration points:**
 
-| File | Change |
-|------|--------|
-| `twig-core/src/git/graph.rs` : `apply_branch_metadata()` | Add `twig.worktree` annotation from `RepoState` worktree data |
-| `twig-core/src/git/renderer.rs` | Add compact worktree indicator to branch name rendering (or optional column) |
-| `twig-core/src/state.rs` | Add `get_worktree_by_branch(&str) -> Option<&Worktree>` lookup method |
-| `plugins/twig-flow/src/switch.rs` | Add worktree awareness check after resolving target branch |
-| `plugins/twig-flow/src/cli.rs` | Add `-w`/`--worktree` flag for explicit worktree creation |
+| File                                                     | Change                                                                       |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `twig-core/src/git/graph.rs` : `apply_branch_metadata()` | Add `twig.worktree` annotation from `RepoState` worktree data                |
+| `twig-core/src/git/renderer.rs`                          | Add compact worktree indicator to branch name rendering (or optional column) |
+| `twig-core/src/state.rs`                                 | Add `get_worktree_by_branch(&str) -> Option<&Worktree>` lookup method        |
+| `plugins/twig-flow/src/switch.rs`                        | Add worktree awareness check after resolving target branch                   |
+| `plugins/twig-flow/src/cli.rs`                           | Add `-w`/`--worktree` flag for explicit worktree creation                    |
 
 ## Subagent Execution Plan
 
 ### Task Backlog
 
-| Priority | Task | Definition of Done | Notes | Status |
-| -------- | ---- | ------------------ | ----- | ------ |
-| P0 | Add `-w`/`--worktree` flag to `twig switch` | `twig switch -w <branch>` creates a worktree (or reports existing one); works with `-p` for dependency setup | Refactor `create_worktree` to accept optional parent dependency. Reuse `resolve_branch_base` logic from switch. | |
-| P0 | Add worktree awareness to `twig switch` (without `-w`) | When switching to a branch checked out in a worktree, error with the worktree path instead of letting git fail cryptically | Check before attempting checkout. Git won't allow checkout of a branch in another worktree, so this is a hard error with actionable guidance. | |
-| P0 | Implement `twig wt remove <branch>` | Can remove a specific worktree by branch name; validates no uncommitted changes; `--force` overrides; `--delete-branch` option | Use `git2` worktree prune + fs removal. Update `RepoState`. | |
-| P1 | Implement `twig wt path <branch>` | Outputs raw worktree path to stdout; exit 1 if none exists | Simple lookup in `RepoState` + validate path still exists on disk. | |
-| P1 | Add `get_worktree_by_branch()` to `RepoState` | Lookup worktree by original branch name (not sanitized name); used by graph builder and switch awareness | Current `get_worktree()` takes the sanitized name. Need branch-based lookup for all downstream consumers. | |
-| P1 | Add `twig.worktree` annotation in `BranchGraphBuilder` | `apply_branch_metadata()` populates worktree annotation from `RepoState` | Feeds into both `twig tree` and `twig flow` tree rendering automatically. | |
-| P1 | Compact worktree indicator in `BranchTableRenderer` | Branches with `twig.worktree` annotation show a `*` suffix (or similar) in the Branch column | Avoids adding a full column; keeps table width manageable. Indicator links to `twig wt list` for details. | |
-| P1 | Add worktree awareness to twig-flow switch | When `twig flow <target>` resolves to a branch checked out in a worktree, error with path instead of attempting checkout | Reuses same core check function as `twig switch` awareness. | |
-| P1 | Add `-w` flag to `twig flow` CLI | `twig flow -w <target>` creates/uses worktree instead of checkout | Mirrors `twig switch -w`; explicit opt-in, no prompt injection. | |
-| P1 | Remove `twig wt create` | `twig wt create` subcommand is deleted; `twig switch -w` is the only creation path | Clean removal — no hidden alias, no deprecation notice. | |
-| P2 | Update `twig jira create-branch -w` to use unified code path | Jira create-branch worktree mode uses the same logic as `twig switch -w` | Reduces code duplication in jira.rs. | |
-| P2 | Improve worktree directory naming | Use branch name directly (preserving `/` as directory separators) instead of sanitizing to hyphens; e.g., `<repo>-worktrees/feature/foo/` | Evaluate git2 constraints — worktree names may not support `/`. If so, keep sanitized name as internal identifier but use full branch name for directory structure. | |
-| P3 | Shell integration helpers | Document shell aliases/functions for `cd $(twig wt path ...)` patterns; consider a `twig wt shell <branch>` that spawns a subshell in the worktree directory | Subprocess can't change parent shell's cwd; document the workaround patterns. | |
+| Priority | Task                                                         | Definition of Done                                                                                                                                           | Notes                                                                                                                                                               | Status |
+| -------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| P0       | Add `-w`/`--worktree` flag to `twig switch`                  | `twig switch -w <branch>` creates a worktree (or reports existing one); works with `-p` for dependency setup                                                 | Refactor `create_worktree` to accept optional parent dependency. Reuse `resolve_branch_base` logic from switch.                                                     |        |
+| P0       | Add worktree awareness to `twig switch` (without `-w`)       | When switching to a branch checked out in a worktree, error with the worktree path instead of letting git fail cryptically                                   | Check before attempting checkout. Git won't allow checkout of a branch in another worktree, so this is a hard error with actionable guidance.                       |        |
+| P0       | Implement `twig wt remove <branch>`                          | Can remove a specific worktree by branch name; validates no uncommitted changes; `--force` overrides; `--delete-branch` option                               | Use `git2` worktree prune + fs removal. Update `RepoState`.                                                                                                         |        |
+| P1       | Implement `twig wt path <branch>`                            | Outputs raw worktree path to stdout; exit 1 if none exists                                                                                                   | Simple lookup in `RepoState` + validate path still exists on disk.                                                                                                  |        |
+| P1       | Add `get_worktree_by_branch()` to `RepoState`                | Lookup worktree by original branch name (not sanitized name); used by graph builder and switch awareness                                                     | Current `get_worktree()` takes the sanitized name. Need branch-based lookup for all downstream consumers.                                                           |        |
+| P1       | Add `twig.worktree` annotation in `BranchGraphBuilder`       | `apply_branch_metadata()` populates worktree annotation from `RepoState`                                                                                     | Feeds into both `twig tree` and `twig flow` tree rendering automatically.                                                                                           |        |
+| P1       | Compact worktree indicator in `BranchTableRenderer`          | Branches with `twig.worktree` annotation show a `*` suffix (or similar) in the Branch column                                                                 | Avoids adding a full column; keeps table width manageable. Indicator links to `twig wt list` for details.                                                           |        |
+| P1       | Add worktree awareness to twig-flow switch                   | When `twig flow <target>` resolves to a branch checked out in a worktree, error with path instead of attempting checkout                                     | Reuses same core check function as `twig switch` awareness.                                                                                                         |        |
+| P1       | Add `-w` flag to `twig flow` CLI                             | `twig flow -w <target>` creates/uses worktree instead of checkout                                                                                            | Mirrors `twig switch -w`; explicit opt-in, no prompt injection.                                                                                                     |        |
+| P1       | Remove `twig wt create`                                      | `twig wt create` subcommand is deleted; `twig switch -w` is the only creation path                                                                           | Clean removal — no hidden alias, no deprecation notice.                                                                                                             |        |
+| P2       | Update `twig jira create-branch -w` to use unified code path | Jira create-branch worktree mode uses the same logic as `twig switch -w`                                                                                     | Reduces code duplication in jira.rs.                                                                                                                                |        |
+| P2       | Improve worktree directory naming                            | Use branch name directly (preserving `/` as directory separators) instead of sanitizing to hyphens; e.g., `<repo>-worktrees/feature/foo/`                    | Evaluate git2 constraints — worktree names may not support `/`. If so, keep sanitized name as internal identifier but use full branch name for directory structure. |        |
+| P3       | Shell integration helpers                                    | Document shell aliases/functions for `cd $(twig wt path ...)` patterns; consider a `twig wt shell <branch>` that spawns a subshell in the worktree directory | Subprocess can't change parent shell's cwd; document the workaround patterns.                                                                                       |        |
 
 ### Risks & Mitigations
 
-- **Risk:** `twig switch -w` overloads `switch` with too many concerns. **Mitigation:** Keep the implementation modular — `-w` calls into the same `create_worktree` core function, just with dependency wiring added. The switch command dispatches early based on the flag.
+- **Risk:** `twig switch -w` overloads `switch` with too many concerns. **Mitigation:** Keep the implementation modular
+  — `-w` calls into the same `create_worktree` core function, just with dependency wiring added. The switch command
+  dispatches early based on the flag.
 
-- **Risk:** Worktree path validation may diverge from git state (stale entries in state.json). **Mitigation:** `twig wt list` and `twig wt path` should validate paths exist on disk and warn about stale entries. `twig wt clean` remains for batch cleanup.
+- **Risk:** Worktree path validation may diverge from git state (stale entries in state.json). **Mitigation:**
+  `twig wt list` and `twig wt path` should validate paths exist on disk and warn about stale entries. `twig wt clean`
+  remains for batch cleanup.
 
-- **Risk:** Directory naming change (P2) could break existing worktree layouts. **Mitigation:** Only apply new naming to newly created worktrees; existing entries remain valid via state.json path field.
+- **Risk:** Directory naming change (P2) could break existing worktree layouts. **Mitigation:** Only apply new naming to
+  newly created worktrees; existing entries remain valid via state.json path field.
 
 ### Open Questions
 
-- ~~Should `twig switch -w` be the *only* way to create worktrees?~~ **Resolved:** Yes. `twig wt create` is removed entirely.
-- Should `twig cascade` operate across worktrees (rebase branches that are checked out in worktrees)? This is technically possible since git rebase works on refs, not working directories, but could surprise users with changed worktree contents.
+- ~~Should `twig switch -w` be the *only* way to create worktrees?~~ **Resolved:** Yes. `twig wt create` is removed
+  entirely.
+- Should `twig cascade` operate across worktrees (rebase branches that are checked out in worktrees)? This is
+  technically possible since git rebase works on refs, not working directories, but could surprise users with changed
+  worktree contents.
 
 ## Status Tracking (to be updated by subagent)
 
@@ -265,4 +301,5 @@ The core worktree logic (`create_worktree` with dependency wiring, worktree exis
 
 ## Lessons Learned (ongoing)
 
-- _Worktree support was well-implemented technically but failed to integrate into the primary user workflow, making it invisible in practice. Feature adoption requires meeting users where they already are (in this case, `twig switch`)._
+- _Worktree support was well-implemented technically but failed to integrate into the primary user workflow, making it
+  invisible in practice. Feature adoption requires meeting users where they already are (in this case, `twig switch`)._

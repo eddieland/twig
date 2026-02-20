@@ -48,14 +48,19 @@ jobs:
         if: matrix.check == 'clippy'
         run: cargo clippy --workspace -- -D warnings
 
+      - name: Install uv
+        if: matrix.check == 'autofixers'
+        uses: astral-sh/setup-uv@v6
+
       - name: Verify autofixers produce no diff
         if: matrix.check == 'autofixers'
         shell: bash
         run: |
           cargo fmt --all
           cargo clippy --fix --allow-dirty --allow-staged --workspace
+          uvx --from mdformat --with mdformat-gfm mdformat --wrap 120 .
           if ! git diff --quiet; then
-            echo "::error::Running Rust autofixers produced changes. Please run 'make fmt' locally before committing."
+            echo "::error::Running autofixers produced changes. Please run 'make fmt' locally before committing."
             git status --short
             git diff
             exit 1

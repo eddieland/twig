@@ -1,6 +1,7 @@
 # Software Specifications
 
-This directory contains software specifications and technical documentation, largely created by Large Language Models (LLMs) to guide development and maintain project context.
+This directory contains software specifications and technical documentation, largely created by Large Language Models
+(LLMs) to guide development and maintain project context.
 
 ## Purpose
 
@@ -44,12 +45,13 @@ YYYY-MM-DD_descriptive-name.md
 ## Specification Template
 
 To bootstrap new documents quickly, copy [`_TEMPLATE.md`](_TEMPLATE.md) into a dated filename that matches the naming
-scheme above, then replace the placeholders with project-specific details. The template mirrors the structure of our existing
-plans, including purpose, constraints, backlog, risk tracking, and a space for lessons learned.
+scheme above, then replace the placeholders with project-specific details. The template mirrors the structure of our
+existing plans, including purpose, constraints, backlog, risk tracking, and a space for lessons learned.
 
 ## Intentional Context Compaction
 
-When working with LLM agents on complex tasks, we recommend a practice called **intentional context compaction**. This approach significantly improves outcomes by:
+When working with LLM agents on complex tasks, we recommend a practice called **intentional context compaction**. This
+approach significantly improves outcomes by:
 
 ### Key Principles
 
@@ -59,13 +61,14 @@ When working with LLM agents on complex tasks, we recommend a practice called **
    - Verify each step before proceeding to the next
    - Prevent context drift and accumulating errors
 
-2. **Regular Checkpointing**: Have the agent periodically save its progress
+1. **Regular Checkpointing**: Have the agent periodically save its progress
 
    - Document what has been accomplished
    - Record key decisions and rationale
    - Note any challenges or blockers encountered
 
-3. **Lessons Learned**: Capture insights for future agents
+1. **Lessons Learned**: Capture insights for future agents
+
    - Summarize what worked well
    - Identify patterns that should be followed
    - Document pitfalls to avoid
@@ -88,4 +91,5 @@ When working with LLM agents on complex tasks, we recommend a practice called **
 5. Next agent reviews checkpoints → continues with component B
 ```
 
-By practicing intentional context compaction, you create a self-documenting development process that scales across multiple sessions and agent interactions.
+By practicing intentional context compaction, you create a self-documenting development process that scales across
+multiple sessions and agent interactions.

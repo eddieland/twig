@@ -15,6 +15,7 @@ fmt: ## Format code using rustfmt
 	cargo clippy --fix --allow-dirty --workspace
 	uvx ruff format examples/plugins/twig-backup || :
 	uvx ruff check --fix --select F,E,W --ignore F841 examples/plugins/twig-backup || :
+	uvx --from mdformat --with mdformat-gfm mdformat --wrap 120 . || :
 
 .PHONY: lint
 lint: ## Run clippy for linting

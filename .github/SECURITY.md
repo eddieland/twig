@@ -13,10 +13,11 @@ Please report security vulnerabilities via GitHub's private vulnerability report
 To report a vulnerability:
 
 1. Go to the repository's Security tab
-2. Click "Report a vulnerability"
-3. Fill out the vulnerability report form with as much detail as possible
+1. Click "Report a vulnerability"
+1. Fill out the vulnerability report form with as much detail as possible
 
-We take security seriously and will respond to vulnerability reports promptly. Please do not publicly disclose security vulnerabilities until we have had a chance to address them.
+We take security seriously and will respond to vulnerability reports promptly. Please do not publicly disclose security
+vulnerabilities until we have had a chance to address them.
 
 ## Security Best Practices
 

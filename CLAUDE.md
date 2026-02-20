@@ -4,7 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Twig is a Git-first productivity tool written in Rust that manages branches, issues, and pull requests across one or many repositories. Core focus: stacked pull-request workflows with cascading rebases.
+Twig is a Git-first productivity tool written in Rust that manages branches, issues, and pull requests across one or
+many repositories. Core focus: stacked pull-request workflows with cascading rebases.
 
 ## Build & Development
 
@@ -81,7 +82,8 @@ twig/
 
 Pre-commit hooks enforce formatting and linting. Setup: `make pre-commit-setup`
 
-Workspace-level clippy lints prohibit: `unwrap_used`, `panic`, `print_stdout`, `print_stderr`, `dbg_macro`, `todo`, `unimplemented`
+Workspace-level clippy lints prohibit: `unwrap_used`, `panic`, `print_stdout`, `print_stderr`, `dbg_macro`, `todo`,
+`unimplemented`
 
 ## Test Utilities
 
@@ -93,8 +95,10 @@ Workspace-level clippy lints prohibit: `unwrap_used`, `panic`, `print_stdout`, `
 
 ## Documentation Workflow
 
-Specs live in `docs/specs/` with naming convention `YYYY-MM-DD_descriptive-name.md`. Use `_TEMPLATE.md` for new specs. Practice incremental checkpointing for long-running work.
+Specs live in `docs/specs/` with naming convention `YYYY-MM-DD_descriptive-name.md`. Use `_TEMPLATE.md` for new specs.
+Practice incremental checkpointing for long-running work.
 
 ## Plugin System
 
-Plugins named `twig-<name>` discovered via `$PATH`. Receive context via env vars: `TWIG_CONFIG_DIR`, `TWIG_DATA_DIR`, `TWIG_CURRENT_REPO`, `TWIG_CURRENT_BRANCH`, `TWIG_VERSION`
+Plugins named `twig-<name>` discovered via `$PATH`. Receive context via env vars: `TWIG_CONFIG_DIR`, `TWIG_DATA_DIR`,
+`TWIG_CURRENT_REPO`, `TWIG_CURRENT_BRANCH`, `TWIG_VERSION`

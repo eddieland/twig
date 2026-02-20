@@ -71,10 +71,10 @@ The `TWIG_VERBOSITY` environment variable contains a number (0-3) indicating the
 ### Best Practices for Plugin Logging
 
 1. **Respect the verbosity level**: Don't output debug information when verbosity is 0
-2. **Use appropriate log levels**: Reserve INFO for important user-facing messages
-3. **Send logs to stderr**: Keep stdout clean for structured output that might be parsed
-4. **Include context**: Add plugin name or operation context to log messages
-5. **Be consistent**: Follow the same logging patterns as twig core for familiar UX
+1. **Use appropriate log levels**: Reserve INFO for important user-facing messages
+1. **Send logs to stderr**: Keep stdout clean for structured output that might be parsed
+1. **Include context**: Add plugin name or operation context to log messages
+1. **Be consistent**: Follow the same logging patterns as twig core for familiar UX
 
 See the example plugins in `examples/plugins/` for concrete implementations.
 
@@ -258,18 +258,18 @@ SUBCOMMANDS:
 ## Testing Your Plugin
 
 1. **Build your plugin** (for compiled languages)
-2. **Make it executable** and place it in your `$PATH`
-3. **Test basic functionality**:
+1. **Make it executable** and place it in your `$PATH`
+1. **Test basic functionality**:
    ```bash
    twig your-plugin --help
    twig your-plugin --version
    ```
-4. **Test with twig context**:
+1. **Test with twig context**:
    ```bash
    cd /path/to/git/repo
    twig your-plugin subcommand
    ```
-5. **Test error conditions**:
+1. **Test error conditions**:
    - Run outside git repository
    - Invalid arguments
    - Missing dependencies
@@ -279,9 +279,9 @@ SUBCOMMANDS:
 Plugins are distributed independently of twig core:
 
 1. **Binary releases**: Provide pre-compiled binaries for common platforms
-2. **Package managers**: Submit to language-specific package managers
-3. **Source code**: Provide clear build instructions
-4. **Documentation**: Include installation and usage instructions
+1. **Package managers**: Submit to language-specific package managers
+1. **Source code**: Provide clear build instructions
+1. **Documentation**: Include installation and usage instructions
 
 ## Examples
 
@@ -294,10 +294,10 @@ See the `examples/plugins/` directory for complete examples:
 ## Best Practices
 
 1. **Use twig-core for Rust plugins** to access configuration consistently
-2. **Handle missing environment variables gracefully**
-3. **Provide clear error messages** when not in a git repository
-4. **Follow semantic versioning** for your plugin
-5. **Document your plugin's requirements** and dependencies
-6. **Test on multiple platforms** if distributing binaries
-7. **Respect user preferences** for colors and verbosity
-8. **Keep plugin state separate** from twig's core state
+1. **Handle missing environment variables gracefully**
+1. **Provide clear error messages** when not in a git repository
+1. **Follow semantic versioning** for your plugin
+1. **Document your plugin's requirements** and dependencies
+1. **Test on multiple platforms** if distributing binaries
+1. **Respect user preferences** for colors and verbosity
+1. **Keep plugin state separate** from twig's core state

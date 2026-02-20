@@ -1,17 +1,19 @@
 # User Stories from argit User Feedback
 
-This document contains user stories derived from feedback provided by an argit user, capturing key workflows and feature requests that should be considered for twig implementation.
+This document contains user stories derived from feedback provided by an argit user, capturing key workflows and feature
+requests that should be considered for twig implementation.
 
 The user stories are categorized into:
 
 1. **Core argit Features** - Existing functionality in argit that should be implemented in twig
-2. **Enhancement Requests** - Nice-to-have improvements that weren't in the original argit
+1. **Enhancement Requests** - Nice-to-have improvements that weren't in the original argit
 
 ## Core argit Features
 
 ### Creating and Navigating Branches
 
-1. I want to create new branches linked to tickets using a simple command (`flow`/`switch`) so that I can quickly start working on new features or fixes.
+1. I want to create new branches linked to tickets using a simple command (`flow`/`switch`) so that I can quickly start
+   working on new features or fixes.
 
    **Implementation Status**: ✅ Fully implemented
 
@@ -20,7 +22,8 @@ The user stories are categorized into:
    - Also offers `twig jira branch create` for explicit creation
    - Example: `twig switch PROJ-123` or `twig jira branch create PROJ-123`
 
-2. I want to quickly navigate to the root branch (`flow --root`/`switch --root`) so that I can update my local repository with the latest changes.
+1. I want to quickly navigate to the root branch (`flow --root`/`switch --root`) so that I can update my local
+   repository with the latest changes.
 
    **Implementation Status**: ✅ Fully implemented
 
@@ -28,7 +31,8 @@ The user stories are categorized into:
    - Automatically traverses up the dependency chain to find the topmost parent branch
    - If the current branch has no dependencies, it remains on the current branch
 
-3. I want to quickly open the web browser to view Jira issues or GitHub PRs (`story go`/`pr go`) so that I can easily access their details.
+1. I want to quickly open the web browser to view Jira issues or GitHub PRs (`story go`/`pr go`) so that I can easily
+   access their details.
 
    **Implementation Status**: ✅ Fully implemented
 
@@ -40,7 +44,8 @@ The user stories are categorized into:
 
 ### Branch Rebasing and Dependency Management
 
-4. I want to perform cascading rebases (`cascade`) so that changes from parent branches automatically propagate to all child branches.
+4. I want to perform cascading rebases (`cascade`) so that changes from parent branches automatically propagate to all
+   child branches.
 
    **Implementation Status**: ✅ Fully implemented
 
@@ -48,18 +53,21 @@ The user stories are categorized into:
    - Supports options like `--max-depth`, `--force`, `--show-graph`, and `--autostash`
    - Example: `twig cascade`
 
-5. I want to easily identify when my tickets have landed (`tidy`) so that I can update ticket statuses in project management tools.
+1. I want to easily identify when my tickets have landed (`tidy`) so that I can update ticket statuses in project
+   management tools.
 
    **Implementation Status**: ⚠️ Partially implemented
 
    - Twig doesn't have a direct equivalent to argit's `tidy`
-   - However, `twig git stale-branches` provides similar functionality to identify branches that haven't been updated recently
+   - However, `twig git stale-branches` provides similar functionality to identify branches that haven't been updated
+     recently
    - The `--prune` flag enables interactive cleanup of stale branches
    - Examples:
      - `twig git stale-branches --days 30` (list only)
      - `twig git stale-branches --days 30 --prune` (interactive cleanup)
 
-6. I want to add dependencies to parent branches (`track`) so that I can establish relationships between my current branch and its parent branch (e.g., `track feat/my-parent`).
+1. I want to add dependencies to parent branches (`track`) so that I can establish relationships between my current
+   branch and its parent branch (e.g., `track feat/my-parent`).
 
    **Implementation Status**: ✅ Fully implemented
 
@@ -69,7 +77,8 @@ The user stories are categorized into:
 
 ### Branch Locking
 
-7. I want to lock branches (`lock`) so that I can create temporary branches that I don't want to push but still want to consistently rebase.
+7. I want to lock branches (`lock`) so that I can create temporary branches that I don't want to push but still want to
+   consistently rebase.
 
    **Implementation Status**: ⚠️ Partially implemented
 
@@ -80,14 +89,16 @@ The user stories are categorized into:
 
 ### Branch Management Improvements
 
-8. I want child branches to be automatically reparented when their parent branch is merged so that my branch hierarchy remains clean and accurate.
+8. I want child branches to be automatically reparented when their parent branch is merged so that my branch hierarchy
+   remains clean and accurate.
 
    **Implementation Status**: ❌ Not yet implemented
 
    - This feature is not currently available in twig
    - Planned for future implementation
 
-9. I want an aggressive cleanup option (`tidy --aggressive`) so that I can remove empty parent branches and maintain a cleaner branch structure.
+1. I want an aggressive cleanup option (`tidy --aggressive`) so that I can remove empty parent branches and maintain a
+   cleaner branch structure.
 
    **Implementation Status**: ⚠️ Partially implemented
 
@@ -97,7 +108,8 @@ The user stories are categorized into:
 
 ### Configuration Management
 
-10. I want a global configuration option that works across repositories so that I can use the same workflow tools even in repositories without specific tool configuration and so that I can keep repository content and history clean.
+10. I want a global configuration option that works across repositories so that I can use the same workflow tools even
+    in repositories without specific tool configuration and so that I can keep repository content and history clean.
 
     **Implementation Status**: ⚠️ Partially implemented
 
@@ -108,7 +120,8 @@ The user stories are categorized into:
 
 ### Integration with External Tools
 
-11. I want integration with lat-pr for handling parent branches and labels so that I can maintain branch dependencies when creating pull requests.
+11. I want integration with lat-pr for handling parent branches and labels so that I can maintain branch dependencies
+    when creating pull requests.
 
     **Implementation Status**: ❌ Not yet implemented
 
@@ -144,8 +157,8 @@ The following features were mentioned as no longer used and may not need to be p
 When implementing these features in twig, consider:
 
 1. Maintaining compatibility with existing workflows while leveraging Rust's performance benefits
-2. Providing clear migration paths from argit commands to twig equivalents
-3. Enhancing the most frequently used commands first:
+1. Providing clear migration paths from argit commands to twig equivalents
+1. Enhancing the most frequently used commands first:
    - `flow`/`switch` - ✅ Implemented
    - `cascade` - ✅ Implemented
    - `tidy` - ⚠️ Partially implemented via `git stale-branches` (with `--prune` for interactive cleanup)
@@ -162,16 +175,16 @@ Twig offers several features that weren't in the original argit:
    - `twig worktree list`
    - `twig worktree clean`
 
-2. **GitHub Integration**: Track PR status and review information
+1. **GitHub Integration**: Track PR status and review information
 
    - `twig github pr status`
    - `twig github checks`
 
-3. **Upward Rebasing**: Rebase current branch on its ancestors
+1. **Upward Rebasing**: Rebase current branch on its ancestors
 
    - `twig rebase`
 
-4. **Plugin Architecture**: Extensible kubectl/Docker-inspired plugin system for custom functionality
+1. **Plugin Architecture**: Extensible kubectl/Docker-inspired plugin system for custom functionality
 
    - Plugins are executable files named `twig-<plugin-name>` discovered via `$PATH`
    - Built-in commands take precedence over plugins

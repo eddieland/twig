@@ -3,11 +3,16 @@
 [![CI](https://github.com/eddieland/twig/actions/workflows/ci.yml/badge.svg)](https://github.com/eddieland/twig/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/eddieland/twig?display_name=tag&sort=semver)](https://github.com/eddieland/twig/releases/latest)
 
-Twig is a Git-first productivity tool that keeps branches, issues, and pull requests aligned across everything you are building. It was shaped around stacked pull-request workflows: make a change on one branch, and Twig will help you carry it forward to each dependent branch by rebasing in sequence. Multi-repo management, worktrees, and Jira or GitHub integrations sit on top of that core experience so you can keep related work in sync without babysitting each branch.
+Twig is a Git-first productivity tool that keeps branches, issues, and pull requests aligned across everything you are
+building. It was shaped around stacked pull-request workflows: make a change on one branch, and Twig will help you carry
+it forward to each dependent branch by rebasing in sequence. Multi-repo management, worktrees, and Jira or GitHub
+integrations sit on top of that core experience so you can keep related work in sync without babysitting each branch.
 
 ## Overview
 
-Twig coordinates branch management, issue tracking, and review work across one or many repositories. The CLI standardizes branch naming, keeps metadata alongside each repo, and offers batch operations when you need to run the same Git command everywhere.
+Twig coordinates branch management, issue tracking, and review work across one or many repositories. The CLI
+standardizes branch naming, keeps metadata alongside each repo, and offers batch operations when you need to run the
+same Git command everywhere.
 
 ## Highlights
 
@@ -20,27 +25,32 @@ Twig coordinates branch management, issue tracking, and review work across one o
 
 ## Platform notes
 
-Twig is written in Rust (Edition 2024). The minimum supported Rust version is 1.91.0. We develop primarily on Ubuntu 24.04, with macOS and Windows builds available as well.
+Twig is written in Rust (Edition 2024). The minimum supported Rust version is 1.91.0. We develop primarily on Ubuntu
+24.04, with macOS and Windows builds available as well.
 
 ## Installation
 
 ### Pre-built Binaries (Recommended)
 
-The easiest way to install Twig is to download a pre-built binary from the [GitHub Releases](https://github.com/eddieland/twig/releases) page.
+The easiest way to install Twig is to download a pre-built binary from the
+[GitHub Releases](https://github.com/eddieland/twig/releases) page.
 
 1. Navigate to the [latest release](https://github.com/eddieland/twig/releases/latest)
-2. Download the appropriate binary for your platform:
+
+1. Download the appropriate binary for your platform:
+
    - `twig-linux-x86_64-v*.tar.gz` for Linux
    - `twig-macos-x86_64-v*.tar.gz` for macOS
    - `twig-windows-x86_64-v*.zip` for Windows
-3. Verify the download (recommended):
+
+1. Verify the download (recommended):
 
    ```bash
    # Verify checksum (Linux/macOS)
    sha256sum -c twig-*-v*.tar.gz.sha256
    ```
 
-4. Extract and install:
+1. Extract and install:
 
 **Linux/macOS:**
 
@@ -115,7 +125,8 @@ COMPLETE=powershell twig | Out-String | Invoke-Expression
 
 ### For Contributors
 
-If you want to contribute to Twig, please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file for detailed development setup instructions.
+If you want to contribute to Twig, please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file for detailed development
+setup instructions.
 
 ## Basic Usage
 
@@ -143,7 +154,8 @@ twig github pr status
 
 ### Managing a stack of pull requests
 
-When you open a Jira issue or decide to split a change across several branches, Twig can record the order of those branches and keep them synchronized. Suppose you start a branch from a Jira ticket and later build on top of it:
+When you open a Jira issue or decide to split a change across several branches, Twig can record the order of those
+branches and keep them synchronized. Suppose you start a branch from a Jira ticket and later build on top of it:
 
 ```bash
 twig switch PROJ-123
@@ -159,7 +171,8 @@ If you need to update the base branch after review feedback, run:
 twig cascade
 ```
 
-Twig will walk the dependency chain, rebasing `feature/new-ui` on top of the refreshed PROJ-123 branch. Each pull request stays reviewable, and your local branches reflect the order you intended.
+Twig will walk the dependency chain, rebasing `feature/new-ui` on top of the refreshed PROJ-123 branch. Each pull
+request stays reviewable, and your local branches reflect the order you intended.
 
 ## Command Structure
 
@@ -218,7 +231,8 @@ twig
 
 ## Environment Variables
 
-Twig supports several environment variables to customize its behavior. For the best experience, we recommend setting these variables in your shell profile file (`.bashrc`, `.zshrc`, or equivalent).
+Twig supports several environment variables to customize its behavior. For the best experience, we recommend setting
+these variables in your shell profile file (`.bashrc`, `.zshrc`, or equivalent).
 
 ### Jira Integration
 
@@ -228,7 +242,8 @@ Specifies the URL of your Jira instance.
 
 - **Example**: `export JIRA_HOST="https://your-company.atlassian.net"`
 
-**Authentication**: When `JIRA_HOST` is set, Twig will look for credentials in your `.netrc` file matching this hostname first. If not found, it falls back to looking for `atlassian.net` credentials.
+**Authentication**: When `JIRA_HOST` is set, Twig will look for credentials in your `.netrc` file matching this hostname
+first. If not found, it falls back to looking for `atlassian.net` credentials.
 
 **API Requests**: All Jira API requests will be sent to this host, allowing you to:
 
@@ -246,7 +261,9 @@ export JIRA_HOST="https://your-company.atlassian.net"
 
 ### XDG Base Directory Specification
 
-Twig follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html) for storing configuration and data files. You can customize these locations with the following variables:
+Twig follows the
+[XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html) for
+storing configuration and data files. You can customize these locations with the following variables:
 
 #### XDG_CONFIG_HOME
 
@@ -293,12 +310,14 @@ These aliases can significantly reduce typing and make common twig operations mo
 
 ## MCP Server (Alpha)
 
-> [!WARNING]
-> The MCP server is in early alpha. APIs and tool schemas may change between releases.
+> [!WARNING] The MCP server is in early alpha. APIs and tool schemas may change between releases.
 
-Twig ships a second binary, `twig-mcp`, that exposes branch metadata, Jira issues, and GitHub PRs as a read-only [Model Context Protocol](https://modelcontextprotocol.io/) server. This lets AI coding agents query your repository context without shelling out to `twig` commands.
+Twig ships a second binary, `twig-mcp`, that exposes branch metadata, Jira issues, and GitHub PRs as a read-only
+[Model Context Protocol](https://modelcontextprotocol.io/) server. This lets AI coding agents query your repository
+context without shelling out to `twig` commands.
 
-The server uses **stdio transport** and auto-detects the repository from its working directory (or use `--repo /path/to/repo` to override).
+The server uses **stdio transport** and auto-detects the repository from its working directory (or use
+`--repo /path/to/repo` to override).
 
 <details>
 <summary><b>Install in Claude Code (CLI)</b></summary>
@@ -465,7 +484,8 @@ All tools are **read-only** and return structured JSON responses.
 
 ## Development Resources
 
-For information about development workflows, Makefile usage, and snapshot testing, please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file.
+For information about development workflows, Makefile usage, and snapshot testing, please refer to the
+[CONTRIBUTING.md](CONTRIBUTING.md) file.
 
 ## Windows Usage
 
@@ -479,7 +499,8 @@ Windows uses different path normalization techniques compared to Unix-based syst
 - Windows paths may include drive letters (e.g., `C:\`)
 - Case sensitivity differs between Windows (case-insensitive) and Unix (case-sensitive)
 
-These differences can lead to unexpected behavior when working with paths across different platforms, especially in a Git context where repositories might be accessed from multiple operating systems.
+These differences can lead to unexpected behavior when working with paths across different platforms, especially in a
+Git context where repositories might be accessed from multiple operating systems.
 
 ### Troubleshooting Windows-Specific Issues
 
@@ -491,15 +512,18 @@ If you encounter issues when using Twig on Windows:
    twig --verbose git list
    ```
 
-2. **Provide crash reports**: If Twig crashes, it will generate a crash report. Please include this when reporting issues:
+1. **Provide crash reports**: If Twig crashes, it will generate a crash report. Please include this when reporting
+   issues:
 
    ```
    # Location of crash reports
    %USERPROFILE%\.local\share\twig\crash-reports\
    ```
 
-3. **Include panic dumps**: If you encounter a panic, the error message contains valuable information for debugging. Copy the entire output when reporting issues.
+1. **Include panic dumps**: If you encounter a panic, the error message contains valuable information for debugging.
+   Copy the entire output when reporting issues.
 
-4. **Check path normalization**: If you're experiencing path-related issues, try using forward slashes even on Windows, as Git often works better with Unix-style paths.
+1. **Check path normalization**: If you're experiencing path-related issues, try using forward slashes even on Windows,
+   as Git often works better with Unix-style paths.
 
 Providing these details when reporting Windows-specific issues will help us identify and fix problems more effectively.

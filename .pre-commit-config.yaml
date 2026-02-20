@@ -29,3 +29,11 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
+
+      - id: mdformat
+        name: mdformat
+        description: Format Markdown files with mdformat.
+        entry: uvx --from mdformat --with mdformat-gfm mdformat --wrap 120
+        language: system
+        types: [markdown]
+        pass_filenames: true

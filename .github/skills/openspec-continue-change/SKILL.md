@@ -1,25 +1,21 @@
----
-name: openspec-continue-change
-description: Continue working on an OpenSpec change by creating the next artifact. Use when the user wants to progress their change, create the next artifact, or continue their workflow.
-license: MIT
-compatibility: Requires openspec CLI.
-metadata:
-  author: openspec
-  version: "1.0"
-  generatedBy: "1.1.1"
----
+______________________________________________________________________
+
+## name: openspec-continue-change description: Continue working on an OpenSpec change by creating the next artifact. Use when the user wants to progress their change, create the next artifact, or continue their workflow. license: MIT compatibility: Requires openspec CLI. metadata: author: openspec version: "1.0" generatedBy: "1.1.1"
 
 Continue working on a change by creating the next artifact.
 
-**Input**: Optionally specify a change name. If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
+**Input**: Optionally specify a change name. If omitted, check if it can be inferred from conversation context. If vague
+or ambiguous you MUST prompt for available changes.
 
 **Steps**
 
 1. **If no change name provided, prompt for selection**
 
-   Run `openspec list --json` to get available changes sorted by most recently modified. Then use the **AskUserQuestion tool** to let the user select which change to work on.
+   Run `openspec list --json` to get available changes sorted by most recently modified. Then use the **AskUserQuestion
+   tool** to let the user select which change to work on.
 
    Present the top 3-4 most recently modified changes as options, showing:
+
    - Change name
    - Schema (from `schema` field if present, otherwise "spec-driven")
    - Status (e.g., "0/5 tasks", "complete", "no tasks")
@@ -29,28 +25,33 @@ Continue working on a change by creating the next artifact.
 
    **IMPORTANT**: Do NOT guess or auto-select a change. Always let the user choose.
 
-2. **Check current status**
+1. **Check current status**
+
    ```bash
    openspec status --change "<name>" --json
    ```
+
    Parse the JSON to understand current state. The response includes:
+
    - `schemaName`: The workflow schema being used (e.g., "spec-driven")
    - `artifacts`: Array of artifacts with their status ("done", "ready", "blocked")
    - `isComplete`: Boolean indicating if all artifacts are complete
 
-3. **Act based on status**:
+1. **Act based on status**:
 
-   ---
+   ______________________________________________________________________
 
    **If all artifacts are complete (`isComplete: true`)**:
+
    - Congratulate the user
    - Show final status including the schema used
    - Suggest: "All artifacts created! You can now implement this change or archive it."
    - STOP
 
-   ---
+   ______________________________________________________________________
 
    **If artifacts are ready to create** (status shows artifacts with `status: "ready"`):
+
    - Pick the FIRST artifact with `status: "ready"` from the status output
    - Get its instructions:
      ```bash
@@ -71,13 +72,15 @@ Continue working on a change by creating the next artifact.
    - Show what was created and what's now unlocked
    - STOP after creating ONE artifact
 
-   ---
+   ______________________________________________________________________
 
    **If no artifacts are ready (all blocked)**:
+
    - This shouldn't happen with a valid schema
    - Show status and suggest checking for issues
 
-4. **After creating an artifact, show progress**
+1. **After creating an artifact, show progress**
+
    ```bash
    openspec status --change "<name>"
    ```
@@ -85,6 +88,7 @@ Continue working on a change by creating the next artifact.
 **Output**
 
 After each invocation, show:
+
 - Which artifact was created
 - Schema workflow being used
 - Current progress (N/M complete)
@@ -93,20 +97,24 @@ After each invocation, show:
 
 **Artifact Creation Guidelines**
 
-The artifact types and their purpose depend on the schema. Use the `instruction` field from the instructions output to understand what to create.
+The artifact types and their purpose depend on the schema. Use the `instruction` field from the instructions output to
+understand what to create.
 
 Common artifact patterns:
 
 **spec-driven schema** (proposal → specs → design → tasks):
+
 - **proposal.md**: Ask user about the change if not clear. Fill in Why, What Changes, Capabilities, Impact.
   - The Capabilities section is critical - each capability listed will need a spec file.
-- **specs/<capability>/spec.md**: Create one spec per capability listed in the proposal's Capabilities section (use the capability name, not the change name).
+- **specs/<capability>/spec.md**: Create one spec per capability listed in the proposal's Capabilities section (use the
+  capability name, not the change name).
 - **design.md**: Document technical decisions, architecture, and implementation approach.
 - **tasks.md**: Break down implementation into checkboxed tasks.
 
 For other schemas, follow the `instruction` field from the CLI output.
 
 **Guardrails**
+
 - Create ONE artifact per invocation
 - Always read dependency artifacts before creating a new one
 - Never skip artifacts or create out of order

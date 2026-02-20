@@ -1,10 +1,13 @@
 # Migrating from argit to twig
 
-This guide helps users of argit transition to twig, a new Git-based developer productivity tool with similar functionality but enhanced features and performance.
+This guide helps users of argit transition to twig, a new Git-based developer productivity tool with similar
+functionality but enhanced features and performance.
 
 ## Overview
 
-Both argit and twig are tools designed to enhance Git workflows by providing branch dependency management, integration with external services, and visualization of branch relationships. While they share many conceptual similarities, twig is implemented in Rust (rather than Python) and offers additional features and performance improvements.
+Both argit and twig are tools designed to enhance Git workflows by providing branch dependency management, integration
+with external services, and visualization of branch relationships. While they share many conceptual similarities, twig
+is implemented in Rust (rather than Python) and offers additional features and performance improvements.
 
 ### Key Differences
 
@@ -17,14 +20,20 @@ Both argit and twig are tools designed to enhance Git workflows by providing bra
 
 ### Performance Benefits
 
-One of the most noticeable improvements when migrating from argit to twig is the dramatic reduction in command latency. The Rust implementation provides significantly faster startup times compared to Python:
+One of the most noticeable improvements when migrating from argit to twig is the dramatic reduction in command latency.
+The Rust implementation provides significantly faster startup times compared to Python:
 
-- **CLI Help Response**: `twig --help` responds in **fractions of a second** (typically <100ms), while `argit --help` takes a **minimum of 500ms** even with pre-compiled `.pyc` files
-- **Command Execution**: All twig commands benefit from near-instantaneous startup, eliminating the Python interpreter overhead that affects every argit command
-- **Interactive Workflows**: The reduced latency makes twig feel more responsive during rapid command sequences and interactive workflows
-- **Shell Completion**: Tab completion is noticeably faster, providing immediate feedback without the delay experienced with Python-based tools
+- **CLI Help Response**: `twig --help` responds in **fractions of a second** (typically \<100ms), while `argit --help`
+  takes a **minimum of 500ms** even with pre-compiled `.pyc` files
+- **Command Execution**: All twig commands benefit from near-instantaneous startup, eliminating the Python interpreter
+  overhead that affects every argit command
+- **Interactive Workflows**: The reduced latency makes twig feel more responsive during rapid command sequences and
+  interactive workflows
+- **Shell Completion**: Tab completion is noticeably faster, providing immediate feedback without the delay experienced
+  with Python-based tools
 
-This performance improvement becomes especially apparent during daily development workflows where you might run dozens of Git-related commands throughout the day.
+This performance improvement becomes especially apparent during daily development workflows where you might run dozens
+of Git-related commands throughout the day.
 
 ### Command Mapping
 
@@ -206,7 +215,8 @@ twig rebase --from-root
 twig rebase --dry-run
 ```
 
-This provides more flexibility compared to argit's cascade-only approach, allowing you to update your current branch with changes from its ancestors before cascading changes to descendants.
+This provides more flexibility compared to argit's cascade-only approach, allowing you to update your current branch
+with changes from its ancestors before cascading changes to descendants.
 
 ### Worktree Management
 
