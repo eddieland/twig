@@ -8,7 +8,7 @@ use clap::{Args, Subcommand};
 use twig_core::output::{format_command, print_header, print_info, print_warning};
 
 use super::completion;
-use crate::self_update::{PluginInstallOptions, SelfUpdateOptions, run as run_self_update, run_flow_plugin_install};
+use crate::self_update::{PluginInstallOptions, SelfUpdateOptions, run as run_self_update, run_plugin_install};
 use crate::{diagnostics, plugin};
 
 /// Arguments for the top-level `twig self` command.
@@ -28,7 +28,8 @@ pub enum SelfSubcommand {
 This command determines the platform-specific binary to download, verifies permissions,\n\
 handles sudo elevation when required, and ensures that the running executable is swapped\n\
 out safely once the update completes.\n\n\
-Use `twig self update flow` to install or update the flow plugin instead."
+Use `twig self update flow`, `twig self update prune`, or `twig self update mcp` to install or\n\
+update individual plugins instead."
   )]
   #[command(alias = "upgrade")]
   Update(SelfUpdateArgs),
@@ -81,6 +82,22 @@ the Twig executable so it can be discovered via your PATH. Use this when you wan
 install or update the built-in flow plugin binary."
   )]
   Flow,
+
+  /// Install or update the Twig prune plugin
+  #[command(
+    long_about = "Download the latest Twig prune plugin release from GitHub and install it alongside\n\
+the Twig executable so it can be discovered via your PATH. Use this when you want to\n\
+install or update the prune plugin binary."
+  )]
+  Prune,
+
+  /// Install or update the Twig MCP server
+  #[command(
+    long_about = "Download the latest Twig MCP server release from GitHub and install it alongside\n\
+the Twig executable so it can be discovered via your PATH. Use this when you want to\n\
+install or update the MCP server binary."
+  )]
+  Mcp,
 }
 
 /// Execute a `twig self` command.
@@ -94,9 +111,12 @@ pub fn handle_self_command(args: SelfArgs) -> Result<()> {
 }
 
 fn handle_update_command(args: SelfUpdateArgs) -> Result<()> {
+  let plugin_opts = PluginInstallOptions { force: args.force };
   match args.target {
     None => run_self_update(SelfUpdateOptions { force: args.force }),
-    Some(UpdateTarget::Flow) => run_flow_plugin_install(PluginInstallOptions { force: args.force }),
+    Some(UpdateTarget::Flow) => run_plugin_install("twig-flow", plugin_opts),
+    Some(UpdateTarget::Prune) => run_plugin_install("twig-prune", plugin_opts),
+    Some(UpdateTarget::Mcp) => run_plugin_install("twig-mcp", plugin_opts),
   }
 }
 
