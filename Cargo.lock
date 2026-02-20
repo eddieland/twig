@@ -3466,6 +3466,7 @@ name = "twig-mcp"
 version = "0.5.7"
 dependencies = [
  "anyhow",
+ "clap",
  "directories",
  "git2",
  "insta",

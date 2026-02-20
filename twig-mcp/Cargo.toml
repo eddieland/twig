@@ -15,6 +15,7 @@ path = "src/main.rs"
 twig-core = { path = "../twig-core" }
 twig-gh = { path = "../twig-gh" }
 twig-jira = { path = "../twig-jira" }
+clap = { workspace = true }
 rmcp = { version = "0.15", features = ["server", "transport-io"] }
 schemars = "1"
 tokio = { workspace = true }
