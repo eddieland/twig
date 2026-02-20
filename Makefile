@@ -129,6 +129,10 @@ install: ## Install twig locally
 install-flow-plugin: ## Install twig flow plugin
 	cargo install --path plugins/twig-flow
 
+.PHONY: install-mcp
+install-mcp: ## Install twig-mcp MCP server
+	cargo install --path twig-mcp
+
 .PHONY: install-prune-plugin
 install-prune-plugin: ## Install twig prune plugin
 	cargo install --path plugins/twig-prune

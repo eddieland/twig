@@ -291,6 +291,178 @@ alias tgps='twig github pr status' # Check PR status
 
 These aliases can significantly reduce typing and make common twig operations more convenient.
 
+## MCP Server (Alpha)
+
+> [!WARNING]
+> The MCP server is in early alpha. APIs and tool schemas may change between releases.
+
+Twig ships a second binary, `twig-mcp`, that exposes branch metadata, Jira issues, and GitHub PRs as a read-only [Model Context Protocol](https://modelcontextprotocol.io/) server. This lets AI coding agents query your repository context without shelling out to `twig` commands.
+
+The server uses **stdio transport** and auto-detects the repository from its working directory (or use `--repo /path/to/repo` to override).
+
+<details>
+<summary><b>Install in Claude Code (CLI)</b></summary>
+
+```sh
+claude mcp add --scope user twig-mcp -- twig-mcp
+```
+
+Remove `--scope user` to install for the current project only.
+
+To override the repository path:
+
+```sh
+claude mcp add --scope user twig-mcp -- twig-mcp --repo /path/to/repo
+```
+
+</details>
+
+<details>
+<summary><b>Install in Claude Desktop</b></summary>
+
+Add to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "twig-mcp": {
+      "command": "twig-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+To override the repository path, add `"args": ["--repo", "/path/to/repo"]`.
+
+</details>
+
+<details>
+<summary><b>Install in Cursor</b></summary>
+
+Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project-specific):
+
+```json
+{
+  "mcpServers": {
+    "twig-mcp": {
+      "command": "twig-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Install in VS Code / Copilot</b></summary>
+
+Add to your VS Code `settings.json`:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "twig-mcp": {
+        "type": "stdio",
+        "command": "twig-mcp",
+        "args": []
+      }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Install in Windsurf</b></summary>
+
+Add to your Windsurf MCP config:
+
+```json
+{
+  "mcpServers": {
+    "twig-mcp": {
+      "command": "twig-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Install in Zed</b></summary>
+
+Add to your Zed `settings.json`:
+
+```json
+{
+  "context_servers": {
+    "twig-mcp": {
+      "command": {
+        "path": "twig-mcp",
+        "args": []
+      }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Install in Cline</b></summary>
+
+Add to your Cline MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "twig-mcp": {
+      "command": "twig-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+</details>
+
+### Available Tools
+
+All tools are **read-only** and return structured JSON responses.
+
+**Local State** — work without any API credentials:
+
+| Tool                  | Description                                       |
+| --------------------- | ------------------------------------------------- |
+| `get_current_branch`  | Current branch name with linked Jira issue and PR |
+| `get_branch_metadata` | Metadata for a specific branch                    |
+| `get_branch_tree`     | Branch dependency tree visualization              |
+| `get_branch_stack`    | Ancestor chain from a branch up to its root       |
+| `list_branches`       | All twig-tracked branches in the repository       |
+| `list_repositories`   | All twig-registered repositories                  |
+| `get_worktrees`       | Active worktrees for the repository               |
+
+**GitHub** — requires GitHub credentials in `~/.netrc` (see `twig creds setup`):
+
+| Tool                 | Description                                       |
+| -------------------- | ------------------------------------------------- |
+| `get_pull_request`   | Full PR details (defaults to current branch's PR) |
+| `get_pr_status`      | PR details with reviews and CI check status       |
+| `list_pull_requests` | List PRs for the repository                       |
+
+**Jira** — requires Jira credentials in `~/.netrc` and `JIRA_HOST` set:
+
+| Tool               | Description                                               |
+| ------------------ | --------------------------------------------------------- |
+| `get_jira_issue`   | Issue details (defaults to current branch's linked issue) |
+| `list_jira_issues` | List issues with project, status, and assignee filters    |
+
 ## Development Resources
 
 For information about development workflows, Makefile usage, and snapshot testing, please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file.
