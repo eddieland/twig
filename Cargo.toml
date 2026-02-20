@@ -5,6 +5,7 @@ members = [
     "twig-core",
     "twig-gh",
     "twig-jira",
+    "twig-mcp",
     "twig-test-utils",
     "plugins/twig-flow",
     "plugins/twig-prune",
