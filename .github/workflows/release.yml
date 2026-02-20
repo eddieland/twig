@@ -45,9 +45,9 @@ jobs:
         with:
           shared-key: rust-ubuntu-${{ hashFiles('**/Cargo.lock') }}
       - name: Build release
-        run: cargo build --release -p twig-cli -p twig-flow --bins
+        run: cargo build --release -p twig-cli -p twig-flow -p twig-prune -p twig-mcp --bins
       - name: Strip binary
-        run: strip target/release/twig target/release/twig-flow
+        run: strip target/release/twig target/release/twig-flow target/release/twig-prune target/release/twig-mcp
       - name: Extract version
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
@@ -58,6 +58,10 @@ jobs:
           shasum -a 256 twig-linux-x86_64-v${VERSION}.tar.gz > twig-linux-x86_64-v${VERSION}.tar.gz.sha256
           tar -czf twig-flow-linux-x86_64-v${VERSION}.tar.gz -C target/release twig-flow
           shasum -a 256 twig-flow-linux-x86_64-v${VERSION}.tar.gz > twig-flow-linux-x86_64-v${VERSION}.tar.gz.sha256
+          tar -czf twig-prune-linux-x86_64-v${VERSION}.tar.gz -C target/release twig-prune
+          shasum -a 256 twig-prune-linux-x86_64-v${VERSION}.tar.gz > twig-prune-linux-x86_64-v${VERSION}.tar.gz.sha256
+          tar -czf twig-mcp-linux-x86_64-v${VERSION}.tar.gz -C target/release twig-mcp
+          shasum -a 256 twig-mcp-linux-x86_64-v${VERSION}.tar.gz > twig-mcp-linux-x86_64-v${VERSION}.tar.gz.sha256
       - name: Generate build provenance
         uses: actions/attest-build-provenance@v3
         with:
@@ -66,6 +70,14 @@ jobs:
         uses: actions/attest-build-provenance@v3
         with:
           subject-path: twig-flow-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
+      - name: Generate build provenance (twig-prune)
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: twig-prune-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
+      - name: Generate build provenance (twig-mcp)
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: twig-mcp-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Upload twig artifact
         uses: actions/upload-artifact@v6
         with:
@@ -80,6 +92,20 @@ jobs:
           path: |
             twig-flow-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
             twig-flow-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
+      - name: Upload twig-prune artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: twig-prune-linux
+          path: |
+            twig-prune-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
+            twig-prune-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
+      - name: Upload twig-mcp artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: twig-mcp-linux
+          path: |
+            twig-mcp-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
+            twig-mcp-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
 
   build-macos:
     needs: validate-version
@@ -99,9 +125,9 @@ jobs:
         with:
           shared-key: rust-macos-latest-${{ hashFiles('**/Cargo.lock') }}
       - name: Build release
-        run: cargo build --release -p twig-cli -p twig-flow --bins
+        run: cargo build --release -p twig-cli -p twig-flow -p twig-prune -p twig-mcp --bins
       - name: Strip binary
-        run: strip target/release/twig target/release/twig-flow
+        run: strip target/release/twig target/release/twig-flow target/release/twig-prune target/release/twig-mcp
       - name: Extract version
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
@@ -112,6 +138,10 @@ jobs:
           shasum -a 256 twig-macos-x86_64-v${VERSION}.tar.gz > twig-macos-x86_64-v${VERSION}.tar.gz.sha256
           tar -czf twig-flow-macos-x86_64-v${VERSION}.tar.gz -C target/release twig-flow
           shasum -a 256 twig-flow-macos-x86_64-v${VERSION}.tar.gz > twig-flow-macos-x86_64-v${VERSION}.tar.gz.sha256
+          tar -czf twig-prune-macos-x86_64-v${VERSION}.tar.gz -C target/release twig-prune
+          shasum -a 256 twig-prune-macos-x86_64-v${VERSION}.tar.gz > twig-prune-macos-x86_64-v${VERSION}.tar.gz.sha256
+          tar -czf twig-mcp-macos-x86_64-v${VERSION}.tar.gz -C target/release twig-mcp
+          shasum -a 256 twig-mcp-macos-x86_64-v${VERSION}.tar.gz > twig-mcp-macos-x86_64-v${VERSION}.tar.gz.sha256
       - name: Generate build provenance
         uses: actions/attest-build-provenance@v3
         with:
@@ -120,6 +150,14 @@ jobs:
         uses: actions/attest-build-provenance@v3
         with:
           subject-path: twig-flow-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
+      - name: Generate build provenance (twig-prune)
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: twig-prune-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
+      - name: Generate build provenance (twig-mcp)
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: twig-mcp-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Upload twig artifact
         uses: actions/upload-artifact@v6
         with:
@@ -134,6 +172,20 @@ jobs:
           path: |
             twig-flow-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
             twig-flow-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
+      - name: Upload twig-prune artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: twig-prune-macos
+          path: |
+            twig-prune-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
+            twig-prune-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
+      - name: Upload twig-mcp artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: twig-mcp-macos
+          path: |
+            twig-mcp-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
+            twig-mcp-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
 
   build-windows:
     needs: validate-version
@@ -153,7 +205,7 @@ jobs:
         with:
           shared-key: rust-windows-latest-${{ hashFiles('**/Cargo.lock') }}
       - name: Build release
-        run: cargo build --profile release-windows -p twig-cli -p twig-flow --bins
+        run: cargo build --profile release-windows -p twig-cli -p twig-flow -p twig-prune -p twig-mcp --bins
       - name: Extract version
         id: version
         shell: bash
@@ -166,22 +218,21 @@ jobs:
         run: |
           copy target\release-windows\twig.exe release\
           copy target\release-windows\twig-flow.exe release\
+          copy target\release-windows\twig-prune.exe release\
+          copy target\release-windows\twig-mcp.exe release\
       - name: Create zip for release
         shell: bash
         run: |
-          7z a twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip ./release/twig.exe
-          7z a twig-flow-windows-x86_64-v${{ steps.version.outputs.version }}.zip ./release/twig-flow.exe
-          # Generate checksum in the same format as Linux/macOS
-          if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip > twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
-            sha256sum twig-flow-windows-x86_64-v${{ steps.version.outputs.version }}.zip > twig-flow-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
-          else
-            # Fallback to shasum if sha256sum is not available
-            shasum -a 256 twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip > twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
-            shasum -a 256 twig-flow-windows-x86_64-v${{ steps.version.outputs.version }}.zip > twig-flow-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
-          fi
-          cat twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
-          cat twig-flow-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
+          VERSION=${{ steps.version.outputs.version }}
+          for bin in twig twig-flow twig-prune twig-mcp; do
+            7z a ${bin}-windows-x86_64-v${VERSION}.zip ./release/${bin}.exe
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum ${bin}-windows-x86_64-v${VERSION}.zip > ${bin}-windows-x86_64-v${VERSION}.zip.sha256
+            else
+              shasum -a 256 ${bin}-windows-x86_64-v${VERSION}.zip > ${bin}-windows-x86_64-v${VERSION}.zip.sha256
+            fi
+            cat ${bin}-windows-x86_64-v${VERSION}.zip.sha256
+          done
 
       - name: Generate build provenance
         uses: actions/attest-build-provenance@v3
@@ -191,6 +242,14 @@ jobs:
         uses: actions/attest-build-provenance@v3
         with:
           subject-path: twig-flow-windows-x86_64-v${{ steps.version.outputs.version }}.zip
+      - name: Generate build provenance (twig-prune)
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: twig-prune-windows-x86_64-v${{ steps.version.outputs.version }}.zip
+      - name: Generate build provenance (twig-mcp)
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: twig-mcp-windows-x86_64-v${{ steps.version.outputs.version }}.zip
 
       - name: Upload twig artifact
         uses: actions/upload-artifact@v6
@@ -206,6 +265,20 @@ jobs:
           path: |
             twig-flow-windows-x86_64-v${{ steps.version.outputs.version }}.zip
             twig-flow-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
+      - name: Upload twig-prune artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: twig-prune-windows
+          path: |
+            twig-prune-windows-x86_64-v${{ steps.version.outputs.version }}.zip
+            twig-prune-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
+      - name: Upload twig-mcp artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: twig-mcp-windows
+          path: |
+            twig-mcp-windows-x86_64-v${{ steps.version.outputs.version }}.zip
+            twig-mcp-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
 
   create-release:
     name: Create Release
@@ -236,6 +309,16 @@ jobs:
         with:
           name: twig-flow-linux
           path: ./
+      - name: Download Linux twig-prune artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: twig-prune-linux
+          path: ./
+      - name: Download Linux twig-mcp artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: twig-mcp-linux
+          path: ./
 
       - name: Download macOS artifact
         uses: actions/download-artifact@v7
@@ -247,6 +330,16 @@ jobs:
         with:
           name: twig-flow-macos
           path: ./
+      - name: Download macOS twig-prune artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: twig-prune-macos
+          path: ./
+      - name: Download macOS twig-mcp artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: twig-mcp-macos
+          path: ./
 
       - name: Download Windows zip artifact
         uses: actions/download-artifact@v7
@@ -257,6 +350,16 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           name: twig-flow-windows
+          path: ./
+      - name: Download Windows twig-prune artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: twig-prune-windows
+          path: ./
+      - name: Download Windows twig-mcp artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: twig-mcp-windows
           path: ./
 
       - name: Install envsubst
@@ -282,6 +385,18 @@ jobs:
             ./twig-flow-macos-x86_64-*.tar.gz.sha256
             ./twig-flow-windows-x86_64-*.zip
             ./twig-flow-windows-x86_64-*.zip.sha256
+            ./twig-prune-linux-x86_64-*.tar.gz
+            ./twig-prune-linux-x86_64-*.tar.gz.sha256
+            ./twig-prune-macos-x86_64-*.tar.gz
+            ./twig-prune-macos-x86_64-*.tar.gz.sha256
+            ./twig-prune-windows-x86_64-*.zip
+            ./twig-prune-windows-x86_64-*.zip.sha256
+            ./twig-mcp-linux-x86_64-*.tar.gz
+            ./twig-mcp-linux-x86_64-*.tar.gz.sha256
+            ./twig-mcp-macos-x86_64-*.tar.gz
+            ./twig-mcp-macos-x86_64-*.tar.gz.sha256
+            ./twig-mcp-windows-x86_64-*.zip
+            ./twig-mcp-windows-x86_64-*.zip.sha256
           body_path: release_notes.md
           draft: false
           prerelease: false

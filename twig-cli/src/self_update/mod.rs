@@ -91,36 +91,40 @@ pub fn run(options: SelfUpdateOptions) -> Result<()> {
   Ok(())
 }
 
-/// Download and install the latest Twig flow plugin release.
+/// Download and install the latest release of the given plugin.
 ///
 /// The plugin binary is placed alongside the running Twig executable so it can
 /// be discovered via standard PATH lookups.
-pub fn run_flow_plugin_install(options: PluginInstallOptions) -> Result<()> {
+pub fn run_plugin_install(binary_name: &str, options: PluginInstallOptions) -> Result<()> {
+  let display_name = binary_name.replace('-', " ");
   let client = build_http_client()?;
   let release = fetch_latest_release(&client)?;
-  let target = target_config("twig-flow")?;
+  let target = target_config(binary_name)?;
   let latest_version = release.clean_tag();
-  let install_path = flow_plugin_install_path(&target)?;
+  let install_path = plugin_install_path(&target)?;
 
   if !options.force
     && let Some(installed_version) = read_installed_plugin_version(&install_path)?
     && installed_version == latest_version
   {
-    print_success("Twig flow plugin is already up to date.");
+    print_success(&format!("{display_name} plugin is already up to date."));
     return Ok(());
   }
 
   let asset = release
     .find_matching_asset(&target)
-    .ok_or_else(|| anyhow!("No Twig flow plugin asset available for this platform"))?;
+    .ok_or_else(|| anyhow!("No {display_name} plugin asset available for this platform"))?;
 
-  print_info(&format!("Downloading Twig flow {latest_version} ({})…", asset.name));
+  print_info(&format!(
+    "Downloading {display_name} {latest_version} ({})…",
+    asset.name
+  ));
 
   let staging_root = create_staging_directory()?;
   let archive_path = download_asset(&client, asset, &staging_root)?;
   let binary_path = extract_archive(&archive_path, &staging_root, &target)?;
 
-  print_info("Installing Twig flow plugin…");
+  print_info(&format!("Installing {display_name} plugin…"));
   let outcome = install_plugin_binary(&binary_path, &install_path)?;
 
   if let Err(err) = fs::remove_dir_all(&staging_root) {
@@ -137,7 +141,7 @@ pub fn run_flow_plugin_install(options: PluginInstallOptions) -> Result<()> {
   match outcome {
     InstallOutcome::Immediate => {
       print_success(&format!(
-        "Twig flow {latest_version} is installed at {}.",
+        "{display_name} {latest_version} is installed at {}.",
         install_path.display()
       ));
     }
@@ -149,7 +153,7 @@ pub fn run_flow_plugin_install(options: PluginInstallOptions) -> Result<()> {
         print_info("A background PowerShell helper will finish applying the update once Twig exits.");
       }
       print_success(&format!(
-        "Twig flow {latest_version} is staged and will complete installation shortly."
+        "{display_name} {latest_version} is staged and will complete installation shortly."
       ));
     }
   }
@@ -442,11 +446,11 @@ fn install_plugin_binary(binary_path: &Path, install_path: &Path) -> Result<Inst
   platform::install_new_binary(binary_path, install_path)
 }
 
-/// Returns the path where the flow plugin should be installed.
+/// Returns the path where a plugin should be installed.
 ///
 /// Places the plugin in the same directory as the Twig executable so it can
 /// be discovered via PATH.
-fn flow_plugin_install_path(target: &TargetConfig) -> Result<PathBuf> {
+fn plugin_install_path(target: &TargetConfig) -> Result<PathBuf> {
   let current_exe = std::env::current_exe().context("Failed to locate current executable")?;
   let parent = current_exe
     .parent()
@@ -933,6 +937,88 @@ mod tests {
       found.map(|a| a.name.as_str()),
       Some("twig-macos-arm64-v0.5.2.tar.gz"),
       "Should select twig, not twig-flow on macOS"
+    );
+  }
+
+  // twig-prune asset matching tests
+  #[test]
+  fn selects_twig_prune_linux_asset() {
+    let target = linux_target("twig-prune");
+    assert!(target.matches(&asset("twig-prune-linux-x86_64-v0.5.7.tar.gz")));
+  }
+
+  #[test]
+  fn twig_prune_does_not_match_twig_target() {
+    let target = linux_target("twig");
+    assert!(
+      !target.matches(&asset("twig-prune-linux-x86_64-v0.5.7.tar.gz")),
+      "twig-prune asset should not match twig target"
+    );
+  }
+
+  #[test]
+  fn twig_prune_does_not_match_twig_mcp_target() {
+    let target = linux_target("twig-mcp");
+    assert!(
+      !target.matches(&asset("twig-prune-linux-x86_64-v0.5.7.tar.gz")),
+      "twig-prune asset should not match twig-mcp target"
+    );
+  }
+
+  // twig-mcp asset matching tests
+  #[test]
+  fn selects_twig_mcp_linux_asset() {
+    let target = linux_target("twig-mcp");
+    assert!(target.matches(&asset("twig-mcp-linux-x86_64-v0.5.7.tar.gz")));
+  }
+
+  #[test]
+  fn twig_mcp_does_not_match_twig_target() {
+    let target = linux_target("twig");
+    assert!(
+      !target.matches(&asset("twig-mcp-linux-x86_64-v0.5.7.tar.gz")),
+      "twig-mcp asset should not match twig target"
+    );
+  }
+
+  #[test]
+  fn twig_mcp_does_not_match_twig_prune_target() {
+    let target = linux_target("twig-prune");
+    assert!(
+      !target.matches(&asset("twig-mcp-linux-x86_64-v0.5.7.tar.gz")),
+      "twig-mcp asset should not match twig-prune target"
+    );
+  }
+
+  #[test]
+  fn selects_correct_plugin_from_full_release() {
+    let assets = vec![
+      asset("twig-flow-linux-x86_64-v0.5.7.tar.gz"),
+      asset("twig-linux-x86_64-v0.5.7.tar.gz"),
+      asset("twig-mcp-linux-x86_64-v0.5.7.tar.gz"),
+      asset("twig-prune-linux-x86_64-v0.5.7.tar.gz"),
+    ];
+    let r = release("v0.5.7", assets);
+
+    let prune_target = linux_target("twig-prune");
+    let prune_found = r.find_matching_asset(&prune_target);
+    assert_eq!(
+      prune_found.map(|a| a.name.as_str()),
+      Some("twig-prune-linux-x86_64-v0.5.7.tar.gz"),
+    );
+
+    let mcp_target = linux_target("twig-mcp");
+    let mcp_found = r.find_matching_asset(&mcp_target);
+    assert_eq!(
+      mcp_found.map(|a| a.name.as_str()),
+      Some("twig-mcp-linux-x86_64-v0.5.7.tar.gz"),
+    );
+
+    let twig_target = linux_target("twig");
+    let twig_found = r.find_matching_asset(&twig_target);
+    assert_eq!(
+      twig_found.map(|a| a.name.as_str()),
+      Some("twig-linux-x86_64-v0.5.7.tar.gz"),
     );
   }
 }
