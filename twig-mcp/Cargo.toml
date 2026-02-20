@@ -1,0 +1,32 @@
+[package]
+name = "twig-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "twig-mcp"
+path = "src/main.rs"
+
+[dependencies]
+twig-core = { path = "../twig-core" }
+twig-gh = { path = "../twig-gh" }
+twig-jira = { path = "../twig-jira" }
+rmcp = { version = "0.15", features = ["server", "transport-io"] }
+schemars = "1"
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+git2 = { workspace = true }
+directories = { workspace = true }
+
+[dev-dependencies]
+twig-test-utils = { path = "../twig-test-utils" }
+insta = { workspace = true }
+tempfile = { workspace = true }
