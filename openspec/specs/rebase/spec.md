@@ -12,16 +12,8 @@ graph rather than relying solely on git's tracking branches, enabling correct re
 
 ### Requirement: Repository resolution
 
-#### Scenario: Auto-detecting the repository from the working directory
-
-WHEN the user runs `twig rebase` without `-r` THEN the repository is detected by traversing from the current working
-directory upward using `detect_repository` (which delegates to `git2::Repository::discover`) AND if no repository is
-found, the command fails with a "Not in a git repository" error
-
-#### Scenario: Overriding the repository path with `-r`
-
-WHEN the user runs `twig rebase -r <path>` THEN the command operates on the repository located at `<path>` instead of
-auto-detecting from the working directory
+Repository resolution follows the shared behavior defined in `repository-resolution/spec.md`. This command uses the `-r`
+flag for the repository path override.
 
 ### Requirement: HEAD validation
 
@@ -32,8 +24,8 @@ branch
 
 #### Scenario: HEAD is detached
 
-WHEN the user runs `twig rebase` AND HEAD is detached (not pointing to a branch) THEN the command fails with a "HEAD is
-not a branch. Cannot rebase." error
+WHEN the user runs `twig rebase` AND HEAD is detached (not pointing to a branch) THEN the command fails with an error
+indicating HEAD is not a branch
 
 ### Requirement: Parent resolution from dependency graph
 
@@ -46,13 +38,13 @@ current branch onto each parent in sequence
 #### Scenario: Current branch has no twig-defined parent dependencies
 
 WHEN the user runs `twig rebase` AND the current branch has no parent dependencies in the twig state THEN the command
-prints a warning: "No parent branches found for the current branch." AND prints guidance to use
-`twig branch depend <parent-branch>` to define a parent AND the command exits successfully without performing any rebase
+prints a warning indicating no parent branches were found AND prints guidance to use `twig branch depend` to define a
+parent AND the command exits successfully without performing any rebase
 
 #### Scenario: No local branches found
 
 WHEN the user runs `twig rebase` AND the resolved branch node set is empty (no local branches) THEN the command prints a
-warning: "No local branches found." AND exits successfully without performing any rebase
+warning indicating no local branches were found AND exits successfully without performing any rebase
 
 ### Requirement: Basic rebase onto parent
 
@@ -60,7 +52,7 @@ warning: "No local branches found." AND exits successfully without performing an
 
 WHEN the user runs `twig rebase` AND the current branch has a twig-defined parent dependency AND the branch is not
 already up-to-date with the parent THEN `git rebase <parent>` is executed in the repository directory AND on success,
-the CLI prints a success message: "Successfully rebased <branch> onto <parent>"
+the CLI prints a success message indicating the branch was rebased onto the parent
 
 #### Scenario: Rebasing onto multiple parents sequentially
 
@@ -74,21 +66,21 @@ parent individually AND if any rebase fails with an error, the command aborts wi
 #### Scenario: Branch is already up-to-date with parent
 
 WHEN the user runs `twig rebase` AND git reports the branch is "up to date" with the parent (detected in stdout or
-stderr) THEN the command prints an informational message: "Branch <branch> is already up-to-date with <parent>" AND no
-rebase operation is performed AND the command continues to the next parent (if any)
+stderr) THEN the command prints an informational message indicating the branch is already up-to-date with the parent AND
+no rebase operation is performed AND the command continues to the next parent (if any)
 
 ### Requirement: Force rebase
 
 #### Scenario: Forcing rebase when already up-to-date
 
-WHEN the user runs `twig rebase --force` AND the branch is already up-to-date with a parent THEN the command prints
-"Branch is up-to-date, but force flag is set. Rebasing anyway..." AND executes `git rebase --force-rebase <parent>` AND
-on success, prints "Successfully force-rebased <branch> onto <parent>"
+WHEN the user runs `twig rebase --force` AND the branch is already up-to-date with a parent THEN the command indicates
+the branch is up-to-date but the force flag is set AND executes `git rebase --force-rebase <parent>` AND on success,
+prints a success message indicating the branch was force-rebased
 
 #### Scenario: Force rebase fails
 
 WHEN the user runs `twig rebase --force` AND the forced rebase command fails (non-success exit, no CONFLICT marker) THEN
-the command prints an error: "Failed to force-rebase <branch> onto <parent>" AND returns a "Rebase failed" error
+the command prints an error indicating the force-rebase failed AND returns an error
 
 #### Scenario: Force flag has no effect when branch is not up-to-date
 
@@ -119,7 +111,7 @@ graph
 #### Scenario: Show-graph with no root branches
 
 WHEN the user runs `twig rebase --show-graph` AND no root branches are found in the dependency tree THEN the command
-prints a warning: "No root branches found. Cannot display dependency tree." AND continues with the rebase operation
+prints a warning indicating no root branches were found for the dependency tree AND continues with the rebase operation
 
 ### Requirement: Interactive conflict resolution
 
@@ -129,8 +121,8 @@ scenarios and documents only its behavioral differences (see `cascade-rebase/spe
 #### Scenario: Rebase encounters conflicts
 
 WHEN a `git rebase` operation encounters conflicts (detected by "CONFLICT" in stdout or stderr) THEN the command prints
-a warning: "Conflicts detected while rebasing `<branch>` onto `<parent>`" AND presents an interactive prompt with four
-resolution options
+a warning indicating conflicts were detected during the rebase AND presents an interactive prompt with four resolution
+options
 
 #### Scenario: User selects "Continue" after resolving conflicts
 
@@ -162,18 +154,13 @@ interaction fails, "Continue" is used as the fallback
 
 #### Scenario: Git rebase command fails to execute
 
-WHEN the underlying `git rebase` command cannot be executed (e.g., git binary not found) THEN the command fails with a
-"Failed to execute git rebase command" error
+WHEN the underlying `git rebase` command cannot be executed (e.g., git binary not found) THEN the command fails with an
+error indicating the git rebase command could not be executed
 
 #### Scenario: Git rebase exits with non-zero status and no conflict
 
 WHEN the `git rebase` command exits with a non-zero status AND the output does not contain "CONFLICT" or "up to date"
-markers THEN the command prints an error: "Failed to rebase <branch> onto <parent>" AND returns a "Rebase failed" error
-
-#### Scenario: Repository cannot be opened
-
-WHEN the repository path is provided (via `-r` or auto-detection) AND `git2::Repository::open` fails THEN the command
-fails with a "Failed to open git repository at <path>" error
+markers THEN the command prints an error indicating the rebase failed AND returns an error
 
 ### Requirement: Command alias
 

@@ -13,17 +13,8 @@ confirmation.
 
 ### Requirement: Repository resolution
 
-#### Scenario: Auto-detecting the repository from the working directory
-
-WHEN the user runs `twig adopt` without `--repo` THEN the repository is detected by traversing from the current working
-directory upward using `detect_repository` AND if no repository is found, the command fails with a "Not in a git
-repository" error
-
-#### Scenario: Overriding the repository path with `--repo`
-
-WHEN the user runs `twig adopt --repo <path>` THEN the command operates on the repository located at `<path>` instead of
-auto-detecting from the working directory AND if the repository cannot be opened, the command fails with a "Failed to
-open git repository at <path>" error
+Repository resolution follows the shared behavior defined in `repository-resolution/spec.md`. This command uses the
+`--repo` flag for the repository path override.
 
 ### Requirement: Orphan detection
 
@@ -36,8 +27,8 @@ classified as orphaned
 
 #### Scenario: No orphaned branches exist
 
-WHEN the user runs `twig adopt` AND no orphaned branches are found THEN the command prints "No orphaned branches found.
-Nothing to adopt." AND exits successfully without prompting or modifying state
+WHEN the user runs `twig adopt` AND no orphaned branches are found THEN the command prints a message indicating no
+orphaned branches were found AND exits successfully without prompting or modifying state
 
 ### Requirement: Mode selection
 
@@ -72,7 +63,7 @@ fallback root is available, the plan entry uses the reason "Fallback to suggeste
 #### Scenario: Auto mode warns when some branches cannot be matched
 
 WHEN the mode is `auto` AND the number of plan entries is fewer than the number of orphaned branches THEN the command
-prints a warning: "Some orphaned branches could not be matched automatically."
+prints a warning indicating some orphaned branches could not be matched automatically
 
 ### Requirement: Default-root mode adoption
 
@@ -84,8 +75,8 @@ root"
 
 #### Scenario: No default root configured
 
-WHEN the mode is `default-root` AND no default root branch is configured THEN the command fails with the error: "No
-default root is configured. Set one with 'twig branch root add <branch> --default'."
+WHEN the mode is `default-root` AND no default root branch is configured THEN the command fails with an error indicating
+no default root is configured AND includes guidance to set one with `twig branch root add <branch> --default`
 
 ### Requirement: Branch mode adoption
 
@@ -97,21 +88,21 @@ branches are added to the adoption plan with the specified branch as their paren
 
 #### Scenario: Branch mode without `--parent`
 
-WHEN the mode is `branch` AND `--parent` is not provided THEN the command fails with the error: "--parent must be
-provided when using --mode branch"
+WHEN the mode is `branch` AND `--parent` is not provided THEN the command fails with an error indicating `--parent` must
+be provided when using `--mode branch`
 
 #### Scenario: Specified parent branch does not exist locally
 
 WHEN the mode is `branch` AND the `--parent` branch does not exist in the resolved branch nodes THEN the command fails
-with the error: "Parent branch '<branch>' does not exist locally."
+with an error indicating the specified parent branch does not exist locally
 
 ### Requirement: Empty adoption plan
 
 #### Scenario: No suggestions generated for any orphaned branch
 
 WHEN the adoption plan is empty after mode processing (e.g., auto mode produced no suggestions and no fallback root is
-available) THEN the command prints a warning: "No adoption suggestions could be generated for the orphaned branches."
-AND exits successfully without prompting or modifying state
+available) THEN the command prints a warning indicating no adoption suggestions could be generated AND exits
+successfully without prompting or modifying state
 
 ### Requirement: Plan display
 
@@ -152,8 +143,8 @@ repository state
 
 #### Scenario: User declines the adoption plan
 
-WHEN the user responds with any value other than "y" or "yes" (including empty input) THEN the command prints "Aborted
-without making changes." AND exits successfully without modifying state
+WHEN the user responds with any value other than "y" or "yes" (including empty input) THEN the command prints a message
+indicating no changes were made AND exits successfully without modifying state
 
 #### Scenario: Skipping confirmation with `--yes`
 
@@ -166,14 +157,14 @@ immediately after the preview
 
 WHEN the user confirms the adoption plan (or `--yes` is specified) THEN for each plan entry,
 `repo_state.add_dependency(child, parent)` is called AND the updated state is saved to disk via `repo_state.save()` AND
-the command prints "Adoption complete. Branch relationships updated."
+the command prints a success message indicating the adoption is complete and branch relationships were updated
 
 #### Scenario: Duplicate dependency detected during application
 
 WHEN `add_dependency` is called for a child-parent pair that already exists in the dependency graph THEN the operation
-fails with the error: "Dependency from '<child>' to '<parent>' already exists"
+fails with an error indicating the dependency already exists
 
 #### Scenario: Circular dependency detected during application
 
 WHEN `add_dependency` is called AND adding the dependency would create a cycle in the dependency graph THEN the
-operation fails with the error: "Adding dependency from '<child>' to '<parent>' would create a circular dependency"
+operation fails with an error indicating the dependency would create a circular dependency

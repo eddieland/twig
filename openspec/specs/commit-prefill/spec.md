@@ -15,14 +15,14 @@ messages and offers fixup instead.
 
 #### Scenario: Not in a git repository
 
-WHEN the user runs `twig commit` AND the current directory is not inside a git repository THEN twig exits with an error
-indicating "Not in a git repository"
+Repository resolution follows the shared behavior defined in `repository-resolution/spec.md`. This command does not
+accept a repository path override flag.
 
 #### Scenario: No Jira issue linked to current branch
 
 WHEN the user runs `twig commit` AND the current branch has no Jira issue associated in the repo state THEN twig prints
-an error "No Jira issue associated with the current branch." AND prints guidance to link a Jira issue with
-`twig jira branch link <issue-key>` AND exits without creating a commit
+an error indicating no Jira issue is associated with the current branch AND prints guidance to link a Jira issue with
+`twig jira branch link` AND exits without creating a commit
 
 ### Requirement: Jira issue resolution
 
@@ -34,7 +34,7 @@ about the missing environment variable
 #### Scenario: Jira issue fetch failure
 
 WHEN the user runs `twig commit` AND the Jira API call to fetch the issue fails (network error, invalid credentials, or
-issue not found) THEN twig exits with an error "Failed to fetch Jira issue {ISSUE-KEY}"
+issue not found) THEN twig exits with an error indicating the Jira issue could not be fetched
 
 #### Scenario: Successful Jira issue fetch
 
@@ -94,10 +94,9 @@ line THEN twig creates a normal commit with `git commit -m "{message}"`
 #### Scenario: Duplicate found and user accepts fixup
 
 WHEN the user runs `twig commit` AND a commit with an identical subject line exists in the last 20 commits THEN twig
-prints a warning "A commit with the message '{message}' already exists in recent history." AND prompts the user with
-"Create a fixup commit instead? \[y/N\]: " AND when the user responds "y" or "yes" (case-insensitive) THEN twig finds
-the short hash of the matching commit from the last 20 commits AND creates a fixup commit with
-`git commit --fixup {hash}`
+prints a warning indicating a commit with that message already exists in recent history AND prompts the user to create a
+fixup commit instead AND when the user responds "y" or "yes" (case-insensitive) THEN twig finds the short hash of the
+matching commit from the last 20 commits AND creates a fixup commit with `git commit --fixup {hash}`
 
 #### Scenario: Duplicate found and user declines fixup
 
@@ -126,20 +125,20 @@ checking recent history for duplicates AND without prompting the user
 
 #### Scenario: Successful normal commit
 
-WHEN `git commit -m "{message}"` succeeds THEN twig prints an info line "Creating commit with message: '{message}'" AND
-prints a success message "Commit created successfully." AND displays the git commit output
+WHEN `git commit -m "{message}"` succeeds THEN twig prints the commit message being used AND prints a success message
+indicating the commit was created AND displays the git commit output
 
 #### Scenario: Failed normal commit (e.g., nothing staged)
 
-WHEN `git commit -m "{message}"` fails (non-zero exit code) THEN twig prints an error "Failed to create commit." AND
+WHEN `git commit -m "{message}"` fails (non-zero exit code) THEN twig prints an error indicating the commit failed AND
 displays git's stderr output AND exits with an error
 
 #### Scenario: Successful fixup commit
 
-WHEN `git commit --fixup {hash}` succeeds THEN twig prints a success message "Fixup commit created successfully." AND
+WHEN `git commit --fixup {hash}` succeeds THEN twig prints a success message indicating the fixup commit was created AND
 the git output is logged at debug verbosity level
 
 #### Scenario: Failed fixup commit
 
-WHEN `git commit --fixup {hash}` fails THEN twig prints an error "Failed to create fixup commit." AND the git stderr is
-logged at warn verbosity level AND twig exits with an error
+WHEN `git commit --fixup {hash}` fails THEN twig prints an error indicating the fixup commit failed AND the git stderr
+is logged at warn verbosity level AND twig exits with an error

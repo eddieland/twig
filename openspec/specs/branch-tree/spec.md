@@ -26,8 +26,8 @@ auto-detecting from the current working directory
 
 #### Scenario: No local branches found
 
-WHEN the user runs `twig tree` AND the repository has no local branches THEN a warning is printed: "No local branches
-found." AND the command exits successfully
+WHEN the user runs `twig tree` AND the repository has no local branches THEN a warning indicating no local branches were
+found is printed AND the command exits successfully
 
 #### Scenario: No user-defined dependencies or root branches
 
@@ -38,9 +38,9 @@ rendering a tree
 
 #### Scenario: Dependencies exist but no root branches
 
-WHEN the user runs `twig tree` AND user-defined dependencies exist AND no root branches are configured THEN a warning is
-displayed: "Found user-defined dependencies but no root branches." AND the available branches are listed AND the user is
-prompted to designate a root branch via `twig branch root add`
+WHEN the user runs `twig tree` AND user-defined dependencies exist AND no root branches are configured THEN a warning
+indicating dependencies exist but no root branches are configured is displayed AND the available branches are listed AND
+guidance is provided to designate a root branch via `twig branch root add`
 
 ### Requirement: Max depth limiting
 

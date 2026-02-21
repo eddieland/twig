@@ -23,12 +23,13 @@ authentication with the header `Authorization: Basic <base64(username:password)>
 #### Scenario: Credentials not found on Unix
 
 WHEN a GitHub subcommand requires authentication AND no entry for machine `github.com` exists in `~/.netrc` THEN the
-command fails with "GitHub credentials not found in .netrc file. Please add credentials for machine 'github.com'."
+command fails with an error indicating GitHub credentials were not found AND includes guidance to add credentials for
+`github.com` to `~/.netrc`
 
 #### Scenario: Credentials not found on Windows
 
 WHEN a GitHub subcommand requires authentication AND no credentials are found for machine `github.com` THEN the command
-fails with "GitHub credentials not found. Please run 'twig creds setup' to configure credentials for 'github.com'."
+fails with an error indicating GitHub credentials were not found AND includes guidance to run `twig creds setup`
 
 ### Requirement: Remote detection
 
@@ -46,57 +47,48 @@ WHEN a subcommand needs the repository's GitHub owner and name AND the `origin` 
 #### Scenario: Remote URL does not match GitHub
 
 WHEN a subcommand needs the repository's GitHub owner and name AND the `origin` remote URL does not match the GitHub
-pattern THEN the command prints an error: "Failed to extract repository info from URL: Could not extract owner and repo
-from URL: <url>"
+pattern THEN the command fails with an error indicating the owner and repo could not be extracted from the remote URL
 
 #### Scenario: No origin remote exists
 
 WHEN a subcommand attempts to read the `origin` remote AND the repository has no remote named `origin` THEN the command
-prints an error: "Failed to find remote 'origin': <details>"
+fails with an error indicating the `origin` remote was not found
 
 ### Requirement: Repository resolution for subcommands
 
-#### Scenario: Auto-detecting the repository from the working directory
-
-WHEN the user runs a GitHub subcommand that accepts `--repo` without specifying it THEN the repository is detected by
-traversing from the current working directory upward AND if no repository is found, the command prints "No git
-repository found. Make sure you're in a git repository or specify a valid repository path with --repo"
-
-#### Scenario: Overriding the repository path with `--repo`
-
-WHEN the user runs a GitHub subcommand with `-r <path>` or `--repo <path>` THEN the command operates on the repository
-located at `<path>` instead of auto-detecting from the working directory
+Repository resolution follows the shared behavior defined in `repository-resolution/spec.md`. Subcommands that accept a
+repository override use the `--repo` (or `-r`) flag.
 
 ### Requirement: Authentication check (`github check`)
 
 #### Scenario: Successful authentication
 
 WHEN the user runs `twig github check` AND credentials are valid THEN the command calls `test_connection()` followed by
-`get_current_user()` AND prints "Successfully authenticated with GitHub" AND displays the user's username, name (if
+`get_current_user()` AND prints a success message confirming authentication AND displays the user's username, name (if
 present), and user ID
 
 #### Scenario: Authentication failure
 
-WHEN the user runs `twig github check` AND `test_connection()` returns false THEN the command prints "Authentication
-failed but no error was returned"
+WHEN the user runs `twig github check` AND `test_connection()` returns false THEN the command prints an error indicating
+authentication failed
 
 #### Scenario: Connection error
 
-WHEN the user runs `twig github check` AND `test_connection()` returns an error THEN the command prints "Failed to
-authenticate with GitHub: <error>"
+WHEN the user runs `twig github check` AND `test_connection()` returns an error THEN the command prints an error
+indicating authentication with GitHub failed, including the underlying error details
 
 #### Scenario: User info retrieval failure
 
 WHEN the user runs `twig github check` AND authentication succeeds but `get_current_user()` fails THEN the command
-prints "Failed to get user information: <error>"
+prints an error indicating user information could not be retrieved
 
 ### Requirement: CI/CD check display (`github checks`)
 
 #### Scenario: Viewing checks for an explicit PR number
 
 WHEN the user runs `twig github checks <PR_NUMBER>` THEN the command fetches the PR details to obtain the head commit
-SHA AND fetches check runs for that commit AND displays a table with columns: Check Name, Status, Conclusion, Started At
-AND lists detail URLs below the table
+SHA AND fetches check runs for that commit AND displays a table with columns for check name, status, conclusion, and
+start time AND lists detail URLs below the table
 
 #### Scenario: Viewing checks for the current branch's PR
 
@@ -106,13 +98,13 @@ WHEN the user runs `twig github checks` without a PR number AND the current bran
 #### Scenario: No associated PR and no argument
 
 WHEN the user runs `twig github checks` without a PR number AND the current branch has no associated PR THEN the command
-prints "Branch '<name>' has no associated PR" AND prints guidance: "Link a PR with `twig github pr link <pr-url>` or
-specify a PR number"
+prints a warning indicating the branch has no associated PR AND prints guidance to link a PR with `twig github pr link`
+or specify a PR number
 
 #### Scenario: Invalid PR number argument
 
-WHEN the user runs `twig github checks <value>` AND the value cannot be parsed as a u32 THEN the command prints "Invalid
-PR number: <value>"
+WHEN the user runs `twig github checks <value>` AND the value cannot be parsed as a u32 THEN the command prints an error
+indicating the PR number is invalid
 
 #### Scenario: Check status coloring in the table
 
@@ -122,8 +114,8 @@ WHEN the checks table is rendered THEN status values are colored: `completed` in
 
 #### Scenario: No checks found
 
-WHEN the checks are fetched for a PR AND the response contains zero check runs THEN the command prints "No checks found
-for this PR"
+WHEN the checks are fetched for a PR AND the response contains zero check runs THEN the command prints a message
+indicating no checks were found for the PR
 
 #### Scenario: Details URLs displayed
 
@@ -151,12 +143,13 @@ opens that PR's URL in the browser
 #### Scenario: No associated PR
 
 WHEN the user runs `twig github open` without a PR number AND the current branch has no associated PR THEN the command
-prints "Current branch has no associated GitHub PR" AND prints guidance: "Link a PR with `twig github pr link <pr-url>`"
+prints a warning indicating the current branch has no associated GitHub PR AND prints guidance to link a PR with
+`twig github pr link`
 
 #### Scenario: Invalid PR number argument
 
-WHEN the user runs `twig github open <value>` AND the value cannot be parsed as a u32 THEN the command prints "Invalid
-PR number: <value>" AND prints "PR number must be a positive integer"
+WHEN the user runs `twig github open <value>` AND the value cannot be parsed as a u32 THEN the command prints an error
+indicating the PR number is invalid
 
 #### Scenario: Browser open failure is non-fatal
 
@@ -178,33 +171,33 @@ is parsed as a u32 PR number AND the PR is fetched from GitHub for validation an
 #### Scenario: Creating a new link
 
 WHEN the PR is validated AND the current branch has no existing metadata in `.twig/state.json` THEN a new
-`BranchMetadata` entry is created with the `github_pr` field set THEN the command prints "Linked branch '<name>' with PR
-#<number>: <title>"
+`BranchMetadata` entry is created with the `github_pr` field set THEN the command prints a success message indicating
+the branch was linked to the PR, including the PR number and title
 
 #### Scenario: Updating an existing link
 
 WHEN the PR is validated AND the current branch already has metadata in `.twig/state.json` THEN the existing entry's
-`github_pr` field is updated THEN the command prints "Updated branch '<name>' to link with PR #<number>: <title>"
+`github_pr` field is updated THEN the command prints a success message indicating the branch link was updated
 
 #### Scenario: State save failure is non-fatal
 
-WHEN the branch metadata is updated in memory but the `.twig/state.json` file cannot be saved THEN the command prints
-"Failed to save repository state: <error>" AND returns Ok (does not propagate the error)
+WHEN the branch metadata is updated in memory but the `.twig/state.json` file cannot be saved THEN the command prints an
+error indicating the state could not be saved AND returns Ok (does not propagate the error)
 
 #### Scenario: Invalid PR URL
 
 WHEN the user provides a URL containing `github.com` and `/pull/` AND the URL cannot be parsed (e.g., non-numeric PR
-segment) THEN the command prints "Invalid PR URL: <error>"
+segment) THEN the command prints an error indicating the PR URL is invalid
 
 #### Scenario: Invalid PR ID
 
-WHEN the user provides a value that is not a URL AND the value cannot be parsed as a u32 THEN the command prints
-"Invalid PR ID '<value>': <error>"
+WHEN the user provides a value that is not a URL AND the value cannot be parsed as a u32 THEN the command prints an
+error indicating the PR ID is invalid
 
 #### Scenario: No argument and no associated PR
 
 WHEN the user runs `twig github pr link` without an argument AND the current branch has no associated PR THEN the
-command prints "No PR URL or ID provided and current branch has no associated PR"
+command prints an error indicating no PR URL or ID was provided and the current branch has no associated PR
 
 #### Scenario: No argument with existing associated PR
 
@@ -243,7 +236,8 @@ timestamp)
 
 #### Scenario: No pull requests found
 
-WHEN the API returns an empty list THEN the command prints "No <state> pull requests found for <owner>/<repo>"
+WHEN the API returns an empty list THEN the command prints a message indicating no matching pull requests were found for
+the repository
 
 ### Requirement: List command alias
 
@@ -282,8 +276,8 @@ skipped=dim) AND for in-progress checks, the status itself is shown in yellow
 
 #### Scenario: No associated PR
 
-WHEN the user runs `twig github pr status` AND the current branch has no associated PR THEN the command prints a
-warning: "Branch '<name>' has no associated PR" AND prints guidance: "Link a PR with `twig github pr link <pr-url>`"
+WHEN the user runs `twig github pr status` AND the current branch has no associated PR THEN the command prints a warning
+indicating the branch has no associated PR AND prints guidance to link a PR with `twig github pr link`
 
 #### Scenario: Status command always uses current repository
 
@@ -300,19 +294,19 @@ WHEN the user runs `twig github pr st` THEN it behaves identically to `twig gith
 
 #### Scenario: Authentication failure (401/403)
 
-WHEN any GitHub API request returns HTTP 401 or 403 THEN the error message is "Authentication failed. Please check your
-GitHub credentials."
+WHEN any GitHub API request returns HTTP 401 or 403 THEN the error indicates authentication failed and suggests checking
+GitHub credentials
 
 #### Scenario: Pull request not found (404)
 
-WHEN a `get_pull_request` or `get_pull_request_reviews` call returns HTTP 404 THEN the error message is "Pull request
-#<number> not found"
+WHEN a `get_pull_request` or `get_pull_request_reviews` call returns HTTP 404 THEN the error indicates the pull request
+was not found
 
 #### Scenario: Commit not found (404) for check runs
 
-WHEN a `get_check_runs` call returns HTTP 404 THEN the error message is "Commit <sha> not found"
+WHEN a `get_check_runs` call returns HTTP 404 THEN the error indicates the commit was not found
 
 #### Scenario: Unexpected HTTP status
 
-WHEN any GitHub API request returns an unhandled HTTP status THEN the error message includes the HTTP status code and
-the response body text
+WHEN any GitHub API request returns an unhandled HTTP status THEN the error includes the HTTP status code and the
+response body text

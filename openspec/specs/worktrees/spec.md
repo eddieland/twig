@@ -12,17 +12,8 @@ and clean up stale ones. Integrates with branch creation flows (e.g., `twig jira
 
 ### Requirement: Repository resolution
 
-#### Scenario: Auto-detecting the repository from the working directory
-
-WHEN the user runs any `twig worktree` subcommand without `--repo` THEN the repository is detected by calling
-`detect_repository_from_path(".")` which traverses from the current working directory upward using
-`git2::Repository::discover` AND if no repository is found, the command fails with a "Could not detect repository path"
-error
-
-#### Scenario: Overriding the repository path with `--repo`
-
-WHEN the user runs any `twig worktree` subcommand with `--repo <path>` (or `-r <path>`) THEN the command operates on the
-repository located at `<path>` instead of auto-detecting from the working directory
+Repository resolution follows the shared behavior defined in `repository-resolution/spec.md`. This command uses the
+`--repo` (or `-r`) flag for the repository path override.
 
 ### Requirement: Worktree path convention
 
@@ -43,7 +34,7 @@ directory name and the worktree identifier in git
 #### Scenario: Branch already exists locally
 
 WHEN the user runs `twig worktree create <branch>` AND the branch already exists as a local branch THEN the command
-prints "Using existing branch: <branch>" AND creates a linked worktree at the conventional path using the existing
+indicates it is using the existing branch AND creates a linked worktree at the conventional path using the existing
 branch AND records the worktree in the repository state AND prints a success message with the branch name and worktree
 path
 
@@ -56,7 +47,7 @@ branch name
 #### Scenario: A git worktree with the sanitized name is already registered
 
 WHEN the user runs `twig worktree create <branch>` AND git already has a worktree registered with the sanitized branch
-name THEN the command fails with an error: "A worktree named '\<sanitized_name>' already exists"
+name THEN the command fails with an error indicating a worktree with that name already exists
 
 #### Scenario: A branch with the sanitized name conflicts with the worktree name
 
@@ -69,14 +60,14 @@ with an error indicating the name conflict AND advises the user to delete the co
 #### Scenario: Branch does not exist locally
 
 WHEN the user runs `twig worktree create <branch>` AND the branch does not exist as a local branch THEN the command
-prints "Creating new branch: <branch>" AND creates a new branch from HEAD AND creates a linked worktree at the
+indicates it is creating a new branch AND creates a new branch from HEAD AND creates a linked worktree at the
 conventional path AND records the worktree in the repository state AND prints a success message with the branch name and
 worktree path
 
 #### Scenario: HEAD is not a direct reference when creating a new branch
 
 WHEN the user runs `twig worktree create <branch>` AND the branch does not exist AND HEAD is not a direct reference THEN
-the command fails with a "HEAD is not a direct reference" error
+the command fails with an error indicating HEAD is not a direct reference
 
 ### Requirement: Worktree state recording
 
@@ -101,8 +92,8 @@ metadata is available in the state)
 
 #### Scenario: Repository has no worktrees
 
-WHEN the user runs `twig worktree list` AND the repository has no git worktrees THEN the command prints a warning: "No
-worktrees found for this repository." AND prints guidance to create one with `twig worktree create <branch-name>`
+WHEN the user runs `twig worktree list` AND the repository has no git worktrees THEN the command prints a warning
+indicating no worktrees were found AND prints guidance to create one with `twig worktree create`
 
 #### Scenario: Worktree exists in git but not in twig state
 
@@ -120,13 +111,13 @@ twig state AND the updated state is saved AND a success message reports the coun
 
 #### Scenario: No stale worktrees found
 
-WHEN the user runs `twig worktree clean` AND all tracked worktrees still exist on disk THEN the command prints "No stale
-worktrees found to clean up" AND the state is saved (preserving all entries)
+WHEN the user runs `twig worktree clean` AND all tracked worktrees still exist on disk THEN the command prints a message
+indicating no stale worktrees were found AND the state is saved (preserving all entries)
 
 #### Scenario: Repository has no worktrees to clean
 
 WHEN the user runs `twig worktree clean` AND the repository has no git worktrees at all THEN the command prints a
-warning: "No worktrees found for this repository."
+warning indicating no worktrees were found for the repository
 
 ### Requirement: Jira integration with worktrees
 
@@ -186,13 +177,8 @@ WHEN the user runs `twig worktree ls` THEN it behaves identically to `twig workt
 
 ### Requirement: Error handling
 
-#### Scenario: Repository cannot be opened
-
-WHEN the repository path is provided (via `--repo` or auto-detection) AND `git2::Repository::open` fails THEN the
-command fails with a "Failed to open git repository at <path>" error
-
 #### Scenario: Git worktree creation fails
 
 WHEN the underlying `git2` worktree creation fails (e.g., branch already checked out in another worktree, permission
-denied) THEN the command fails with a "Failed to create worktree for branch '<branch>'" error AND includes a diagnostic
-listing possible causes
+denied) THEN the command fails with an error indicating the worktree could not be created for the branch AND includes a
+diagnostic listing possible causes

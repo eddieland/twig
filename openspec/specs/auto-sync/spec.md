@@ -13,22 +13,8 @@ skipping of Jira or GitHub detection.
 
 ### Requirement: Repository resolution
 
-#### Scenario: Auto-detecting the repository from the working directory
-
-WHEN the user runs `twig sync` without `-r` THEN the repository is detected by traversing from the current working
-directory upward using `detect_repository` AND if no repository is found, the command fails with a "No repository
-specified and not in a git repository" error
-
-#### Scenario: Overriding the repository path with `-r`
-
-WHEN the user runs `twig sync -r <path>` THEN the command operates on the repository located at `<path>` instead of
-auto-detecting from the working directory AND if the path does not exist, the command fails with a "Repository path does
-not exist" error
-
-#### Scenario: Repository cannot be opened
-
-WHEN the repository path is resolved (via `-r` or auto-detection) AND `git2::Repository::open` fails THEN the command
-fails with a "Failed to open git repository at <path>" error
+Repository resolution follows the shared behavior defined in `repository-resolution/spec.md`. This command uses the `-r`
+flag for the repository path override.
 
 ### Requirement: Branch enumeration
 
@@ -39,8 +25,8 @@ branches named "HEAD" or containing "origin/" are excluded from processing
 
 #### Scenario: No local branches found
 
-WHEN the repository has no local branches THEN the command prints "No local branches found to sync" AND exits
-successfully without making any changes
+WHEN the repository has no local branches THEN the command prints a message indicating no local branches were found to
+sync AND exits successfully without making any changes
 
 ### Requirement: Stale branch eviction
 
@@ -48,8 +34,8 @@ successfully without making any changes
 
 WHEN the sync command loads repository state AND some branch metadata entries reference branches that no longer exist
 locally THEN those stale entries and their orphaned dependencies are removed from state AND an informational message is
-printed: "Cleaned up N stale branch entries and M orphaned dependencies" AND the eviction is persisted to disk even in
-dry-run mode
+printed reporting the count of removed branch entries and orphaned dependencies AND the eviction is persisted to disk
+even in dry-run mode
 
 ### Requirement: Jira issue detection from branch names
 
@@ -98,8 +84,8 @@ AND if no open PR exists but closed PRs do, the most recent PR number is stored
 #### Scenario: Origin remote URL cannot be resolved
 
 WHEN GitHub detection is active AND the origin remote URL is missing or cannot be parsed into an owner/repo pair THEN
-GitHub PR detection is skipped entirely with a warning: "Skipping GitHub PR detection because the origin remote URL is
-missing or invalid" AND the sync continues with Jira detection only
+GitHub PR detection is skipped entirely with a warning indicating the origin remote URL is missing or invalid AND the
+sync continues with Jira detection only
 
 #### Scenario: GitHub API call fails for a branch
 
@@ -157,8 +143,8 @@ conflict
 #### Scenario: Existing association conflicts with detected values
 
 WHEN a branch already has metadata AND the detected Jira issue key or GitHub PR number differs from the stored value AND
-`--force` is not set THEN the conflict is reported with both existing and detected values AND the user is advised to
-"Use --force to update conflicting associations" AND the metadata is not modified
+`--force` is not set THEN the conflict is reported with both existing and detected values AND the user is advised to use
+`--force` to update conflicting associations AND the metadata is not modified
 
 #### Scenario: Branch has existing association but no patterns detected
 
@@ -176,14 +162,14 @@ metadata is overwritten with the detected values AND the update is reported in t
 
 #### Scenario: Dry-run previews new associations
 
-WHEN the user runs `twig sync --dry-run` THEN the command prints "Running in dry-run mode - no changes will be made" AND
-new associations are reported with "Would create" instead of "Creating" AND no new metadata is persisted to the state
-file
+WHEN the user runs `twig sync --dry-run` THEN the command indicates it is running in dry-run mode AND new associations
+are reported with hypothetical language (e.g. "would create" instead of "creating") AND no new metadata is persisted to
+the state file
 
 #### Scenario: Dry-run previews updates to existing associations
 
 WHEN the user runs `twig sync --dry-run` AND existing associations would be updated THEN updates are reported with
-"Would update" instead of "Updating" AND no metadata modifications are persisted to the state file
+hypothetical language AND no metadata modifications are persisted to the state file
 
 #### Scenario: Dry-run still evicts stale branches
 
@@ -194,38 +180,37 @@ and saved to disk even in dry-run mode because eviction is background cleanup
 
 #### Scenario: New associations detected
 
-WHEN sync completes with new associations THEN a success message is printed: "Creating N new associations:" (or "Would
-create" in dry-run) AND each association is listed with the branch name and its detected Jira issue and/or PR number
+WHEN sync completes with new associations THEN a success message reports the count of new associations AND each
+association is listed with the branch name and its detected Jira issue and/or PR number
 
 #### Scenario: Associations updated
 
-WHEN sync completes with updated associations THEN a success message is printed: "Updating N existing associations:" (or
-"Would update" in dry-run) AND each update shows the branch name with the old and new values for changed fields
+WHEN sync completes with updated associations THEN a success message reports the count of updated associations AND each
+update shows the branch name with the old and new values for changed fields
 
 #### Scenario: Conflicts found
 
-WHEN sync completes with conflicting associations THEN a warning is printed: "Found N conflicting associations:" AND
-each conflict shows the branch name with existing and detected values for the conflicting fields AND an informational
-message is printed: "Use --force to update conflicting associations"
+WHEN sync completes with conflicting associations THEN a warning reports the count of conflicting associations AND each
+conflict shows the branch name with existing and detected values for the conflicting fields AND guidance is printed
+advising the user to use `--force` to update conflicting associations
 
 #### Scenario: Unlinked branches found
 
-WHEN sync completes with branches that have no detectable patterns THEN an informational message is printed: "Found N
-branches without detectable patterns:" AND each unlinked branch name is listed AND guidance is printed for manual
-linking via `twig jira branch link` and `twig github pr link`
+WHEN sync completes with branches that have no detectable patterns THEN an informational message reports the count of
+unlinked branches AND each unlinked branch name is listed AND guidance is printed for manual linking via
+`twig jira branch link` and `twig github pr link`
 
 #### Scenario: All branches already linked
 
-WHEN sync completes AND no new associations, updates, or conflicts are found THEN a success message is printed: "All
-branches are already properly linked!"
+WHEN sync completes AND no new associations, updates, or conflicts are found THEN a success message indicates all
+branches are already properly linked
 
 ### Requirement: State persistence
 
 #### Scenario: Saving changes after sync
 
 WHEN sync completes (not in dry-run mode) AND new or updated associations were created OR stale branch eviction occurred
-THEN the updated state is saved to `.twig/state.json` AND a success message is printed: "Successfully saved branch
-associations"
+THEN the updated state is saved to `.twig/state.json` AND a success message confirms the associations were saved
 
 #### Scenario: No changes to save
 
@@ -237,8 +222,8 @@ file is not written
 #### Scenario: Running sync twice produces the same result
 
 WHEN sync is run AND then run again immediately without any changes to branches or remote PRs THEN the second run
-produces no new associations, no updates, and no conflicts AND the summary reports "All branches are already properly
-linked!"
+produces no new associations, no updates, and no conflicts AND the summary indicates all branches are already properly
+linked
 
 ### Requirement: GitHub client creation
 

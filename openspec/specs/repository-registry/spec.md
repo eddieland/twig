@@ -74,8 +74,8 @@ displayed AND each repository is shown as `<name> (<path>)` with colors
 
 #### Scenario: Listing when no repositories are registered
 
-WHEN the user runs `twig git list` AND the registry is empty THEN a warning is printed: "No repositories in registry."
-AND an info message is printed about using `twig git add` to register repositories
+WHEN the user runs `twig git list` AND the registry is empty THEN a warning indicating no repositories are registered is
+printed AND guidance is printed about using `twig git add` to register repositories
 
 #### Scenario: Using the `ls` alias
 

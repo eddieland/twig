@@ -14,29 +14,20 @@ command module)
 
 ### Requirement: Repository resolution
 
-#### Scenario: Auto-detecting the repository from the working directory
-
-WHEN the user runs `twig git stale-branches` without `-r` THEN the repository is detected by traversing from the current
-working directory upward using `detect_repository` AND if no repository is found, the command fails with a "No
-repository specified and not in a git repository" error
-
-#### Scenario: Overriding the repository path with `-r`
-
-WHEN the user runs `twig git stale-branches -r <path>` THEN the command operates on the repository located at `<path>`
-instead of auto-detecting from the working directory AND if the path does not exist, the command fails with a
-"Repository path does not exist: <path>" error
+Repository resolution follows the shared behavior defined in `repository-resolution/spec.md`. This command uses the `-r`
+flag for the repository path override.
 
 ### Requirement: Flag validation
 
 #### Scenario: `--json` and `--prune` are mutually exclusive
 
-WHEN the user runs `twig git stale-branches --json --prune` THEN the command fails immediately with a "--json cannot be
-used together with --prune" error AND no branch scanning is performed
+WHEN the user runs `twig git stale-branches --json --prune` THEN the command fails immediately with an error indicating
+`--json` and `--prune` cannot be used together AND no branch scanning is performed
 
 #### Scenario: `--days` must be a positive number
 
 WHEN the user runs `twig git stale-branches -d <value>` AND `<value>` is not a valid positive integer THEN the command
-fails with a "Days must be a positive number" error
+fails with an error indicating the days value must be a positive number
 
 ### Requirement: Staleness threshold
 
@@ -65,17 +56,17 @@ WHEN the command scans for stale branches AND a branch is marked as a root branc
 
 #### Scenario: No stale branches found
 
-WHEN the command scans for stale branches AND no branches meet the staleness criteria THEN the command prints "No stale
-branches found in <path>" AND exits successfully
+WHEN the command scans for stale branches AND no branches meet the staleness criteria THEN the command prints a message
+indicating no stale branches were found AND exits successfully
 
 ### Requirement: Display mode (default)
 
 #### Scenario: Displaying stale branches in the default format
 
 WHEN the user runs `twig git stale-branches` without `--prune` or `--json` AND stale branches are found THEN the command
-prints "Found N stale branches in <path>:" AND lists the branches sorted chronologically (oldest first) AND each branch
-displays: the branch name (cyan bold), last commit date (yellow), and relative time (dimmed, e.g. "45 days ago") AND a
-footer prints: "Run `twig git stale-branches --prune` for interactive cleanup with detailed guidance."
+reports the count of stale branches found AND lists the branches sorted chronologically (oldest first) AND each branch
+displays: the branch name, last commit date, and relative time AND a footer provides guidance to run
+`twig git stale-branches --prune` for interactive cleanup
 
 #### Scenario: Branch info enrichment in display mode
 
@@ -112,9 +103,8 @@ with the same metadata as display mode before serialization AND no interactive p
 
 #### Scenario: Entering prune mode
 
-WHEN the user runs `twig git stale-branches --prune` AND stale branches are found THEN the command prints "Finding
-branches not updated in the last N days..." followed by "Found N stale branches." AND branches are sorted alphabetically
-for consistent ordering
+WHEN the user runs `twig git stale-branches --prune` AND stale branches are found THEN the command reports the count of
+stale branches found AND branches are sorted alphabetically for consistent ordering
 
 #### Scenario: Per-branch detail display during pruning
 
@@ -138,7 +128,7 @@ skipped in the prune summary
 #### Scenario: Deletion fails
 
 WHEN a branch deletion fails THEN the error is recorded in the prune summary with the branch name and error message AND
-an error message "Failed to delete <name>: <error>" is printed AND the command continues to the next branch
+an error is printed indicating which branch failed to delete AND the command continues to the next branch
 
 #### Scenario: Config cleanup error workaround (libgit2 issue 4247)
 
@@ -149,7 +139,7 @@ treated as successful AND if the branch still exists, the original error is prop
 #### Scenario: No stale branches found in prune mode
 
 WHEN the user runs `twig git stale-branches --prune` AND no branches meet the staleness criteria THEN the command prints
-"No stale branches found in <path>" AND exits successfully without any prompts
+a message indicating no stale branches were found AND exits successfully without any prompts
 
 ### Requirement: Prune summary
 
@@ -230,7 +220,7 @@ merged PR THEN the plugin fetches the Jira issue AND if the issue status (lowerc
 #### Scenario: Dry run mode
 
 WHEN the user runs `twig-prune --dry-run` (or `-n`) THEN the plugin lists all prune candidates with their descriptions
-AND prints "Dry run -- no branches were deleted." AND no branches are actually deleted
+AND indicates it was a dry run with no branches deleted AND no branches are actually deleted
 
 #### Scenario: Skip-prompts mode
 
