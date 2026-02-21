@@ -13,22 +13,15 @@ updated in topological order.
 
 ### Requirement: Repository resolution
 
-#### Scenario: Auto-detect repository from current directory
-
-WHEN the user runs `twig cascade` without the `-r` flag THEN the repository is detected by walking up from the current
-working directory AND if no Git repository is found, the command fails with "Not in a git repository"
-
-#### Scenario: Explicit repository path override
-
-WHEN the user runs `twig cascade -r <path>` THEN the command operates on the repository at `<path>` instead of the
-auto-detected repository
+Repository resolution follows the shared behavior defined in `repository-resolution/spec.md`. This command uses the `-r`
+flag for the repository path override.
 
 ### Requirement: HEAD must be a branch
 
 #### Scenario: Detached HEAD is rejected
 
-WHEN the user runs `twig cascade` AND HEAD is not a branch (e.g., detached HEAD state) THEN the command fails with "HEAD
-is not a branch. Cannot cascade rebase."
+WHEN the user runs `twig cascade` AND HEAD is not a branch (e.g., detached HEAD state) THEN the command fails with an
+error indicating HEAD is not a branch
 
 ### Requirement: Dependency tree discovery
 
@@ -40,13 +33,13 @@ via visited set)
 
 #### Scenario: No child branches found
 
-WHEN the current branch has no children in the dependency graph THEN the command prints a warning "No child branches
-found for the current branch." AND exits successfully without performing any rebase
+WHEN the current branch has no children in the dependency graph THEN the command prints a warning indicating no child
+branches were found for the current branch AND exits successfully without performing any rebase
 
 #### Scenario: No local branches found
 
-WHEN the repository has no branches tracked in the dependency resolver THEN the command prints a warning "No local
-branches found." AND exits successfully
+WHEN the repository has no branches tracked in the dependency resolver THEN the command prints a warning indicating no
+local branches were found AND exits successfully
 
 ### Requirement: Topological rebase ordering
 
@@ -105,18 +98,19 @@ WHEN the cascade executes THEN for each branch in topological order, the command
 
 #### Scenario: Successful rebase
 
-WHEN `git rebase <parent>` succeeds for a branch THEN a success message is printed ("Successfully rebased <branch> onto
-<parent>") AND the cascade continues to the next branch
+WHEN `git rebase <parent>` succeeds for a branch THEN a success message indicating the branch was rebased onto the
+parent is printed AND the cascade continues to the next branch
 
 #### Scenario: Branch is already up-to-date (no force)
 
 WHEN `git rebase <parent>` reports "up to date" AND `--force` is not set THEN the command prints an info message
-("<branch> is already up-to-date with <parent>") AND the cascade continues to the next branch without re-rebasing
+indicating the branch is already up-to-date with the parent AND the cascade continues to the next branch without
+re-rebasing
 
 #### Scenario: Branch with no known parents is skipped
 
-WHEN a branch in the rebase order has no parents in the dependency graph THEN a warning is printed ("No parent branches
-found for <branch>, skipping") AND the cascade continues to the next branch
+WHEN a branch in the rebase order has no parents in the dependency graph THEN a warning indicating no parent branches
+were found for the branch is printed AND the cascade continues to the next branch
 
 #### Scenario: Checkout failure skips the branch
 
@@ -128,8 +122,8 @@ AND the branch is skipped AND the cascade continues to the next branch
 #### Scenario: Force rebase when up-to-date
 
 WHEN the user runs `twig cascade --force` AND a branch is already up-to-date with its parent THEN the command runs
-`git rebase --force-rebase <parent>` instead of skipping AND on success, prints "Successfully force-rebased <branch>
-onto <parent>"
+`git rebase --force-rebase <parent>` instead of skipping AND on success, prints a message indicating the branch was
+force-rebased onto the parent
 
 #### Scenario: Force rebase failure
 
@@ -183,7 +177,8 @@ printed AND the cascade continues to the next branch rather than aborting the en
 #### Scenario: Original branch is restored on completion
 
 WHEN the cascade completes (all branches processed or no early termination) THEN the command checks out the original
-branch (the branch the user was on when the cascade started) AND prints "Cascading rebase completed successfully"
+branch (the branch the user was on when the cascade started) AND prints a success message indicating the cascading
+rebase completed
 
 #### Scenario: Original branch is restored on abort-to-original
 

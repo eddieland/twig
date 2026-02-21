@@ -20,7 +20,7 @@ created.
 
 - WHEN the user runs `twig fixup`
 - AND there are no staged changes in the repository
-- THEN the command prints a warning: "No staged changes found. Stage changes first before creating a fixup commit."
+- THEN the command prints a warning indicating no staged changes were found and that changes should be staged first
 - AND the command exits without error (exit code 0)
 - AND no interactive selector is shown
 
@@ -32,13 +32,8 @@ created.
 
 ### Requirement: Repository detection
 
-The command must be run inside a Git repository.
-
-#### Scenario: Not in a git repository
-
-- WHEN the user runs `twig fixup`
-- AND the current directory is not inside a git repository
-- THEN the command exits with an error: "Not in a git repository"
+Repository resolution follows the shared behavior defined in `repository-resolution/spec.md`. This command does not
+accept a repository path override flag.
 
 ### Requirement: Commit collection with default filters
 
@@ -58,7 +53,8 @@ status.
 
 - WHEN the user runs `twig fixup`
 - AND no commits match the filtering criteria
-- THEN the command prints a warning: "No recent commits found. Try increasing --limit or --days."
+- THEN the command prints a warning indicating no recent commits were found and suggests increasing `--limit` or
+  `--days`
 - AND the command exits without error
 
 ### Requirement: Limit flag
@@ -253,12 +249,12 @@ After selecting a target commit, the command creates a fixup commit using git.
 - WHEN the user selects a commit from the interactive selector
 - AND `--dry-run` is not set
 - THEN the command runs `git commit --fixup <full-commit-hash>`
-- AND on success, prints: "Fixup commit created successfully."
+- AND on success, prints a message indicating the fixup commit was created
 
 #### Scenario: Git commit --fixup failure
 
 - WHEN `git commit --fixup` fails
-- THEN the command prints an error: "Failed to create fixup commit."
+- THEN the command prints an error indicating the fixup commit could not be created
 - AND the command exits with an error containing the git stderr output
 
 ### Requirement: Dry run mode
