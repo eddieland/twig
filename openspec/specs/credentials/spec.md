@@ -9,427 +9,213 @@ Manager).
 **CLI surface:** `twig creds check`, `twig creds setup` **Crates:** `twig-core` (creds module, netrc parser, platform
 backends), `twig-cli` (creds command module)
 
-## Requirements
+## CLI Commands
 
-### Requirement: Credential check — netrc file existence
+### Requirement: Credential check
 
 #### Scenario: No netrc file present
 
-WHEN the user runs `twig creds check` AND no `~/.netrc` file exists THEN twig prints an error "No .netrc file found."
-AND prints guidance to create a `.netrc` file at the expected path AND does not check individual service credentials
+WHEN the user runs `twig creds check` AND no `~/.netrc` file exists THEN twig reports that no .netrc file was found AND
+provides guidance on creating one AND does not check individual service credentials
 
 #### Scenario: Netrc file exists
 
-WHEN the user runs `twig creds check` AND a `~/.netrc` file exists THEN twig proceeds to check file permissions, Jira
-credentials, and GitHub credentials
+WHEN the user runs `twig creds check` AND a `~/.netrc` file exists THEN twig checks file permissions, Jira credentials,
+and GitHub credentials AND displays an example `.netrc` format block showing entries for `atlassian.net` and
+`github.com`
 
-### Requirement: Credential check — file permission verification (Unix)
+#### Scenario: File permission verification
 
-#### Scenario: Secure permissions on Unix
+WHEN file permissions are checked on Unix AND the file has mode 0600 THEN twig reports secure permissions AND when the
+file has group or other bits set THEN twig warns about insecure permissions and suggests `chmod 600`
 
-WHEN the user runs `twig creds check` on a Unix system AND the `~/.netrc` file has mode 0600 (owner read/write only, no
-group/other bits) THEN twig prints a success message ".netrc file has secure permissions."
+WHEN file permissions are checked on Windows THEN twig warns that secure file permissions are not fully supported and
+suggests using Windows Credential Manager
 
-#### Scenario: Insecure permissions on Unix
+#### Scenario: Service credential detection
 
-WHEN the user runs `twig creds check` on a Unix system AND the `~/.netrc` file has group or other permission bits set
-(mode & 0o077 != 0) THEN twig prints a warning "Your .netrc file has insecure permissions." AND prints guidance to run
-`chmod 600 <path>` to fix permissions
+WHEN twig checks for Jira credentials AND `$JIRA_HOST` is set THEN it reports whether credentials were found for the
+configured host AND when `$JIRA_HOST` is not set THEN it reports an error about the missing host variable
 
-### Requirement: Credential check — file permission verification (Windows)
+WHEN twig checks for GitHub credentials THEN it reports whether credentials were found for machine `github.com`
 
-#### Scenario: Permission check on Windows
+### Requirement: Credential setup wizard
 
-WHEN the user runs `twig creds check` on a Windows system AND the `~/.netrc` file exists THEN twig prints a warning
-"Secure file permissions are not fully supported on Windows." AND prints a warning "Your .netrc file may not be properly
-secured." AND suggests using Windows Credential Manager instead
+#### Scenario: Platform-specific welcome guidance
 
-### Requirement: Credential check — Jira credential detection
+WHEN the user runs `twig creds setup` THEN twig displays a welcome message AND on Unix, informs the user that
+credentials will be stored in `~/.netrc` with permissions set to 600 AND on Windows, informs the user that Windows
+Credential Manager will be the primary store with `~/.netrc` as fallback
 
-#### Scenario: Jira credentials found
+#### Scenario: Existing netrc confirmation
 
-WHEN the user runs `twig creds check` AND the `$JIRA_HOST` environment variable is set AND credentials exist in the
-credential provider for the configured Jira host THEN twig prints a success message "Jira credentials found."
+WHEN `~/.netrc` already exists THEN twig prompts the user for confirmation before proceeding AND if the user declines,
+the wizard exits without modifying credentials
 
-#### Scenario: Jira credentials not found
+#### Scenario: Empty required fields skip the service
 
-WHEN the user runs `twig creds check` AND the `$JIRA_HOST` environment variable is set AND no credentials exist for the
-configured Jira host THEN twig prints a warning "No Jira credentials found." AND prints guidance to add credentials for
-machine 'atlassian.net' to the `.netrc` file
-
-#### Scenario: Jira host not configured
-
-WHEN the user runs `twig creds check` AND the `$JIRA_HOST` environment variable is not set THEN twig prints an error
-about being unable to get the Jira host
-
-### Requirement: Credential check — GitHub credential detection
-
-#### Scenario: GitHub credentials found
-
-WHEN the user runs `twig creds check` AND credentials exist in the credential provider for machine `github.com` THEN
-twig prints a success message "GitHub credentials found."
-
-#### Scenario: GitHub credentials not found
-
-WHEN the user runs `twig creds check` AND no credentials exist for machine `github.com` THEN twig prints a warning "No
-GitHub credentials found." AND prints guidance to add credentials for machine 'github.com' to the `.netrc` file
-
-### Requirement: Credential check — example format display
-
-#### Scenario: Check command always displays example format
-
-WHEN the user runs `twig creds check` AND the `~/.netrc` file exists THEN twig always prints an example `.netrc` format
-block showing entries for both `atlassian.net` (login + password) and `github.com` (login + password)
-
-### Requirement: Credential setup — welcome and platform guidance
-
-#### Scenario: Setup wizard on Unix
-
-WHEN the user runs `twig creds setup` on a Unix system THEN twig displays a welcome message for the credential setup
-wizard AND informs the user that credentials will be stored in `~/.netrc` AND informs the user that file permissions
-will be automatically set to 600
-
-#### Scenario: Setup wizard on Windows
-
-WHEN the user runs `twig creds setup` on a Windows system THEN twig displays a welcome message for the credential setup
-wizard AND informs the user that credentials will be stored in Windows Credential Manager AND informs the user that
-`~/.netrc` will be used as a fallback if it exists
-
-### Requirement: Credential setup — existing netrc confirmation
-
-#### Scenario: Netrc file already exists and user confirms
-
-WHEN the user runs `twig creds setup` AND a `~/.netrc` file already exists AND the user responds 'y' to the confirmation
-prompt THEN twig proceeds with the setup wizard to add/update credentials
-
-#### Scenario: Netrc file already exists and user declines
-
-WHEN the user runs `twig creds setup` AND a `~/.netrc` file already exists AND the user does not respond with a value
-starting with 'y' (case-insensitive) THEN twig prints "Setup cancelled." AND exits without modifying any credentials
-
-### Requirement: Credential setup — Jira credential collection
-
-#### Scenario: Jira email is empty
-
-WHEN the user runs `twig creds setup` AND the user provides an empty email when prompted for Jira credentials THEN twig
-prints a warning "Email cannot be empty. Skipping Jira setup." AND informs the user they can run `twig creds setup`
-again later AND proceeds to GitHub credential setup
-
-#### Scenario: Jira API token is empty
-
-WHEN the user runs `twig creds setup` AND the user provides a non-empty email AND the user provides an empty API token
-THEN twig prints a warning "API token cannot be empty. Skipping Jira setup." AND informs the user they can run
-`twig creds setup` again later AND proceeds to GitHub credential setup
-
-#### Scenario: Jira domain is empty
-
-WHEN the user runs `twig creds setup` AND the user provides a non-empty email and API token AND the user provides an
-empty domain THEN twig prints a warning "Domain cannot be empty. Skipping Jira setup." AND informs the user they can run
-`twig creds setup` again later AND proceeds to GitHub credential setup
+WHEN any required field (email, API token, domain for Jira; username, PAT for GitHub) is left empty THEN twig warns that
+the field cannot be empty, skips setup for that service, and informs the user they can retry later
 
 #### Scenario: Jira domain URL normalization
 
-WHEN the user runs `twig creds setup` AND the user provides a Jira domain without an `http` or `https` prefix THEN twig
-prepends `https://` to the domain before validation
+WHEN the user provides a Jira domain without a protocol prefix THEN twig prepends `https://` before validation AND when
+the domain starts with `http` THEN twig uses it as-is
 
-WHEN the user provides a Jira domain that starts with `http` THEN twig uses the domain as-is for validation
+#### Scenario: Credential validation (common behavior)
 
-### Requirement: Credential setup — Jira credential validation
+WHEN valid credentials are provided for a service AND the API connection test succeeds THEN twig reports successful
+validation AND writes the credentials to the netrc file (machine `atlassian.net` for Jira, machine `github.com` for
+GitHub)
 
-#### Scenario: Jira credentials validated successfully
+WHEN the API connection test fails (returns false or a network error) THEN twig reports the failure with troubleshooting
+guidance AND does NOT write credentials AND suggests manual `.netrc` configuration
 
-WHEN the user runs `twig creds setup` AND the user provides email, API token, and domain AND the Jira API connection
-test returns success (via `client.test_connection()` to `/rest/api/2/myself`) THEN twig prints "Jira credentials
-validated successfully!" AND writes a netrc entry for machine `atlassian.net` with the provided email as login and API
-token as password
+#### Scenario: Post-setup permissions and completion
 
-#### Scenario: Jira credentials validation fails
+WHEN the wizard completes on Unix AND credentials were written THEN twig sets `~/.netrc` permissions to 0600 AND on
+Windows, twig informs the user about the Credential Manager / netrc fallback arrangement AND on all platforms, twig
+suggests running `twig creds check` to verify
 
-WHEN the user runs `twig creds setup` AND the user provides email, API token, and domain AND the Jira API connection
-test returns false THEN twig prints an error "Failed to validate Jira credentials." AND prints common troubleshooting
-steps (check email, verify API token, check domain) AND suggests manually adding credentials to `.netrc` later AND does
-NOT write any netrc entry for Jira
-
-#### Scenario: Jira credentials validation network error
-
-WHEN the user runs `twig creds setup` AND the user provides email, API token, and domain AND the Jira API connection
-test returns an error THEN twig prints the error message AND suggests it might be a network issue or the Jira instance
-might be unreachable AND suggests manually adding credentials to `.netrc` later AND does NOT write any netrc entry for
-Jira
-
-### Requirement: Credential setup — GitHub credential collection
-
-#### Scenario: GitHub username is empty
-
-WHEN the user runs `twig creds setup` AND the user provides an empty username when prompted for GitHub credentials THEN
-twig prints a warning "Username cannot be empty. Skipping GitHub setup." AND informs the user they can run
-`twig creds setup` again later
-
-#### Scenario: GitHub Personal Access Token is empty
-
-WHEN the user runs `twig creds setup` AND the user provides a non-empty username AND the user provides an empty Personal
-Access Token THEN twig prints a warning "Personal Access Token cannot be empty. Skipping GitHub setup." AND informs the
-user they can run `twig creds setup` again later
-
-### Requirement: Credential setup — GitHub credential validation
-
-#### Scenario: GitHub credentials validated successfully
-
-WHEN the user runs `twig creds setup` AND the user provides username and Personal Access Token AND the GitHub API
-connection test returns success (via `client.test_connection()` to `/user`) THEN twig prints "GitHub credentials
-validated successfully!" AND writes a netrc entry for machine `github.com` with the provided username as login and token
-as password
-
-#### Scenario: GitHub credentials validation fails
-
-WHEN the user runs `twig creds setup` AND the user provides username and Personal Access Token AND the GitHub API
-connection test returns false THEN twig prints an error "Failed to validate GitHub credentials." AND prints common
-troubleshooting steps (check username, verify token, check required scopes: repo, read:user) AND suggests manually
-adding credentials to `.netrc` later AND does NOT write any netrc entry for GitHub
-
-#### Scenario: GitHub credentials validation network error
-
-WHEN the user runs `twig creds setup` AND the user provides username and Personal Access Token AND the GitHub API
-connection test returns an error THEN twig prints the error message AND suggests it might be a network issue or GitHub
-might be unreachable AND suggests manually adding credentials to `.netrc` later AND does NOT write any netrc entry for
-GitHub
-
-### Requirement: Credential setup — post-setup permissions
-
-#### Scenario: Set secure permissions after setup on Unix
-
-WHEN the user runs `twig creds setup` on a Unix system AND at least one credential was written to `~/.netrc` AND the
-`~/.netrc` file exists at the end of setup THEN twig sets the file permissions to 0600 (owner read/write only) AND
-prints "Set secure permissions on .netrc file (600)."
-
-#### Scenario: Post-setup message on Windows
-
-WHEN the user runs `twig creds setup` on a Windows system AND the `~/.netrc` file exists at the end of setup THEN twig
-informs the user that the existing `.netrc` will be used as a fallback AND informs the user that Windows Credential
-Manager will be the primary credential store
-
-#### Scenario: Setup completion message
-
-WHEN the user runs `twig creds setup` AND the wizard completes (regardless of which services were configured) THEN twig
-prints "Credential setup complete!" AND suggests running `twig creds check` to verify credentials
+## Core: Netrc Parser (`twig-core`)
 
 ### Requirement: Netrc file parsing
 
-#### Scenario: Standard multi-line format
+#### Scenario: Format flexibility
 
-WHEN a `.netrc` file contains entries in standard multi-line format (machine, login, password on separate lines) AND a
-credential lookup is performed for a matching machine name THEN the parser returns the corresponding login as username
-and password as password
+WHEN a `.netrc` file contains entries in standard multi-line, single-line, or mixed formats THEN the parser correctly
+extracts machine, login, and password for all entries AND unrecognized tokens are skipped without error
 
-#### Scenario: Single-line format
+#### Scenario: Machine not found or incomplete entry
 
-WHEN a `.netrc` file contains entries with machine, login, and password all on the same line AND a credential lookup is
-performed for a matching machine name THEN the parser returns the credentials correctly
+WHEN a lookup is performed for a machine not in the file THEN the parser returns `None` AND when a machine entry is
+missing either login or password THEN the parser treats it as incomplete and does not return credentials
 
-#### Scenario: Mixed format
+#### Scenario: No netrc file
 
-WHEN a `.netrc` file contains entries in a mix of single-line, multi-line, and partially split formats THEN the parser
-correctly extracts credentials for all entries regardless of format
-
-#### Scenario: Machine not found
-
-WHEN a `.netrc` file is parsed for a machine name that does not exist in the file THEN the parser returns `None`
-
-#### Scenario: Incomplete entry (missing password)
-
-WHEN a `.netrc` file contains a machine entry with a login but no password THEN the parser does not return credentials
-for that machine AND the parser considers the entry incomplete
-
-#### Scenario: Incomplete entry (missing login)
-
-WHEN a `.netrc` file contains a machine entry with a password but no login THEN the parser does not return credentials
-for that machine
-
-#### Scenario: Empty netrc file
-
-WHEN a `.netrc` file is empty AND a credential lookup is performed THEN the parser returns `None`
-
-#### Scenario: Netrc file does not exist
-
-WHEN the `~/.netrc` file does not exist AND a credential lookup is performed via the Unix `NetrcCredentialProvider` THEN
-the provider returns `None` without error
-
-#### Scenario: Multiple machines in file
-
-WHEN a `.netrc` file contains entries for multiple machines AND a credential lookup is performed for any specific
-machine THEN the parser returns only the credentials for the requested machine
-
-#### Scenario: Malformed lines are skipped
-
-WHEN a `.netrc` file contains unrecognized tokens or comment-like lines THEN the parser skips unrecognized tokens AND
-still correctly parses valid `machine`, `login`, and `password` entries
+WHEN `~/.netrc` does not exist THEN the provider returns `None` without error
 
 ### Requirement: Netrc file writing
 
-#### Scenario: Write entry to new file
+#### Scenario: Writing credentials
 
-WHEN a credential is written for a machine AND the `~/.netrc` file does not yet exist THEN the writer creates the file
-AND writes the machine, login, and password in multi-line format AND sets secure file permissions (0600 on Unix)
+WHEN a credential is written for a new machine THEN the entry is appended (creating the file if needed) with secure
+permissions (0600 on Unix) AND when a credential is written for an existing machine THEN the entry is updated in-place,
+preserving other entries
 
-#### Scenario: Append entry to existing file
+#### Scenario: Trailing newline handling
 
-WHEN a credential is written for a new machine AND the `~/.netrc` file already exists with other entries THEN the writer
-appends the new entry to the end of the file AND preserves all existing entries
+WHEN appending to an existing file that does not end with a newline THEN a newline is added before the new entry
 
-#### Scenario: Update existing entry
+## Core: Host Normalization (`twig-core`)
 
-WHEN a credential is written for a machine that already has an entry in `~/.netrc` THEN the writer replaces the login
-and password for that machine AND preserves all other machine entries unchanged
+### Requirement: Jira host normalization
 
-#### Scenario: Trailing newline handling on append
+#### Scenario: Protocol and trailing slash stripping
 
-WHEN a credential is appended to an existing `~/.netrc` file AND the existing file does not end with a newline THEN the
-writer adds a newline before the new entry to maintain proper formatting
+WHEN a Jira host URL includes `https://` or `http://` THEN the normalization strips the protocol prefix and any trailing
+slash AND when no prefix is present THEN the host is returned as-is (minus any trailing slash)
 
-### Requirement: Host normalization
-
-#### Scenario: Normalize host with https prefix
-
-WHEN a Jira host URL includes an `https://` prefix THEN the normalization strips the prefix and any trailing slash
-
-#### Scenario: Normalize host with http prefix
-
-WHEN a Jira host URL includes an `http://` prefix THEN the normalization strips the prefix and any trailing slash
-
-#### Scenario: Normalize host without prefix
-
-WHEN a Jira host URL has no protocol prefix THEN the normalization returns the host as-is (minus any trailing slash)
+## Core: Credential Retrieval (`twig-core`, `twig-gh`, `twig-jira`)
 
 ### Requirement: GitHub credential retrieval
 
-#### Scenario: GitHub credentials found in provider
+#### Scenario: Credentials found
 
-WHEN `get_github_credentials` is called AND the credential provider has credentials for machine `github.com` THEN it
-returns the `Credentials` struct with username and password
+WHEN `get_github_credentials` is called AND the provider has credentials for machine `github.com` THEN it returns a
+`Credentials` struct with username and password
 
-#### Scenario: GitHub credentials not found on Unix
+#### Scenario: Credentials not found
 
-WHEN `get_github_credentials` is called on a Unix system AND no credentials exist for machine `github.com` THEN it
-returns an error: "GitHub credentials not found in .netrc file. Please add credentials for machine 'github.com'."
-
-#### Scenario: GitHub credentials not found on Windows
-
-WHEN `get_github_credentials` is called on a Windows system AND no credentials exist for machine `github.com` in either
-Windows Credential Manager or `.netrc` THEN it returns an error: "GitHub credentials not found. Please run 'twig creds
-setup' to configure credentials for 'github.com'."
-
-### Requirement: GitHub client creation from credentials
-
-#### Scenario: Create GitHub client from netrc
-
-WHEN `create_github_client_from_netrc` is called AND GitHub credentials exist for machine `github.com` THEN it returns
-an authenticated `GitHubClient` using the username and password (PAT) from the credentials
-
-#### Scenario: Create GitHub runtime and client
-
-WHEN `create_github_runtime_and_client` is called AND GitHub credentials exist THEN it returns a tuple of a new Tokio
-runtime and an authenticated `GitHubClient`
+WHEN no credentials exist for `github.com` THEN an error is returned directing the user to add credentials (on Unix, via
+`.netrc`; on Windows, via `twig creds setup`)
 
 ### Requirement: Jira credential retrieval with fallback
 
-#### Scenario: Jira credentials found for exact host
+#### Scenario: Exact host match
 
-WHEN `get_jira_credentials` is called with a Jira host AND the credential provider has credentials for the normalized
-host (protocol and trailing slash stripped) THEN it returns the credentials for that exact host
+WHEN `get_jira_credentials` is called AND credentials exist for the normalized host THEN those credentials are returned
 
-#### Scenario: Jira credentials fallback to atlassian.net
+#### Scenario: Fallback to atlassian.net
 
-WHEN `get_jira_credentials` is called with a Jira host AND no credentials exist for the normalized host AND credentials
-exist for machine `atlassian.net` THEN it returns the credentials for `atlassian.net` as a fallback
+WHEN no credentials exist for the normalized host AND credentials exist for `atlassian.net` THEN the `atlassian.net`
+credentials are returned
 
-#### Scenario: Jira credentials not found on Unix
+#### Scenario: No credentials found
 
-WHEN `get_jira_credentials` is called on a Unix system AND no credentials exist for the normalized host AND no
-credentials exist for `atlassian.net` THEN it returns an error: "Jira credentials not found in .netrc file. Please add
-credentials for machine '<host>' or 'atlassian.net'."
+WHEN no credentials exist for either the normalized host or `atlassian.net` THEN an error is returned directing the user
+to add credentials (on Unix, via `.netrc`; on Windows, via `twig creds setup`)
 
-#### Scenario: Jira credentials not found on Windows
+### Requirement: Client creation from credentials
 
-WHEN `get_jira_credentials` is called on a Windows system AND no credentials exist for the normalized host AND no
-credentials exist for `atlassian.net` THEN it returns an error: "Jira credentials not found. Please run 'twig creds
-setup' to configure credentials for '<host>' or 'atlassian.net'."
+#### Scenario: GitHub client
 
-### Requirement: Jira client creation from credentials
+WHEN `create_github_client_from_netrc` is called AND credentials exist THEN it returns an authenticated `GitHubClient`
 
-#### Scenario: Create Jira client from netrc
+#### Scenario: Jira client
 
-WHEN `create_jira_client_from_netrc` is called with a Jira host AND Jira credentials exist (either for the exact host or
-via `atlassian.net` fallback) THEN it returns an authenticated `JiraClient` using the host URL, username, and password
-(API token)
+WHEN `create_jira_client_from_netrc` is called AND credentials exist THEN it returns an authenticated `JiraClient` using
+the host URL and credentials
 
-#### Scenario: Create Jira runtime and client
+#### Scenario: Runtime and client pair
 
-WHEN `create_jira_runtime_and_client` is called AND Jira credentials exist THEN it returns a tuple of a new Tokio
-runtime and an authenticated `JiraClient`
+WHEN `create_*_runtime_and_client` is called THEN it returns a Tokio runtime paired with the authenticated client
 
 ### Requirement: Jira host resolution
 
-#### Scenario: JIRA_HOST environment variable is set
+#### Scenario: JIRA_HOST set
 
-WHEN `get_jira_host()` is called AND the `$JIRA_HOST` environment variable is set THEN it returns the value with a URL
-scheme ensured (defaults to `https://` if no scheme is provided)
+WHEN `get_jira_host()` is called AND `$JIRA_HOST` is set THEN it returns the value with `https://` prepended if no
+scheme is present
 
-#### Scenario: JIRA_HOST environment variable is not set
+#### Scenario: JIRA_HOST not set
 
-WHEN `get_jira_host()` is called AND the `$JIRA_HOST` environment variable is not set THEN it returns an error: "Jira
-host environment variable 'JIRA_HOST' not set"
+WHEN `$JIRA_HOST` is not set THEN an error is returned indicating the environment variable is missing
 
-### Requirement: Platform credential provider — Unix
+## Core: Platform Credential Providers (`twig-core`)
 
-#### Scenario: Unix provider reads from netrc
+### Requirement: Provider selection
 
-WHEN the Unix `NetrcCredentialProvider` is used THEN it reads credentials by parsing the `~/.netrc` file for the
-requested machine name
+#### Scenario: Platform dispatch
 
-#### Scenario: Unix provider stores to netrc with secure permissions
+WHEN `get_credential_provider` is called on Unix THEN it returns a `NetrcCredentialProvider` AND on Windows it returns a
+`WindowsCredentialProvider` AND both are initialized with the user's home directory
 
-WHEN the Unix `NetrcCredentialProvider` stores credentials THEN it writes/updates the entry in `~/.netrc` AND sets file
-permissions to 0600
+### Requirement: Unix provider (NetrcCredentialProvider)
 
-### Requirement: Platform credential provider — Windows
+#### Scenario: Read and store
 
-#### Scenario: Windows provider checks Credential Manager first
+WHEN the Unix provider looks up credentials THEN it parses `~/.netrc` for the requested machine AND when it stores
+credentials THEN it writes/updates the entry and sets file permissions to 0600
 
-WHEN the Windows `WindowsCredentialProvider` looks up credentials for a service THEN it first checks Windows Credential
-Manager using target name `twig:<service>` AND if found, returns those credentials
+### Requirement: Windows provider (WindowsCredentialProvider)
 
-#### Scenario: Windows provider falls back to netrc
+#### Scenario: Lookup with fallback
 
-WHEN the Windows `WindowsCredentialProvider` looks up credentials for a service AND no credentials are found in Windows
-Credential Manager (or an error occurs) AND a `~/.netrc` file exists THEN it falls back to parsing the `.netrc` file for
-the service
+WHEN the Windows provider looks up credentials THEN it first checks Windows Credential Manager using target name
+`twig:<service>` AND if not found (or error occurs), falls back to parsing `~/.netrc` AND if neither source has
+credentials, returns `None`
 
-#### Scenario: Windows provider returns None when neither source has credentials
+#### Scenario: Store to Credential Manager
 
-WHEN the Windows `WindowsCredentialProvider` looks up credentials for a service AND no credentials are found in Windows
-Credential Manager AND no `~/.netrc` file exists THEN it returns `None`
+WHEN the Windows provider stores credentials THEN it writes to Windows Credential Manager with persistence set to
+`CRED_PERSIST_LOCAL_MACHINE`
 
-#### Scenario: Windows provider stores to Credential Manager
+#### Scenario: Empty credentials treated as missing
 
-WHEN the Windows `WindowsCredentialProvider` stores credentials for a service THEN it writes the credentials to Windows
-Credential Manager using target name `twig:<service>` AND persistence is set to `CRED_PERSIST_LOCAL_MACHINE`
+WHEN a Credential Manager entry has an empty username or password THEN the provider returns `None`
 
-#### Scenario: Windows Credential Manager entry has empty username or password
+### Requirement: File permissions
 
-WHEN the Windows `WindowsCredentialProvider` reads a credential from Windows Credential Manager AND either the username
-or password is empty THEN it returns `None` for that credential (treats it as not found)
+#### Scenario: Unix permissions
 
-### Requirement: Platform credential provider selection
+WHEN `set_secure_permissions` is called on Unix THEN file mode is set to 0600 AND `has_secure_permissions` returns
+`true` only if no group or other bits are set
 
-#### Scenario: Provider selection on Unix
+#### Scenario: Windows permissions are no-ops
 
-WHEN `get_credential_provider` is called on a Unix system THEN it returns a `NetrcCredentialProvider` initialized with
-the user's home directory
-
-#### Scenario: Provider selection on Windows
-
-WHEN `get_credential_provider` is called on a Windows system THEN it returns a `WindowsCredentialProvider` initialized
-with the user's home directory
+WHEN `set_secure_permissions` is called on Windows THEN it is a no-op AND `has_secure_permissions` returns `true` if the
+file exists and is readable
 
 ### Requirement: Credential data model
 
@@ -437,21 +223,3 @@ with the user's home directory
 
 WHEN credentials are loaded from any provider THEN they are represented as a `Credentials` struct with `username`
 (String) and `password` (String) fields
-
-### Requirement: File permissions trait
-
-#### Scenario: Unix secure permissions are mode 0600
-
-WHEN `UnixFilePermissions::set_secure_permissions` is called on a file THEN the file mode is set to 0600 (owner
-read/write only)
-
-WHEN `UnixFilePermissions::has_secure_permissions` is called on a file THEN it returns `true` only if the file's mode
-has no group or other permission bits set (mode & 0o077 == 0)
-
-#### Scenario: Windows file permissions are no-ops
-
-WHEN `WindowsFilePermissions::set_secure_permissions` is called THEN it returns `Ok(())` without modifying any file
-permissions
-
-WHEN `WindowsFilePermissions::has_secure_permissions` is called THEN it returns `true` if the file exists and is
-readable, `false` otherwise
