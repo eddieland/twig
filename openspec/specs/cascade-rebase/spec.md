@@ -99,7 +99,9 @@ are listed separately AND the cascade proceeds normally after displaying the gra
 #### Scenario: Each descendant is rebased onto its parent
 
 WHEN the cascade executes THEN for each branch in topological order, the command checks out the branch AND then runs
-`git rebase <parent>` AND if the branch has multiple parents, it rebases onto each parent in sequence
+`git rebase <parent>` AND if the branch has multiple parents, it rebases onto each parent in the order returned by
+`get_dependency_parents` with each subsequent rebase operating on the branch tip produced by the previous rebase
+(cumulative, not from the original tip)
 
 #### Scenario: Successful rebase
 
@@ -144,31 +146,30 @@ pops them after
 
 ### Requirement: Conflict handling
 
-#### Scenario: Interactive conflict resolution prompt
+The interactive conflict resolution prompt and its four options ("Continue", "Abort to original", "Abort stay here",
+"Skip") are defined in `rebase/spec.md` under "Interactive conflict resolution". The cascade command uses the same
+prompt and mechanics. The scenarios below document only where the cascade's behavior diverges from standalone rebase.
 
-WHEN a rebase encounters a conflict (output contains "CONFLICT") THEN the command presents an interactive selection
-prompt with four options: "Continue", "Abort to original", "Abort stay here", "Skip" AND the default selection is
-"Continue"
+#### Scenario: "Continue" resumes the cascade
 
-#### Scenario: Continue after resolving conflicts
+WHEN the user selects "Continue" during a cascade conflict THEN `git rebase --continue` is executed AND the cascade
+proceeds to the next branch in topological order (in standalone rebase, the command simply finishes)
 
-WHEN the user selects "Continue" THEN the command runs `git rebase --continue` AND on success, prints that the rebase
-completed after resolving conflicts AND the cascade continues to the next branch
+#### Scenario: "Abort to original" terminates the cascade
 
-#### Scenario: Abort and return to original branch
+WHEN the user selects "Abort to original" during a cascade conflict THEN `git rebase --abort` is executed AND the
+original branch (the branch the user was on when the cascade started) is checked out AND the cascade terminates
+immediately — no further branches are rebased
 
-WHEN the user selects "Abort to original" THEN the command runs `git rebase --abort` AND then checks out the original
-branch (the branch the user was on when the cascade started) AND the cascade terminates immediately (no further branches
-are rebased)
+#### Scenario: "Abort stay here" skips only the current branch
 
-#### Scenario: Abort but stay on current branch
+WHEN the user selects "Abort stay here" during a cascade conflict THEN `git rebase --abort` is executed AND the cascade
+continues to the next branch (in standalone rebase, the command returns immediately)
 
-WHEN the user selects "Abort stay here" THEN the command runs `git rebase --abort` AND the cascade continues to the next
-branch without checking out the original branch
+#### Scenario: "Skip" continues the cascade
 
-#### Scenario: Skip the conflicting commit
-
-WHEN the user selects "Skip" THEN the command runs `git rebase --skip` AND the cascade continues to the next branch
+WHEN the user selects "Skip" during a cascade conflict THEN `git rebase --skip` is executed AND the cascade continues to
+the next branch
 
 ### Requirement: Rebase error handling
 

@@ -65,8 +65,9 @@ the CLI prints a success message: "Successfully rebased <branch> onto <parent>"
 #### Scenario: Rebasing onto multiple parents sequentially
 
 WHEN the user runs `twig rebase` AND the current branch has multiple twig-defined parents THEN the branch is rebased
-onto each parent in sequence AND success or failure is reported for each parent individually AND if any rebase fails
-with an error, the command aborts without processing remaining parents
+onto each parent in the order returned by `get_dependency_parents` AND each subsequent rebase operates on the branch tip
+produced by the previous rebase (cumulative, not from the original tip) AND success or failure is reported for each
+parent individually AND if any rebase fails with an error, the command aborts without processing remaining parents
 
 ### Requirement: Up-to-date detection
 
@@ -120,12 +121,15 @@ graph
 WHEN the user runs `twig rebase --show-graph` AND no root branches are found in the dependency tree THEN the command
 prints a warning: "No root branches found. Cannot display dependency tree." AND continues with the rebase operation
 
-### Requirement: Conflict handling
+### Requirement: Interactive conflict resolution
+
+This is the canonical definition of the shared conflict-handling interaction. The `cascade-rebase` spec references these
+scenarios and documents only its behavioral differences (see `cascade-rebase/spec.md`, "Conflict handling").
 
 #### Scenario: Rebase encounters conflicts
 
 WHEN a `git rebase` operation encounters conflicts (detected by "CONFLICT" in stdout or stderr) THEN the command prints
-a warning: "Conflicts detected while rebasing <branch> onto <parent>" AND presents an interactive prompt with four
+a warning: "Conflicts detected while rebasing `<branch>` onto `<parent>`" AND presents an interactive prompt with four
 resolution options
 
 #### Scenario: User selects "Continue" after resolving conflicts
