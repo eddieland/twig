@@ -1,20 +1,30 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Twig is a Git-first productivity tool written in Rust that manages branches, issues,
+  and pull requests across one or many repositories. Core focus: stacked pull-request
+  workflows with cascading rebases.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Tech stack: Rust 1.91+ (nightly), Clap for CLI, git2 for Git ops, reqwest for HTTP,
+  tokio for async, serde for serialization, rmcp for MCP server.
+
+  Workspace crates: twig-cli (binary), twig-core (shared logic), twig-gh (GitHub API),
+  twig-jira (Jira API), twig-mcp (MCP server), no-worries (panic handler),
+  twig-test-utils (test fixtures), plugins/twig-flow, plugins/twig-prune.
+
+  Conventions:
+  - Commands defined in twig-cli/src/cli/, business logic in sibling modules
+  - State: global registry at XDG_DATA_HOME/twig/registry.json, per-repo at .twig/state.json
+  - Credentials via ~/.netrc
+  - Output via twig_core::output helpers, diagnostics via tracing
+  - Testing with nextest + insta snapshots
+  - Clippy: no unwrap, no panic, no print_stdout/stderr, no dbg/todo/unimplemented
+
+rules:
+  specs:
+    - Use WHEN/THEN/AND scenario format for testable requirements
+    - Reference specific CLI commands and flags where applicable
+    - Note which crate(s) implement each requirement
+  tasks:
+    - Break tasks into chunks of max 2 hours
+    - Include verification steps (tests, lint, manual check)
