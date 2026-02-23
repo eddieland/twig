@@ -139,13 +139,16 @@ fn rebase_downstream(
     return Ok(());
   }
 
-  // Perform the cascading rebase
+  // Perform the cascading rebase, tracking per-branch outcomes.
+  let mut summary = CascadeSummary::new();
+
   for branch in rebase_order {
     // Get the parents of this branch
     let parents = repo_state.get_dependency_parents(&branch);
 
     if parents.is_empty() {
-      print_warning(&format!("No parent branches found for {branch}, skipping",));
+      print_warning(&format!("No parent branches found for {branch}, skipping"));
+      summary.record(branch.clone(), CascadeBranchStatus::NoParents);
       continue;
     }
 
@@ -153,10 +156,11 @@ fn rebase_downstream(
     for parent in parents {
       print_info(&format!("Rebasing {branch} onto {parent}"));
 
-      // First checkout the branch
-      let checkout_result = execute_git_command(repo_path, &["checkout", &branch])?;
-      if !checkout_result.contains("Switched to branch") && !checkout_result.contains("Already on") {
-        print_error(&format!("Failed to checkout branch {branch}: {checkout_result}"));
+      // First checkout the branch — use exit status instead of string matching
+      let checkout_output = execute_git_command(repo_path, &["checkout", &branch])?;
+      if !checkout_output.success {
+        print_error(&format!("Failed to checkout branch {branch}: {}", checkout_output.combined));
+        summary.record(branch.clone(), CascadeBranchStatus::CheckoutFailed);
         continue;
       }
 
@@ -165,7 +169,13 @@ fn rebase_downstream(
 
       match result {
         RebaseResult::Success => {
-          print_success(&format!("Successfully rebased {branch} onto {parent}",));
+          print_success(&format!("Successfully rebased {branch} onto {parent}"));
+          summary.record(
+            branch.clone(),
+            CascadeBranchStatus::Rebased {
+              parent: parent.to_string(),
+            },
+          );
         }
         RebaseResult::UpToDate => {
           if force {
@@ -174,62 +184,109 @@ fn rebase_downstream(
             let force_result = rebase_branch_force(repo_path, &branch, parent, autostash)?;
             match force_result {
               RebaseResult::Success => {
-                print_success(&format!("Successfully force-rebased {branch} onto {parent}",));
+                print_success(&format!("Successfully force-rebased {branch} onto {parent}"));
+                summary.record(
+                  branch.clone(),
+                  CascadeBranchStatus::ForceRebased {
+                    parent: parent.to_string(),
+                  },
+                );
               }
               _ => {
-                print_error(&format!("Failed to force-rebase {branch} onto {parent}",));
-                // Continue with other branches rather than aborting the whole process
+                print_error(&format!("Failed to force-rebase {branch} onto {parent}"));
+                summary.record(
+                  branch.clone(),
+                  CascadeBranchStatus::ForceFailed {
+                    parent: parent.to_string(),
+                  },
+                );
                 continue;
               }
             }
           } else {
-            print_info(&format!("Branch {branch} is already up-to-date with {parent}",));
+            print_info(&format!("Branch {branch} is already up-to-date with {parent}"));
+            summary.record(
+              branch.clone(),
+              CascadeBranchStatus::UpToDate {
+                parent: parent.to_string(),
+              },
+            );
           }
         }
         RebaseResult::Conflict => {
           // Handle conflict
-          print_warning(&format!("Conflicts detected while rebasing {branch} onto {parent}",));
+          print_warning(&format!("Conflicts detected while rebasing {branch} onto {parent}"));
           let resolution = handle_rebase_conflict(repo_path, &branch)?;
 
           match resolution {
             ConflictResolution::Continue => {
               // Continue the rebase
-              let continue_result = execute_git_command(repo_path, &["rebase", "--continue"])?;
-              print_info(&continue_result);
+              let continue_output = execute_git_command(repo_path, &["rebase", "--continue"])?;
+              print_info(&continue_output.combined);
               print_success(&format!(
                 "Rebase of {branch} onto {parent} completed after resolving conflicts",
               ));
+              summary.record(
+                branch.clone(),
+                CascadeBranchStatus::ConflictResolved {
+                  parent: parent.to_string(),
+                },
+              );
             }
             ConflictResolution::AbortToOriginal => {
               // Abort the rebase and go back to the original branch
-              let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
-              print_info(&abort_result);
-              print_info(&format!("Rebase of {branch} onto {parent} aborted",));
+              let abort_output = execute_git_command(repo_path, &["rebase", "--abort"])?;
+              print_info(&abort_output.combined);
+              print_info(&format!("Rebase of {branch} onto {parent} aborted"));
+              summary.record(
+                branch.clone(),
+                CascadeBranchStatus::Aborted {
+                  parent: parent.to_string(),
+                },
+              );
 
               // Checkout the original branch
-              let checkout_result = execute_git_command(repo_path, &["checkout", &current_branch_name])?;
-              print_info(&checkout_result);
+              let checkout_output = execute_git_command(repo_path, &["checkout", &current_branch_name])?;
+              print_info(&checkout_output.combined);
 
+              summary.print_report();
               return Ok(());
             }
             ConflictResolution::AbortStayHere => {
               // Abort the rebase but stay on the current branch
-              let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
-              print_info(&abort_result);
-              print_info(&format!("Rebase of {branch} onto {parent} aborted",));
+              let abort_output = execute_git_command(repo_path, &["rebase", "--abort"])?;
+              print_info(&abort_output.combined);
+              print_info(&format!("Rebase of {branch} onto {parent} aborted"));
+              summary.record(
+                branch.clone(),
+                CascadeBranchStatus::Aborted {
+                  parent: parent.to_string(),
+                },
+              );
               continue;
             }
             ConflictResolution::Skip => {
               // Skip the current commit
-              let skip_result = execute_git_command(repo_path, &["rebase", "--skip"])?;
-              print_info(&skip_result);
-              print_info(&format!("Skipped commit during rebase of {branch} onto {parent}",));
+              let skip_output = execute_git_command(repo_path, &["rebase", "--skip"])?;
+              print_info(&skip_output.combined);
+              print_info(&format!("Skipped commit during rebase of {branch} onto {parent}"));
+              summary.record(
+                branch.clone(),
+                CascadeBranchStatus::Skipped {
+                  parent: parent.to_string(),
+                },
+              );
             }
           }
         }
         RebaseResult::Error => {
-          print_error(&format!("Failed to rebase {branch} onto {parent}",));
-          // Continue with other branches rather than aborting the whole process
+          print_error(&format!("Failed to rebase {branch} onto {parent}"));
+          summary.record(
+            branch.clone(),
+            CascadeBranchStatus::Failed {
+              parent: parent.to_string(),
+            },
+          );
           continue;
         }
       }
@@ -237,10 +294,20 @@ fn rebase_downstream(
   }
 
   // Return to the original branch
-  let checkout_result = execute_git_command(repo_path, &["checkout", &current_branch_name])?;
-  print_info(&checkout_result);
+  let checkout_output = execute_git_command(repo_path, &["checkout", &current_branch_name])?;
+  print_info(&checkout_output.combined);
 
-  print_success("Cascading rebase completed successfully");
+  summary.print_report();
+
+  if summary.failure_count() > 0 {
+    print_warning(&format!(
+      "Cascade completed with {} failure{}",
+      summary.failure_count(),
+      if summary.failure_count() == 1 { "" } else { "s" }
+    ));
+  } else {
+    print_success("Cascading rebase completed successfully");
+  }
   Ok(())
 }
 
@@ -413,6 +480,143 @@ enum RebaseResult {
   Error,
 }
 
+/// Outcome status for a single branch during cascade rebase.
+#[derive(Debug, Clone)]
+enum CascadeBranchStatus {
+  /// Rebase completed successfully.
+  Rebased { parent: String },
+  /// Force-rebased (branch was already up-to-date but --force was set).
+  ForceRebased { parent: String },
+  /// Branch was already up-to-date with its parent.
+  UpToDate { parent: String },
+  /// Conflicts were resolved and the rebase completed.
+  ConflictResolved { parent: String },
+  /// Rebase was aborted due to conflicts.
+  Aborted { parent: String },
+  /// Conflicting commit was skipped during rebase.
+  Skipped { parent: String },
+  /// Checkout of the branch failed before rebasing.
+  CheckoutFailed,
+  /// Rebase failed due to an error.
+  Failed { parent: String },
+  /// Force-rebase failed.
+  ForceFailed { parent: String },
+  /// Branch had no configured parents.
+  NoParents,
+}
+
+impl CascadeBranchStatus {
+  /// Returns `true` when the status represents a successful outcome.
+  fn is_success(&self) -> bool {
+    matches!(
+      self,
+      Self::Rebased { .. } | Self::ForceRebased { .. } | Self::UpToDate { .. } | Self::ConflictResolved { .. }
+    )
+  }
+
+  /// Returns `true` when the status represents a failure.
+  fn is_failure(&self) -> bool {
+    matches!(
+      self,
+      Self::CheckoutFailed | Self::Failed { .. } | Self::ForceFailed { .. }
+    )
+  }
+
+  /// Description including the parent branch when applicable.
+  fn description(&self) -> String {
+    match self {
+      Self::Rebased { parent } => format!("rebased onto {parent}"),
+      Self::ForceRebased { parent } => format!("force-rebased onto {parent}"),
+      Self::UpToDate { parent } => format!("up-to-date with {parent}"),
+      Self::ConflictResolved { parent } => format!("conflicts resolved, rebased onto {parent}"),
+      Self::Aborted { parent } => format!("aborted (conflicts with {parent})"),
+      Self::Skipped { parent } => format!("skipped conflicting commit onto {parent}"),
+      Self::CheckoutFailed => "checkout failed".to_string(),
+      Self::Failed { parent } => format!("failed to rebase onto {parent}"),
+      Self::ForceFailed { parent } => format!("failed to force-rebase onto {parent}"),
+      Self::NoParents => "no parent branches configured".to_string(),
+    }
+  }
+}
+
+/// Tracks the overall outcome of a cascade rebase operation.
+struct CascadeSummary {
+  entries: Vec<(String, CascadeBranchStatus)>,
+}
+
+impl CascadeSummary {
+  fn new() -> Self {
+    Self { entries: Vec::new() }
+  }
+
+  fn record(&mut self, branch: String, status: CascadeBranchStatus) {
+    self.entries.push((branch, status));
+  }
+
+  fn success_count(&self) -> usize {
+    self.entries.iter().filter(|(_, s)| s.is_success()).count()
+  }
+
+  fn failure_count(&self) -> usize {
+    self.entries.iter().filter(|(_, s)| s.is_failure()).count()
+  }
+
+  fn other_count(&self) -> usize {
+    self
+      .entries
+      .iter()
+      .filter(|(_, s)| !s.is_success() && !s.is_failure())
+      .count()
+  }
+
+  fn print_report(&self) {
+    if self.entries.is_empty() {
+      return;
+    }
+
+    println!();
+    print_info("Cascade summary:");
+
+    let max_branch_len = self
+      .entries
+      .iter()
+      .map(|(name, _)| name.len())
+      .max()
+      .unwrap_or(0);
+
+    for (branch, status) in &self.entries {
+      let icon = if status.is_success() {
+        "✓"
+      } else if status.is_failure() {
+        "✗"
+      } else {
+        "⊘"
+      };
+      let padded = format!("{branch:<width$}", width = max_branch_len);
+      println!("  {icon} {padded}  {}", status.description());
+    }
+
+    let total = self.entries.len();
+    let succeeded = self.success_count();
+    let failed = self.failure_count();
+    let other = self.other_count();
+
+    let mut parts = Vec::new();
+    if succeeded > 0 {
+      parts.push(format!("{succeeded} succeeded"));
+    }
+    if failed > 0 {
+      parts.push(format!("{failed} failed"));
+    }
+    if other > 0 {
+      parts.push(format!("{other} skipped/aborted"));
+    }
+
+    println!();
+    println!("  {total} branches: {}", parts.join(", "));
+  }
+}
+
 /// Enum representing rebase conflict resolution options
 enum ConflictResolution {
   Continue,
@@ -535,8 +739,16 @@ fn handle_rebase_conflict(_repo_path: &Path, _branch: &str) -> Result<ConflictRe
   }
 }
 
-/// Execute a git command and handle output
-fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<String> {
+/// Output from a git command, including exit status and separated streams.
+struct GitCommandOutput {
+  /// Whether the command exited successfully.
+  success: bool,
+  /// Combined stdout + stderr for display purposes.
+  combined: String,
+}
+
+/// Execute a git command and return structured output including exit status.
+fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<GitCommandOutput> {
   let output = Command::new(consts::GIT_EXECUTABLE)
     .args(args)
     .current_dir(repo_path)
@@ -546,18 +758,21 @@ fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<String> {
   let stdout = String::from_utf8_lossy(&output.stdout).to_string();
   let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
-  let mut result = String::new();
+  let mut combined = String::new();
 
   if !stdout.is_empty() {
-    result.push_str(&stdout);
+    combined.push_str(&stdout);
   }
 
   if !stderr.is_empty() {
-    if !result.is_empty() {
-      result.push('\n');
+    if !combined.is_empty() {
+      combined.push('\n');
     }
-    result.push_str(&stderr);
+    combined.push_str(&stderr);
   }
 
-  Ok(result)
+  Ok(GitCommandOutput {
+    success: output.status.success(),
+    combined,
+  })
 }
