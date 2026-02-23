@@ -50,7 +50,7 @@ jobs:
 
       - name: Install uv
         if: matrix.check == 'autofixers'
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
 
       - name: Verify autofixers produce no diff
         if: matrix.check == 'autofixers'
