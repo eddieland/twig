@@ -107,22 +107,36 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
       continue;
     }
 
-    let author = commit.author();
-    let author_name = author.name().unwrap_or("").to_string();
-
-    // Filter by author if needed
-    if !args.all_authors && author_name != current_user {
-      continue;
-    }
-
     let message = commit.message().unwrap_or("").to_string();
-    let hash = commit.id().to_string();
-    let short_hash = format!("{:.7}", commit.id());
 
     // Filter out fixup commits unless explicitly requested
     if !args.include_fixups && is_fixup_commit(&message) {
       continue;
     }
+
+    // Determine if this commit is unique to the current branch BEFORE author
+    // filtering. Branch-unique commits should always be included regardless
+    // of author, since they are the most relevant fixup targets.
+    // A commit is branch-unique if it's NOT reachable from the comparison branch tip
+    // (i.e., the comparison tip is NOT a descendant of this commit, and they're not equal)
+    let is_branch_unique = comparison_tip.is_some_and(|tip| {
+      // The commit is reachable from the comparison tip if:
+      // - The tip is a descendant of the commit (commit is an ancestor of tip), OR
+      // - The commit equals the tip
+      // So branch-unique means: tip is NOT a descendant AND not equal
+      oid != tip && !repo.graph_descendant_of(tip, oid).unwrap_or(true)
+    });
+
+    let author = commit.author();
+    let author_name = author.name().unwrap_or("").to_string();
+
+    // Filter by author if needed, but always keep branch-unique commits
+    if !args.all_authors && !is_branch_unique && author_name != current_user {
+      continue;
+    }
+
+    let hash = commit.id().to_string();
+    let short_hash = format!("{:.7}", commit.id());
 
     // Convert git2::Time to DateTime<Utc>
     let date = DateTime::from_timestamp(commit_time.seconds(), 0)
@@ -136,17 +150,6 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
     let jira_issue = jira_parser
       .as_ref()
       .and_then(|parser| extract_jira_issue_from_message(parser, &message));
-
-    // Determine if this commit is unique to the current branch
-    // A commit is branch-unique if it's NOT reachable from the comparison branch tip
-    // (i.e., the comparison tip is NOT a descendant of this commit, and they're not equal)
-    let is_branch_unique = comparison_tip.is_some_and(|tip| {
-      // The commit is reachable from the comparison tip if:
-      // - The tip is a descendant of the commit (commit is an ancestor of tip), OR
-      // - The commit equals the tip
-      // So branch-unique means: tip is NOT a descendant AND not equal
-      oid != tip && !repo.graph_descendant_of(tip, oid).unwrap_or(true)
-    });
 
     let candidate = CommitCandidate {
       hash,
@@ -539,6 +542,76 @@ mod tests {
     assert!(!is_fixup_commit("Fix the bug"));
     assert!(!is_fixup_commit("PROJ-123: Add feature"));
     assert!(!is_fixup_commit(""));
+  }
+
+  #[test]
+  fn test_branch_unique_commits_bypass_author_filter() {
+    use twig_test_utils::git::{checkout_branch, create_branch, ensure_main_branch};
+
+    let git_repo = GitRepoTestGuard::new();
+
+    // Set up a main branch with a shared commit
+    create_commit_with_author(
+      &git_repo.repo,
+      "shared.txt",
+      "shared content",
+      "Shared commit on main",
+      "Twig Test User",
+      "test@example.com",
+    )
+    .expect("Failed to create shared commit");
+
+    ensure_main_branch(&git_repo.repo).expect("Failed to ensure main branch");
+
+    // Create a fake origin/main remote tracking ref so resolve_comparison_branch
+    // can find a comparison target (test repos don't have real remotes)
+    let main_tip = git_repo.repo.head().unwrap().target().unwrap();
+    git_repo
+      .repo
+      .reference("refs/remotes/origin/main", main_tip, true, "fake remote tracking ref")
+      .expect("Failed to create fake origin/main ref");
+
+    // Create a feature branch from main
+    create_branch(&git_repo.repo, "feature", None).expect("Failed to create feature branch");
+    checkout_branch(&git_repo.repo, "feature").expect("Failed to checkout feature branch");
+
+    // Add a commit by a DIFFERENT author (e.g., an AI assistant)
+    create_commit_with_author(
+      &git_repo.repo,
+      "feature.txt",
+      "feature content",
+      "Feature commit by other author",
+      "Claude",
+      "claude@example.com",
+    )
+    .expect("Failed to create feature commit");
+
+    // Collect commits with author filter ON (all_authors = false)
+    let args = FixupArgs {
+      limit: 20,
+      days: 30,
+      all_authors: false,
+      include_fixups: false,
+      dry_run: false,
+      vim_mode: false,
+    };
+
+    let result = collect_commits(git_repo.repo.path().parent().unwrap(), &args);
+    assert!(result.is_ok());
+    let candidates = result.unwrap();
+
+    // The branch-unique commit by "Claude" should still be included
+    // even though it doesn't match the current user, because it's
+    // the only commit unique to this branch
+    let branch_unique_commits: Vec<_> = candidates.iter().filter(|c| c.is_branch_unique).collect();
+    assert_eq!(
+      branch_unique_commits.len(),
+      1,
+      "Should have exactly one branch-unique commit"
+    );
+    assert_eq!(branch_unique_commits[0].message, "Feature commit by other author");
+    assert_eq!(branch_unique_commits[0].author, "Claude");
+    assert!(!branch_unique_commits[0].is_current_user);
   }
 
   #[test]
