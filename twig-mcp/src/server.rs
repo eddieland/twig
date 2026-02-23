@@ -2,10 +2,15 @@
 
 use std::sync::Arc;
 
+use rmcp::handler::server::router::prompt::PromptRouter;
 use rmcp::handler::server::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::*;
-use rmcp::{ErrorData as McpError, ServerHandler, tool, tool_handler, tool_router};
+use rmcp::service::RequestContext;
+use rmcp::{
+  ErrorData as McpError, RoleServer, ServerHandler, prompt, prompt_handler, prompt_router, tool, tool_handler,
+  tool_router,
+};
 use twig_core::git::graph::{BranchGraph, BranchGraphBuilder, BranchName};
 use twig_core::state::{Registry, RepoState};
 
@@ -15,10 +20,18 @@ use crate::tools::jira::{GetJiraIssueParams, ListJiraIssuesParams};
 use crate::tools::local::{BranchMetadataParams, BranchStackParams, BranchTreeParams};
 use crate::types::*;
 
+/// Arguments for the `branch-context` prompt.
+#[derive(Debug, schemars::JsonSchema, serde::Deserialize)]
+pub struct BranchContextArgs {
+  /// Branch name. If omitted, uses the current git branch.
+  pub branch: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct TwigMcpServer {
   context: Arc<ServerContext>,
   tool_router: ToolRouter<Self>,
+  prompt_router: PromptRouter<Self>,
 }
 
 #[tool_router]
@@ -28,6 +41,7 @@ impl TwigMcpServer {
     Self {
       context,
       tool_router: Self::tool_router(),
+      prompt_router: Self::prompt_router(),
     }
   }
 
@@ -518,7 +532,130 @@ impl TwigMcpServer {
   }
 }
 
+// ===========================================================================
+// MCP Prompts
+// ===========================================================================
+
+#[prompt_router]
+impl TwigMcpServer {
+  #[prompt(
+    name = "stack-status",
+    description = "Summarize the current state of my PR stack, including review status and CI results."
+  )]
+  async fn stack_status(&self) -> Vec<PromptMessage> {
+    let mut sections = Vec::new();
+
+    // Current branch
+    if let Some(repo_path) = self.context.repo_path.as_deref()
+      && let Ok(Some(branch)) = get_current_branch_name(repo_path)
+    {
+      sections.push(format!("Current branch: {branch}"));
+    }
+
+    // Branch tree
+    if let Some(repo_path) = self.context.repo_path.as_deref()
+      && let Ok(repo) = git2::Repository::open(repo_path)
+      && let Ok(graph) = BranchGraphBuilder::new()
+        .with_declared_dependencies(true)
+        .with_orphan_parenting(true)
+        .build(&repo)
+    {
+      let state = self.context.load_repo_state().unwrap_or_default();
+      if let Some(root) = graph.root_candidates().first() {
+        let tree_node = build_tree_node(&graph, &state, root);
+        let mut tree_text = String::new();
+        render_tree_text(&tree_node, &mut tree_text, "", true);
+        sections.push(format!("Branch dependency tree:\n```\n{tree_text}```"));
+      }
+    }
+
+    // Per-branch details
+    if let Ok(state) = self.context.load_repo_state()
+      && !state.branches.is_empty()
+    {
+      let mut details = String::from("Branch details:");
+      for (name, meta) in &state.branches {
+        let mut parts = vec![name.clone()];
+        if let Some(ref jira) = meta.jira_issue {
+          parts.push(format!("Jira: {jira}"));
+        }
+        if let Some(pr) = meta.github_pr {
+          parts.push(format!("PR: #{pr}"));
+        }
+        if let Some(parent) = state.get_dependency_parents(name).first() {
+          parts.push(format!("parent: {parent}"));
+        }
+        details.push_str(&format!("\n- {}", parts.join(" | ")));
+      }
+      sections.push(details);
+    }
+
+    if sections.is_empty() {
+      sections.push("No repository or branch data available.".into());
+    }
+
+    vec![PromptMessage::new_text(
+      PromptMessageRole::User,
+      format!(
+        "{}\n\nSummarize the current state of this PR stack. \
+         For each branch, describe its review status and CI results.",
+        sections.join("\n\n")
+      ),
+    )]
+  }
+
+  #[prompt(
+    name = "branch-context",
+    description = "What am I working on? Describe the current branch's Jira issue and PR."
+  )]
+  async fn branch_context(&self, params: Parameters<BranchContextArgs>) -> Vec<PromptMessage> {
+    let branch_name = params.0.branch.or_else(|| {
+      self
+        .context
+        .repo_path
+        .as_deref()
+        .and_then(|p| get_current_branch_name(p).ok().flatten())
+    });
+
+    let Some(branch) = branch_name else {
+      return vec![PromptMessage::new_text(
+        PromptMessageRole::User,
+        "I'm not currently on a git branch. What should I work on?",
+      )];
+    };
+
+    let mut sections = vec![format!("Branch: {branch}")];
+
+    if let Ok(state) = self.context.load_repo_state() {
+      let (jira_issue, pr_number, parent_branch, created_at) = extract_branch_metadata(&state, &branch);
+
+      if let Some(parent) = parent_branch {
+        sections.push(format!("Parent branch: {parent}"));
+      }
+      if let Some(jira) = jira_issue {
+        sections.push(format!("Linked Jira issue: {jira}"));
+      }
+      if let Some(pr) = pr_number {
+        sections.push(format!("Linked PR: #{pr}"));
+      }
+      if let Some(created) = created_at {
+        sections.push(format!("Created: {created}"));
+      }
+    }
+
+    vec![PromptMessage::new_text(
+      PromptMessageRole::User,
+      format!(
+        "{}\n\nDescribe what I'm working on based on this branch context, \
+         including the linked Jira issue and pull request status.",
+        sections.join("\n")
+      ),
+    )]
+  }
+}
+
 #[tool_handler]
+#[prompt_handler]
 impl ServerHandler for TwigMcpServer {
   fn get_info(&self) -> ServerInfo {
     ServerInfo {
@@ -527,7 +664,7 @@ impl ServerHandler for TwigMcpServer {
          Jira issues, and GitHub PRs for the current repository."
           .into(),
       ),
-      capabilities: ServerCapabilities::builder().enable_tools().build(),
+      capabilities: ServerCapabilities::builder().enable_tools().enable_prompts().build(),
       ..Default::default()
     }
   }
