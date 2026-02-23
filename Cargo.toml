@@ -56,7 +56,7 @@ tempfile = { workspace = true }
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 directories = "6.0"
-git2 = { version = "0.20", features = ["https"] }
+git2 = { version = "0.20", features = ["https", "vendored-openssl"] }
 open = "5.3.3"
 regex = "1.12"
 thiserror = "2"
@@ -82,7 +82,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # Async and networking
-reqwest = { version = "0.13", features = ["json", "native-tls", "blocking", "http2"], default-features = false }
+reqwest = { version = "0.13", features = ["json", "rustls", "blocking", "http2"], default-features = false }
 tokio = { version = "1.49", features = ["rt", "rt-multi-thread", "time", "macros"] }
 
 # Serialization
@@ -106,10 +106,6 @@ windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Secur
 insta = "1.46.2"
 tempfile = "3.25"
 wiremock = "0.6.5"
-
-[target.'cfg(windows)'.dependencies]
-# Platform-specific git2 features for Windows
-git2 = { version = "0.20", features = ["vendored-openssl"] }
 
 [profile.release]
 opt-level = 2
