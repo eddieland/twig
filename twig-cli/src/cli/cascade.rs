@@ -155,8 +155,11 @@ fn rebase_downstream(
 
       // First checkout the branch
       let checkout_result = execute_git_command(repo_path, &["checkout", &branch])?;
-      if !checkout_result.contains("Switched to branch") && !checkout_result.contains("Already on") {
-        print_error(&format!("Failed to checkout branch {branch}: {checkout_result}"));
+      if !checkout_result.success {
+        print_error(&format!(
+          "Failed to checkout branch {branch}: {}",
+          checkout_result.output
+        ));
         continue;
       }
 
@@ -195,7 +198,7 @@ fn rebase_downstream(
             ConflictResolution::Continue => {
               // Continue the rebase
               let continue_result = execute_git_command(repo_path, &["rebase", "--continue"])?;
-              print_info(&continue_result);
+              print_info(&continue_result.output);
               print_success(&format!(
                 "Rebase of {branch} onto {parent} completed after resolving conflicts",
               ));
@@ -203,26 +206,26 @@ fn rebase_downstream(
             ConflictResolution::AbortToOriginal => {
               // Abort the rebase and go back to the original branch
               let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
-              print_info(&abort_result);
+              print_info(&abort_result.output);
               print_info(&format!("Rebase of {branch} onto {parent} aborted",));
 
               // Checkout the original branch
               let checkout_result = execute_git_command(repo_path, &["checkout", &current_branch_name])?;
-              print_info(&checkout_result);
+              print_info(&checkout_result.output);
 
               return Ok(());
             }
             ConflictResolution::AbortStayHere => {
               // Abort the rebase but stay on the current branch
               let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
-              print_info(&abort_result);
+              print_info(&abort_result.output);
               print_info(&format!("Rebase of {branch} onto {parent} aborted",));
               continue;
             }
             ConflictResolution::Skip => {
               // Skip the current commit
               let skip_result = execute_git_command(repo_path, &["rebase", "--skip"])?;
-              print_info(&skip_result);
+              print_info(&skip_result.output);
               print_info(&format!("Skipped commit during rebase of {branch} onto {parent}",));
             }
           }
@@ -238,7 +241,7 @@ fn rebase_downstream(
 
   // Return to the original branch
   let checkout_result = execute_git_command(repo_path, &["checkout", &current_branch_name])?;
-  print_info(&checkout_result);
+  print_info(&checkout_result.output);
 
   print_success("Cascading rebase completed successfully");
   Ok(())
@@ -535,29 +538,42 @@ fn handle_rebase_conflict(_repo_path: &Path, _branch: &str) -> Result<ConflictRe
   }
 }
 
-/// Execute a git command and handle output
-fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<String> {
+/// Output from a git command, including both the combined stdout/stderr text and
+/// whether the process exited successfully (exit code 0).
+struct GitCommandOutput {
+  /// Combined stdout and stderr text.
+  output: String,
+  /// Whether the command exited with status code 0.
+  success: bool,
+}
+
+/// Execute a git command and return its output along with the exit status.
+fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<GitCommandOutput> {
   let output = Command::new(consts::GIT_EXECUTABLE)
     .args(args)
     .current_dir(repo_path)
     .output()
     .context(format!("Failed to execute git command: {args:?}",))?;
 
+  let success = output.status.success();
   let stdout = String::from_utf8_lossy(&output.stdout).to_string();
   let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
-  let mut result = String::new();
+  let mut combined = String::new();
 
   if !stdout.is_empty() {
-    result.push_str(&stdout);
+    combined.push_str(&stdout);
   }
 
   if !stderr.is_empty() {
-    if !result.is_empty() {
-      result.push('\n');
+    if !combined.is_empty() {
+      combined.push('\n');
     }
-    result.push_str(&stderr);
+    combined.push_str(&stderr);
   }
 
-  Ok(result)
+  Ok(GitCommandOutput {
+    output: combined,
+    success,
+  })
 }
