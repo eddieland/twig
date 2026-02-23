@@ -156,7 +156,10 @@ fn rebase_downstream(
       // First checkout the branch
       let checkout_result = execute_git_command(repo_path, &["checkout", &branch])?;
       if !checkout_result.success {
-        print_error(&format!("Failed to checkout branch {branch}: {}", checkout_result.output));
+        print_error(&format!(
+          "Failed to checkout branch {branch}: {}",
+          checkout_result.output
+        ));
         continue;
       }
 
