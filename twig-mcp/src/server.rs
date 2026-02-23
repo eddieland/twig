@@ -552,6 +552,9 @@ impl TwigMcpServer {
       sections.push(format!("Current branch: {branch}"));
     }
 
+    // Load repo state once for both the tree and per-branch details sections.
+    let state = self.context.load_repo_state().unwrap_or_default();
+
     // Branch tree
     if let Some(repo_path) = self.context.repo_path.as_deref()
       && let Ok(repo) = git2::Repository::open(repo_path)
@@ -560,21 +563,36 @@ impl TwigMcpServer {
         .with_orphan_parenting(true)
         .build(&repo)
     {
-      let state = self.context.load_repo_state().unwrap_or_default();
-      if let Some(root) = graph.root_candidates().first() {
-        let tree_node = build_tree_node(&graph, &state, root);
+      let roots = graph.root_candidates();
+      if !roots.is_empty() {
         let mut tree_text = String::new();
-        render_tree_text(&tree_node, &mut tree_text, "", true);
-        sections.push(format!("Branch dependency tree:\n```\n{tree_text}```"));
+
+        for (idx, root) in roots.iter().enumerate() {
+          if idx > 0 {
+            tree_text.push('\n');
+          }
+
+          let tree_node = build_tree_node(&graph, &state, root);
+          render_tree_text(&tree_node, &mut tree_text, "", true);
+        }
+
+        let heading = if roots.len() > 1 {
+          "Branch dependency trees"
+        } else {
+          "Branch dependency tree"
+        };
+
+        sections.push(format!("{heading}:\n```\n{tree_text}```"));
       }
     }
 
-    // Per-branch details
-    if let Ok(state) = self.context.load_repo_state()
-      && !state.branches.is_empty()
-    {
+    // Per-branch details (sorted for deterministic output)
+    if !state.branches.is_empty() {
       let mut details = String::from("Branch details:");
-      for (name, meta) in &state.branches {
+      let mut branch_names: Vec<&String> = state.branches.keys().collect();
+      branch_names.sort();
+      for name in branch_names {
+        let meta = &state.branches[name];
         let mut parts = vec![name.clone()];
         if let Some(ref jira) = meta.jira_issue {
           parts.push(format!("Jira: {jira}"));
@@ -629,14 +647,17 @@ impl TwigMcpServer {
     if let Ok(state) = self.context.load_repo_state() {
       let (jira_issue, pr_number, parent_branch, created_at) = extract_branch_metadata(&state, &branch);
 
-      if let Some(parent) = parent_branch {
-        sections.push(format!("Parent branch: {parent}"));
+      match parent_branch {
+        Some(parent) => sections.push(format!("Parent branch: {parent}")),
+        None => sections.push("Parent branch: none".into()),
       }
-      if let Some(jira) = jira_issue {
-        sections.push(format!("Linked Jira issue: {jira}"));
+      match jira_issue {
+        Some(jira) => sections.push(format!("Linked Jira issue: {jira}")),
+        None => sections.push("No linked Jira issue found.".into()),
       }
-      if let Some(pr) = pr_number {
-        sections.push(format!("Linked PR: #{pr}"));
+      match pr_number {
+        Some(pr) => sections.push(format!("Linked PR: #{pr}")),
+        None => sections.push("No linked pull request found.".into()),
       }
       if let Some(created) = created_at {
         sections.push(format!("Created: {created}"));
