@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result};
 use clap::Args;
@@ -36,6 +36,13 @@ pub struct CascadeArgs {
   #[arg(long)]
   pub autostash: bool,
 
+  /// Force push to remote after successful rebase
+  ///
+  /// WARNING: This can overwrite remote changes. Uses --force-with-lease for
+  /// safety.
+  #[arg(long = "force-push")]
+  pub force_push: bool,
+
   /// Show the rebase plan without executing it
   #[arg(long)]
   pub preview: bool,
@@ -59,10 +66,11 @@ pub fn handle_cascade_command(args: CascadeArgs) -> Result<()> {
   let force = args.force;
   let show_graph = args.show_graph;
   let autostash = args.autostash;
+  let force_push = args.force_push;
   let preview = args.preview;
 
   // Perform cascading rebase from current branch to children
-  rebase_downstream(&repo_path, max_depth, force, show_graph, autostash, preview)
+  rebase_downstream(&repo_path, max_depth, force, show_graph, autostash, force_push, preview)
 }
 
 /// Perform cascading rebase from current branch to children
@@ -72,6 +80,7 @@ fn rebase_downstream(
   force: bool,
   show_graph: bool,
   autostash: bool,
+  force_push: bool,
   preview: bool,
 ) -> Result<()> {
   // Open the repository
@@ -140,6 +149,9 @@ fn rebase_downstream(
   }
 
   // Perform the cascading rebase
+  // Track commits that were replaced (skipped or resolved conflicts) during the cascade.
+  // These are logged so downstream branches can be aware of replaced commits.
+  let mut replaced_commits: HashSet<String> = HashSet::new();
   for branch in rebase_order {
     // Get the parents of this branch
     let parents = repo_state.get_dependency_parents(&branch);
@@ -169,6 +181,9 @@ fn rebase_downstream(
       match result {
         RebaseResult::Success => {
           print_success(&format!("Successfully rebased {branch} onto {parent}",));
+          if force_push {
+            handle_force_push(repo_path, &branch)?;
+          }
         }
         RebaseResult::UpToDate => {
           if force {
@@ -177,8 +192,9 @@ fn rebase_downstream(
             let force_result = rebase_branch_force(repo_path, &branch, parent, autostash)?;
             match force_result {
               RebaseResult::Success => {
-                print_success(&format!("Successfully force-rebased {branch} onto {parent}",));
-              }
+                print_success(&format!("Successfully force-rebased {branch} onto {parent}",));                if force_push {
+                  handle_force_push(repo_path, &branch)?;
+                }              }
               _ => {
                 print_error(&format!("Failed to force-rebase {branch} onto {parent}",));
                 // Continue with other branches rather than aborting the whole process
@@ -196,12 +212,28 @@ fn rebase_downstream(
 
           match resolution {
             ConflictResolution::Continue => {
-              // Continue the rebase
-              let continue_result = execute_git_command(repo_path, &["rebase", "--continue"])?;
+              // Capture the commit being applied before continuing
+              let rebase_commit = get_rebase_head_commit(repo_path)?;
+
+              // Continue the rebase (interactive so git can open editors / read stdin)
+              let continue_result = execute_git_command_interactive(repo_path, &["rebase", "--continue"])?;
               print_info(&continue_result.output);
+
+              // Track the replaced commit (it was resolved with changes)
+              if let Some(commit_hash) = rebase_commit {
+                replaced_commits.insert(commit_hash.clone());
+                print_info(&format!(
+                  "Tracking commit {} as replaced (will be skipped in descendant branches)",
+                  &commit_hash[..7.min(commit_hash.len())]
+                ));
+              }
+
               print_success(&format!(
                 "Rebase of {branch} onto {parent} completed after resolving conflicts",
               ));
+              if force_push {
+                handle_force_push(repo_path, &branch)?;
+              }
             }
             ConflictResolution::AbortToOriginal => {
               // Abort the rebase and go back to the original branch
@@ -223,9 +255,22 @@ fn rebase_downstream(
               continue;
             }
             ConflictResolution::Skip => {
-              // Skip the current commit
-              let skip_result = execute_git_command(repo_path, &["rebase", "--skip"])?;
+              // Capture the commit being skipped
+              let rebase_commit = get_rebase_head_commit(repo_path)?;
+
+              // Skip the current commit (interactive so git can open editors / read stdin)
+              let skip_result = execute_git_command_interactive(repo_path, &["rebase", "--skip"])?;
               print_info(&skip_result.output);
+
+              // Track the skipped commit (it should be skipped in descendant branches too)
+              if let Some(commit_hash) = rebase_commit {
+                replaced_commits.insert(commit_hash.clone());
+                print_info(&format!(
+                  "Tracking commit {} as skipped (will be skipped in descendant branches)",
+                  &commit_hash[..7.min(commit_hash.len())]
+                ));
+              }
+
               print_info(&format!("Skipped commit during rebase of {branch} onto {parent}",));
             }
           }
@@ -242,6 +287,13 @@ fn rebase_downstream(
   // Return to the original branch
   let checkout_result = execute_git_command(repo_path, &["checkout", &current_branch_name])?;
   print_info(&checkout_result.output);
+
+  if !replaced_commits.is_empty() {
+    print_info(&format!(
+      "Tracked {} replaced commit(s) during this cascade",
+      replaced_commits.len()
+    ));
+  }
 
   print_success("Cascading rebase completed successfully");
   Ok(())
@@ -538,6 +590,18 @@ fn handle_rebase_conflict(_repo_path: &Path, _branch: &str) -> Result<ConflictRe
   }
 }
 
+/// Force-push a branch to its remote tracking branch using `--force-with-lease`.
+fn handle_force_push(repo_path: &Path, branch: &str) -> Result<()> {
+  print_info(&format!("Force-pushing {branch} to remote..."));
+  let result = execute_git_command(repo_path, &["push", "--force-with-lease", "origin", branch])?;
+  if result.success {
+    print_success(&format!("Successfully force-pushed {branch}"));
+  } else {
+    print_warning(&format!("Failed to force-push {branch}: {}", result.output));
+  }
+  Ok(())
+}
+
 /// Output from a git command, including both the combined stdout/stderr text and
 /// whether the process exited successfully (exit code 0).
 struct GitCommandOutput {
@@ -545,6 +609,26 @@ struct GitCommandOutput {
   output: String,
   /// Whether the command exited with status code 0.
   success: bool,
+}
+
+/// Execute a git command with inherited stdin/stdout/stderr.
+///
+/// Used for commands like `rebase --continue` / `--skip` that may need to
+/// open an editor or interact with the user.
+fn execute_git_command_interactive(repo_path: &Path, args: &[&str]) -> Result<GitCommandOutput> {
+  let status = Command::new(consts::GIT_EXECUTABLE)
+    .args(args)
+    .current_dir(repo_path)
+    .stdin(Stdio::inherit())
+    .stdout(Stdio::inherit())
+    .stderr(Stdio::inherit())
+    .status()
+    .context(format!("Failed to execute git command: {args:?}"))?;
+
+  Ok(GitCommandOutput {
+    output: String::new(),
+    success: status.success(),
+  })
 }
 
 /// Execute a git command and return its output along with the exit status.
@@ -576,4 +660,26 @@ fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<GitCommandOutp
     output: combined,
     success,
   })
+}
+
+/// Get the commit hash that is currently being applied during a rebase.
+///
+/// Uses `git rev-parse REBASE_HEAD` to retrieve the original commit hash
+/// of the commit being rebased. Returns `None` if no rebase is in progress
+/// or `REBASE_HEAD` cannot be resolved.
+fn get_rebase_head_commit(repo_path: &Path) -> Result<Option<String>> {
+  let output = Command::new(consts::GIT_EXECUTABLE)
+    .current_dir(repo_path)
+    .args(["rev-parse", "REBASE_HEAD"])
+    .output()
+    .context("Failed to get REBASE_HEAD commit")?;
+
+  if output.status.success() {
+    let commit_hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if !commit_hash.is_empty() {
+      return Ok(Some(commit_hash));
+    }
+  }
+
+  Ok(None)
 }
