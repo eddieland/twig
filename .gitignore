@@ -40,12 +40,6 @@ lerna-debug.log*
 .node_repl_history
 # Note: package-lock.json and yarn.lock should be committed
 
-# Node.js runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
 # Test coverage
 coverage/
 *.lcov
@@ -54,19 +48,23 @@ coverage/
 # Caches
 .eslintcache
 .stylelintcache
-*.tsbuildinfo
-.cache
+twig-vscode/.cache
 .parcel-cache
 .turbo
+# rollup-plugin-typescript2
 .rpt2_cache/
 .rts2_cache_cjs/
 .rts2_cache_es/
 .rts2_cache_umd/
 
 # TypeScript / JS build output
-dist/
-build/
-out/
+*.tsbuildinfo
+twig-vscode/dist/
+twig-vscode/build/
+twig-vscode/out/
+twig-vscode/server/out/
+twig-vscode/client/out/
+# npm pack tarballs
 *.tgz
 
 # Yarn v2+
@@ -77,27 +75,15 @@ out/
 .yarn-integrity
 .pnp.*
 
-# Frameworks
-.next
-.nuxt
-.svelte-kit
-.vuepress/dist
-
 # dotenv environment variable files
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+/.env.development.local
+/.env.test.local
+/.env.production.local
+/.env.local
 
 # VS Code extension development
 *.vsix
 .vscode-test
-server/out/
-client/out/
-
-# MCP Server specific
-mcp-server/dist/
-mcp-server/node_modules/
 
 # Per-user secrets
 /.env
