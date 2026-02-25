@@ -1,26 +1,20 @@
----
-name: debugging
-description: >-
-  Debug and investigate twig issues using logging, tracing, and diagnostics.
-  Use when troubleshooting unexpected behavior, investigating bugs, adding
-  tracing instrumentation to code, understanding error messages, or running
-  system diagnostics. Covers verbosity flags, RUST_LOG, tracing macros, and
-  twig self diagnose.
----
+______________________________________________________________________
+
+## name: debugging description: >- Debug and investigate twig issues using logging, tracing, and diagnostics. Use when troubleshooting unexpected behavior, investigating bugs, adding tracing instrumentation to code, understanding error messages, or running system diagnostics. Covers verbosity flags, RUST_LOG, tracing macros, and twig self diagnose.
 
 # Debugging with Logging
 
-Twig uses the `tracing` crate for structured logging. Verbosity is controlled
-via the `-v` flag or the `RUST_LOG` environment variable.
+Twig uses the `tracing` crate for structured logging. Verbosity is controlled via the `-v` flag or the `RUST_LOG`
+environment variable.
 
 ## Verbosity levels
 
-| Flag | Level | What you see |
-|---|---|---|
-| (none) | WARN | Warnings and errors only |
-| `-v` | INFO | High-level operation progress |
-| `-vv` | DEBUG | Internal decision-making, state changes |
-| `-vvv` | TRACE | Everything, including per-commit data |
+| Flag   | Level | What you see                            |
+| ------ | ----- | --------------------------------------- |
+| (none) | WARN  | Warnings and errors only                |
+| `-v`   | INFO  | High-level operation progress           |
+| `-vv`  | DEBUG | Internal decision-making, state changes |
+| `-vvv` | TRACE | Everything, including per-commit data   |
 
 ### Examples
 
@@ -32,8 +26,7 @@ twig switch PROJ-123 -vvv # Trace: full Jira/GitHub API flow
 
 ## Using RUST_LOG for granular control
 
-The `-v` flag sets a global level. For finer control, use `RUST_LOG` to target
-specific crates or modules:
+The `-v` flag sets a global level. For finer control, use `RUST_LOG` to target specific crates or modules:
 
 ```powershell
 # All twig crates at debug, everything else at warn
@@ -57,14 +50,12 @@ $env:RUST_LOG = "debug,twig_mcp=trace"
 twig mcp-server
 ```
 
-Both `-v` and `RUST_LOG` work simultaneously — `RUST_LOG` takes precedence for
-modules it targets. The tracing subscriber is initialized with
-`EnvFilter::from_default_env()` combined with the `-v` level.
+Both `-v` and `RUST_LOG` work simultaneously — `RUST_LOG` takes precedence for modules it targets. The tracing
+subscriber is initialized with `EnvFilter::from_default_env()` combined with the `-v` level.
 
 ## Adding tracing to code
 
-When investigating a bug, add temporary tracing statements to narrow down the
-issue.
+When investigating a bug, add temporary tracing statements to narrow down the issue.
 
 ### Tracing macros
 
@@ -116,29 +107,28 @@ debug!("Processing child: {}", child);
 
 Twig separates user-facing messages from debug logging:
 
-| Purpose | Mechanism |
-|---|---|
+| Purpose                        | Mechanism                                                                    |
+| ------------------------------ | ---------------------------------------------------------------------------- |
 | User-facing success/error/info | `twig_core::output::{print_success, print_error, print_warning, print_info}` |
-| Developer diagnostics | `tracing::{trace!, debug!, info!, warn!, error!}` |
+| Developer diagnostics          | `tracing::{trace!, debug!, info!, warn!, error!}`                            |
 
-**Rule**: User-facing functions (`print_*`) always display regardless of
-verbosity. Tracing macros are filtered by `-v` / `RUST_LOG`.
+**Rule**: User-facing functions (`print_*`) always display regardless of verbosity. Tracing macros are filtered by `-v`
+/ `RUST_LOG`.
 
-When debugging, use tracing macros so output only appears when verbosity is
-increased. Don't use `println!` or `eprintln!` for debug output.
+When debugging, use tracing macros so output only appears when verbosity is increased. Don't use `println!` or
+`eprintln!` for debug output.
 
 ## Enhanced error messages
 
-Twig has a structured error system in `twig-cli/src/enhanced_errors.rs`. Errors
-include:
+Twig has a structured error system in `twig-cli/src/enhanced_errors.rs`. Errors include:
 
 - **Category** (GitRepository, BranchOperation, Network, Configuration, etc.)
 - **Message** — what went wrong
 - **Details** — technical context (logged at debug level)
 - **Suggestions** — actionable fix recommendations shown to the user
 
-When investigating an error, run the failing command with `-vv` to see the
-`details` field that may not be shown at default verbosity.
+When investigating an error, run the failing command with `-vv` to see the `details` field that may not be shown at
+default verbosity.
 
 ## System diagnostics
 
@@ -149,6 +139,7 @@ twig self diagnose
 ```
 
 This checks:
+
 - System information
 - Configuration directories and files
 - Credentials (Jira, GitHub .netrc)
@@ -173,8 +164,7 @@ twig <command> 2>&1 | Out-File trace-output.txt
 
 ### Step 3: Add targeted tracing
 
-If logs aren't sufficient, add `debug!()` / `trace!()` calls at key decision
-points in the code, rebuild, and re-run:
+If logs aren't sufficient, add `debug!()` / `trace!()` calls at key decision points in the code, rebuild, and re-run:
 
 ```
 cargo build -p twig
@@ -204,11 +194,8 @@ git reflog | Select-Object -First 10
 
 ## Tips
 
-- **Always use `-vv` first** before adding code changes — the existing tracing
-  often reveals the issue.
-- **Clean up tracing before committing** — remove temporary `debug!()` calls
-  added for investigation. Permanent tracing should be intentional.
-- **Pipe stderr**: Tracing output goes to stderr. Use `2>&1` to capture both
-  stdout and stderr when saving to a file.
-- **RUST_LOG syntax**: Use commas to separate targets
-  (`target1=level,target2=level`). Module paths use `::` not `/`.
+- **Always use `-vv` first** before adding code changes — the existing tracing often reveals the issue.
+- **Clean up tracing before committing** — remove temporary `debug!()` calls added for investigation. Permanent tracing
+  should be intentional.
+- **Pipe stderr**: Tracing output goes to stderr. Use `2>&1` to capture both stdout and stderr when saving to a file.
+- **RUST_LOG syntax**: Use commas to separate targets (`target1=level,target2=level`). Module paths use `::` not `/`.

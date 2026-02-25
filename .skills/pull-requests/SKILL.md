@@ -1,11 +1,6 @@
----
-name: pull-requests
-description: >-
-  Create and manage pull requests for the twig project. Use when branching off
-  main, committing changes, pushing, creating PRs with gh CLI, viewing PR status
-  with twig github commands, or following the contribution workflow. Covers the
-  full PR lifecycle from branch creation to merge.
----
+______________________________________________________________________
+
+## name: pull-requests description: >- Create and manage pull requests for the twig project. Use when branching off main, committing changes, pushing, creating PRs with gh CLI, viewing PR status with twig github commands, or following the contribution workflow. Covers the full PR lifecycle from branch creation to merge.
 
 # Pull Request Workflow
 
@@ -36,6 +31,7 @@ git commit -m "feat: description of the change"
 ```
 
 Commit message prefixes:
+
 - `feat:` — new feature
 - `fix:` — bug fix
 - `refactor:` — code restructuring
@@ -83,8 +79,7 @@ twig github pr link 338
 twig github pr link https://github.com/eddieland/twig/pull/338
 ```
 
-This stores the PR association in `.twig/state.json` so other commands can
-reference it.
+This stores the PR association in `.twig/state.json` so other commands can reference it.
 
 ### View PR status
 
@@ -150,8 +145,7 @@ twig github pr status
 
 ### Updating stacked PRs after rebase
 
-After running `twig cascade`, branches have been rebased and need force-pushing.
-Push each branch manually:
+After running `twig cascade`, branches have been rebased and need force-pushing. Push each branch manually:
 
 ```powershell
 git checkout feature-api
@@ -188,9 +182,9 @@ make all          # fmt + lint + test
 
 ## Command aliases
 
-| Full command | Alias |
-|---|---|
-| `twig github` | `twig gh` |
-| `twig github checks` | `twig github ci` |
-| `twig github pr list` | `twig github pr ls` |
+| Full command            | Alias               |
+| ----------------------- | ------------------- |
+| `twig github`           | `twig gh`           |
+| `twig github checks`    | `twig github ci`    |
+| `twig github pr list`   | `twig github pr ls` |
 | `twig github pr status` | `twig github pr st` |

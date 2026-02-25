@@ -1,17 +1,11 @@
----
-name: branching
-description: >-
-  Manage branch dependencies, root branches, and tree visualization with twig.
-  Use when creating branches, defining parent-child relationships, viewing the
-  branch tree, switching branches, reparenting orphans, or cleaning up stale
-  branch configuration. Covers twig branch, twig tree, twig switch, and twig tidy.
----
+______________________________________________________________________
+
+## name: branching description: >- Manage branch dependencies, root branches, and tree visualization with twig. Use when creating branches, defining parent-child relationships, viewing the branch tree, switching branches, reparenting orphans, or cleaning up stale branch configuration. Covers twig branch, twig tree, twig switch, and twig tidy.
 
 # Branch Management
 
-Twig tracks explicit parent-child relationships between Git branches. Unlike
-Git's implicit commit ancestry, these are user-defined dependency links stored
-in `.twig/state.json`.
+Twig tracks explicit parent-child relationships between Git branches. Unlike Git's implicit commit ancestry, these are
+user-defined dependency links stored in `.twig/state.json`.
 
 ## Core concepts
 
@@ -78,9 +72,8 @@ The tree shows `[up-to-date]` or rebase status next to each branch.
 
 ## Creating branches (IMPORTANT)
 
-**Every new branch must have a parent dependency.** Orphaned branches break tree
-visibility and cascade operations. Always use `twig switch -p` when creating
-branches, or add a dependency immediately after with `twig branch depend`.
+**Every new branch must have a parent dependency.** Orphaned branches break tree visibility and cascade operations.
+Always use `twig switch -p` when creating branches, or add a dependency immediately after with `twig branch depend`.
 
 ### Preferred: create with `-p`
 
@@ -131,9 +124,8 @@ twig branch depend orphaned-branch main
 
 ## Adopting orphaned branches
 
-`twig adopt` re-parents orphaned branches by attaching them to a chosen parent.
-It always previews the proposed tree and asks for confirmation before making
-changes.
+`twig adopt` re-parents orphaned branches by attaching them to a chosen parent. It always previews the proposed tree and
+asks for confirmation before making changes.
 
 ```
 twig adopt                                    # Auto-detect parents for orphans
@@ -178,8 +170,7 @@ twig tidy clean --force        # Skip confirmation
 twig tidy clean --aggressive   # Reparent children of empty intermediates
 ```
 
-Aggressive mode: if A→B→C and B has no unique commits, C gets reparented to A
-and B is deleted.
+Aggressive mode: if A→B→C and B has no unique commits, C gets reparented to A and B is deleted.
 
 ### twig tidy prune
 
@@ -192,20 +183,18 @@ twig tidy prune --dry-run      # Preview
 
 ## State storage
 
-Branch configuration is stored per-repository at `.twig/state.json`. This file
-tracks:
+Branch configuration is stored per-repository at `.twig/state.json`. This file tracks:
 
 - Root branches (with optional default)
 - Parent-child dependencies
 - Branch metadata (Jira issues, GitHub PRs)
 
-Use `twig branch` commands to modify this state — avoid editing the JSON
-directly.
+Use `twig branch` commands to modify this state — avoid editing the JSON directly.
 
 ## Command aliases
 
-| Full command | Alias |
-|---|---|
+| Full command  | Alias     |
+| ------------- | --------- |
 | `twig branch` | `twig br` |
-| `twig tree` | `twig t` |
+| `twig tree`   | `twig t`  |
 | `twig switch` | `twig sw` |

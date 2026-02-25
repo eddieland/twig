@@ -1,17 +1,11 @@
----
-name: manual-testing
-description: >-
-  Test twig CLI changes against a real Git repository. Use when verifying branch
-  management features (tree, cascade, rebase, tidy, branch depend, sync, update,
-  dashboard, switch) or when the user asks to test, try out, or validate twig
-  behavior manually. Manages a dedicated sibling test repo at ../twig-test-dir.
----
+______________________________________________________________________
+
+## name: manual-testing description: >- Test twig CLI changes against a real Git repository. Use when verifying branch management features (tree, cascade, rebase, tidy, branch depend, sync, update, dashboard, switch) or when the user asks to test, try out, or validate twig behavior manually. Manages a dedicated sibling test repo at ../twig-test-dir.
 
 # Manual Testing with twig-test-dir
 
-Test twig changes against a real Git repository without risking any production
-repos. The test repo lives at `d:\code\twig-test-dir`, a sibling to the main
-twig workspace.
+Test twig changes against a real Git repository without risking any production repos. The test repo lives at
+`d:\code\twig-test-dir`, a sibling to the main twig workspace.
 
 ## Prerequisites
 
@@ -21,8 +15,8 @@ Before testing, build twig so the binary reflects your latest changes:
 cargo build -p twig
 ```
 
-The installed `twig` on PATH (`~/.cargo/bin/twig`) may be stale. For testing
-in-progress changes, either:
+The installed `twig` on PATH (`~/.cargo/bin/twig`) may be stale. For testing in-progress changes, either:
+
 - Run `cargo install --path .` to update the PATH binary, **or**
 - Use the debug binary directly: `d:\code\twig\target\debug\twig.exe`
 
@@ -34,8 +28,8 @@ d:\code\twig-test-dir
 
 > **Note:** Adjust this path to match your workspace layout if it differs.
 
-All twig commands must be run **from inside** this directory. Always `cd` (or
-`Push-Location`) into it before executing twig commands.
+All twig commands must be run **from inside** this directory. Always `cd` (or `Push-Location`) into it before executing
+twig commands.
 
 ## Setting up the test repo
 
@@ -84,8 +78,7 @@ Remove-Item -Recurse -Force ".twig" -ErrorAction SilentlyContinue
 
 ## Creating test branch trees
 
-Most twig features operate on branch dependency trees. Here are recipes for
-common test setups.
+Most twig features operate on branch dependency trees. Here are recipes for common test setups.
 
 ### Simple parent → child chain
 
@@ -250,15 +243,9 @@ Get-Content ".twig\state.json" | ConvertFrom-Json | ConvertTo-Json -Depth 10
 
 ## Tips
 
-- **Always build first**: Run `cargo build -p twig` after code changes before
-  testing.
-- **Use debug binary for certainty**: `d:\code\twig\target\debug\twig.exe`
-  guarantees you're running your local build.
-- **Isolate tests**: Reset the repo between unrelated test scenarios to avoid
-  leftover state confusing results.
-- **Check exit codes**: `$LASTEXITCODE` after each twig command to catch silent
-  failures.
-- **Verbose output**: Add `-v`, `-vv`, or `-vvv` to any twig command for
-  tracing output to diagnose issues.
-- **Don't push**: The test repo has no remote — that's intentional. It's purely
-  local.
+- **Always build first**: Run `cargo build -p twig` after code changes before testing.
+- **Use debug binary for certainty**: `d:\code\twig\target\debug\twig.exe` guarantees you're running your local build.
+- **Isolate tests**: Reset the repo between unrelated test scenarios to avoid leftover state confusing results.
+- **Check exit codes**: `$LASTEXITCODE` after each twig command to catch silent failures.
+- **Verbose output**: Add `-v`, `-vv`, or `-vvv` to any twig command for tracing output to diagnose issues.
+- **Don't push**: The test repo has no remote — that's intentional. It's purely local.

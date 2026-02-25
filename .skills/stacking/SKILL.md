@@ -1,18 +1,11 @@
----
-name: stacking
-description: >-
-  Build and manage stacked branch workflows with twig. Use when creating branch
-  stacks, rebasing branches onto their parents, updating stacks from upstream,
-  committing with Jira context, creating fixup commits, or syncing branch
-  metadata. Covers twig rebase, twig update, twig commit, twig fixup, twig sync,
-  and twig sync.
----
+______________________________________________________________________
+
+## name: stacking description: >- Build and manage stacked branch workflows with twig. Use when creating branch stacks, rebasing branches onto their parents, updating stacks from upstream, committing with Jira context, creating fixup commits, or syncing branch metadata. Covers twig rebase, twig update, twig commit, twig fixup, twig sync, and twig sync.
 
 # Stacked Branches
 
-Stacked branches are a series of dependent branches where each builds on the
-previous one. Twig makes this workflow manageable with explicit dependency
-tracking, per-branch rebasing, and sync tooling.
+Stacked branches are a series of dependent branches where each builds on the previous one. Twig makes this workflow
+manageable with explicit dependency tracking, per-branch rebasing, and sync tooling.
 
 ## What is a branch stack?
 
@@ -25,8 +18,7 @@ main
         └── feature-api-docs  # Docs on top of tests
 ```
 
-Each branch contains only its own incremental work. Rebasing propagates
-upstream changes down the chain.
+Each branch contains only its own incremental work. Rebasing propagates upstream changes down the chain.
 
 ## Creating a stack
 
@@ -85,9 +77,9 @@ twig rebase --show-graph     # Show dependency graph before rebasing
 `twig update` performs a full refresh workflow:
 
 1. Switches to the root branch (e.g., `main`)
-2. Fetches from origin
-3. Pulls latest commits
-4. Runs `twig cascade` to rebase all descendants
+1. Fetches from origin
+1. Pulls latest commits
+1. Runs `twig cascade` to rebase all descendants
 
 ```
 twig update                  # Full update + cascade
@@ -101,8 +93,7 @@ Alias: `twig up`
 
 ## Committing with Jira context
 
-If the branch is linked to a Jira issue, create commits pre-filled from the
-issue:
+If the branch is linked to a Jira issue, create commits pre-filled from the issue:
 
 ```
 twig commit                          # Message: "PROJ-123: Issue summary"
@@ -111,8 +102,7 @@ twig commit -p "WIP:" -s "(draft)"   # Add prefix/suffix
 twig commit --no-fixup               # Always create normal commit
 ```
 
-If a recent commit has the same message, twig offers to create a fixup commit
-instead.
+If a recent commit has the same message, twig offers to create a fixup commit instead.
 
 ## Interactive fixup commits
 
@@ -129,8 +119,7 @@ twig fixup --vim-mode                # Vim-style modal interface
 
 Alias: `twig fix`
 
-Commits are scored by recency, authorship, and Jira association to surface the
-most relevant candidates.
+Commits are scored by recency, authorship, and Jira association to surface the most relevant candidates.
 
 ## Syncing branch metadata
 
@@ -145,6 +134,7 @@ twig sync --no-github        # Skip GitHub detection
 ```
 
 Detected patterns include:
+
 - `PROJ-123/feature-name` → Jira issue PROJ-123
 - `feature/PROJ-123-description` → Jira issue PROJ-123
 - PR lookup via GitHub API by branch name
@@ -187,10 +177,8 @@ twig tidy
 
 ## Tips
 
-- **Always use `twig switch -p=<parent>`** when creating stacked branches to
-  set dependencies automatically.
-- **`twig rebase`** only rebases the current branch. Use **`twig cascade`** to
-  propagate changes down the entire tree (see the cascading skill).
-- **`twig update`** is the one-command way to sync with upstream and rebase
-  everything.
+- **Always use `twig switch -p=<parent>`** when creating stacked branches to set dependencies automatically.
+- **`twig rebase`** only rebases the current branch. Use **`twig cascade`** to propagate changes down the entire tree
+  (see the cascading skill).
+- **`twig update`** is the one-command way to sync with upstream and rebase everything.
 - Use **`-v`** on any command for info-level tracing, **`-vv`** for debug.
