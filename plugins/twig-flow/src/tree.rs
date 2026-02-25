@@ -1,3 +1,29 @@
+//! Branch-tree visualization for the `twig-flow` plugin.
+//!
+//! This module orchestrates [`twig_core`]'s graph, tree-algorithm, and renderer
+//! primitives into the end-to-end workflow behind `twig-flow` (no `--target`):
+//!
+//! 1. **Repository & state loading** — [`get_repository`] locates the Git repo;
+//!    [`RepoState`] provides persisted branch dependencies and root configuration
+//!    from `.twig/state.json`.
+//! 2. **Optional branch switching** — The `--root` and `--parent` CLI flags
+//!    check out a branch before rendering, delegating to [`checkout_branch`].
+//! 3. **Graph construction** — [`BranchGraphBuilder`] materialises a
+//!    [`BranchGraph`] DAG from the repository's local branches and their
+//!    configured dependency edges.
+//! 4. **Orphan handling** — Branches without declared parents are detected by
+//!    [`find_orphaned_branches`], grafted under the default root via
+//!    [`attach_orphans_to_default_root`], and annotated with a visual marker
+//!    through [`annotate_orphaned_branches`].
+//! 5. **Filtering** — An optional `--include` glob narrows the graph to matching
+//!    branches (plus ancestors) with [`filter_branch_graph`].
+//! 6. **Rendering** — [`BranchTableRenderer`] formats the final graph as a
+//!    styled, tree-aligned table written to stdout.
+//!
+//! All heavy lifting lives in `twig_core::git`; this module is the
+//! user-facing orchestrator that wires those building blocks together with
+//! CLI flags and user-friendly error messages.
+
 use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, anyhow};
@@ -12,6 +38,29 @@ use twig_core::state::RepoState;
 
 use crate::Cli;
 
+/// Runs the branch-tree visualization pipeline.
+///
+/// This is the primary entry point for `twig-flow` when invoked without a
+/// `--target` flag. It executes the full pipeline described in the
+/// [module documentation](self):
+///
+/// 1. Locate the Git repository via [`get_repository`].
+/// 2. Load [`RepoState`] to obtain root branches and dependency edges.
+/// 3. Optionally switch to the root (`--root`) or parent (`--parent`) branch.
+/// 4. Build a [`BranchGraph`] through [`BranchGraphBuilder`].
+/// 5. Detect, attach, and annotate orphaned branches.
+/// 6. Apply an `--include` filter if provided.
+/// 7. Determine the render root and print the tree table.
+///
+/// Each step produces user-facing diagnostics (via [`twig_core::output`])
+/// rather than propagating raw errors, so the function returns `Ok(())`
+/// even for expected failure paths like missing repos or empty graphs.
+///
+/// # Errors
+///
+/// Returns an error only on unrecoverable problems such as failing to read
+/// `.twig/state.json` when the file exists but is corrupt, or I/O errors
+/// during rendering.
 pub fn run(cli: &Cli) -> Result<()> {
   let repo = match get_repository() {
     Some(repo) => repo,
@@ -91,6 +140,18 @@ pub fn run(cli: &Cli) -> Result<()> {
   Ok(())
 }
 
+/// Loads the per-repository Twig state, falling back to an empty default.
+///
+/// Resolves the repository working directory and delegates to
+/// [`RepoState::load`] which reads `.twig/state.json`. If the file is
+/// missing or unreadable, a warning is printed and an empty [`RepoState`]
+/// is returned so that the tree can still render (albeit without dependency
+/// information or root-branch configuration).
+///
+/// # Errors
+///
+/// Returns an error only when the repository has no working directory
+/// (i.e. it is a bare repo).
 fn load_repo_state(repo: &Repository) -> Result<RepoState> {
   let workdir = repo
     .workdir()
@@ -105,12 +166,35 @@ fn load_repo_state(repo: &Repository) -> Result<RepoState> {
   }
 }
 
+/// Captures the result of an optional branch-switch operation.
+///
+/// When the user passes `--root` or `--parent`, the plugin checks out a
+/// different branch before rendering the tree. `Selection` carries the
+/// outcome back to [`run`]:
+///
+/// * `render_root` — if set, overrides [`determine_render_root`]'s default
+///   heuristic so the tree is rooted at the branch the user switched to.
+/// * `message` — an optional success message to display after the checkout.
+///
+/// A default (empty) `Selection` means no branch switch was requested and
+/// the render root will be chosen automatically by core.
 #[derive(Default)]
 struct Selection {
   render_root: Option<String>,
   message: Option<String>,
 }
 
+/// Checks out the default root branch and returns a [`Selection`] pinned to it.
+///
+/// Uses [`default_root_branch`] to resolve the configured root from
+/// [`RepoState`], then delegates to [`checkout_branch`] for the actual
+/// `HEAD` update. If no root is configured, an error message is printed
+/// and an empty selection is returned.
+///
+/// # Errors
+///
+/// Propagates errors from [`checkout_branch`] (e.g. the branch ref is
+/// missing or the working directory cannot be updated).
 fn select_root_branch(repo: &Repository, state: &RepoState) -> Result<Selection> {
   if let Some(root_branch) = default_root_branch(state) {
     checkout_branch(repo, &root_branch).with_context(|| format!("Failed to checkout {root_branch}"))?;
@@ -127,6 +211,21 @@ fn select_root_branch(repo: &Repository, state: &RepoState) -> Result<Selection>
   }
 }
 
+/// Checks out the parent of the current branch and returns a [`Selection`] pinned to it.
+///
+/// Resolves the current branch name from `HEAD`, then queries
+/// [`RepoState::get_dependency_parents`] for its declared parent(s).
+/// The function handles three edge cases with user-facing messages:
+///
+/// * **Detached HEAD** — cannot determine the current branch.
+/// * **No parents** — the branch has no configured dependencies.
+/// * **Multiple parents** — ambiguous; the user must refine dependencies.
+///
+/// When exactly one parent exists, [`checkout_branch`] switches to it.
+///
+/// # Errors
+///
+/// Propagates errors from [`checkout_branch`].
 fn select_parent_branch(repo: &Repository, state: &RepoState) -> Result<Selection> {
   let Some(current_branch) = current_branch_name(repo) else {
     print_warning("Repository is in a detached HEAD state; cannot determine parent branch.");
@@ -157,11 +256,27 @@ fn select_parent_branch(repo: &Repository, state: &RepoState) -> Result<Selectio
   })
 }
 
+/// Returns the short name of the branch `HEAD` points to, or `None` for a
+/// detached `HEAD`.
 fn current_branch_name(repo: &Repository) -> Option<String> {
   let head = repo.head().ok()?;
   head.shorthand().map(|s| s.to_string())
 }
 
+/// Renders the branch graph as a tree-aligned table to stdout.
+///
+/// Configures the core rendering pipeline:
+///
+/// * [`BranchTableSchema`] — uses `"—"` as the placeholder for empty cells.
+/// * [`BranchTableStyle`] — color mode resolved from the `TWIG_COLORS`
+///   environment variable (see [`resolve_color_mode`]).
+/// * [`BranchTableRenderer`] — receives the schema, style, and any
+///   `highlighted` branches (those matched by an `--include` filter) so
+///   they are visually distinguished in the output.
+///
+/// # Errors
+///
+/// Propagates formatting errors from [`BranchTableRenderer::render`].
 fn render_table(graph: &BranchGraph, root: &BranchName, highlighted: &BTreeSet<BranchName>) -> Result<()> {
   let schema = BranchTableSchema::default().with_placeholder("—");
   let style = BranchTableStyle::new(resolve_color_mode());
@@ -174,6 +289,12 @@ fn render_table(graph: &BranchGraph, root: &BranchName, highlighted: &BTreeSet<B
   Ok(())
 }
 
+/// Maps the `TWIG_COLORS` environment variable to a [`BranchTableColorMode`].
+///
+/// * `"yes"` → [`BranchTableColorMode::Always`]
+/// * `"no"`  → [`BranchTableColorMode::Never`]
+/// * Anything else (including unset) → [`BranchTableColorMode::Auto`], which
+///   lets the renderer decide based on terminal capability.
 fn resolve_color_mode() -> BranchTableColorMode {
   match std::env::var("TWIG_COLORS").as_deref() {
     Ok("yes") => BranchTableColorMode::Always,
@@ -182,6 +303,14 @@ fn resolve_color_mode() -> BranchTableColorMode {
   }
 }
 
+/// Translates a [`BranchGraphError`] into a user-friendly error message.
+///
+/// Each variant maps to a specific diagnostic:
+///
+/// * [`BranchGraphError::MissingWorkdir`] — bare repositories are unsupported.
+/// * [`BranchGraphError::MissingHead`] — the repo needs at least one commit.
+/// * [`BranchGraphError::Git`] — low-level `git2` failure.
+/// * [`BranchGraphError::Other`] — catch-all for unexpected builder errors.
 fn handle_graph_error(err: BranchGraphError) {
   match err {
     BranchGraphError::MissingWorkdir => {
@@ -199,6 +328,13 @@ fn handle_graph_error(err: BranchGraphError) {
   }
 }
 
+/// Prints a footer note when orphaned branches are present in the tree.
+///
+/// Orphaned branches — those with no configured dependency parents and not
+/// designated as roots — are annotated with a `†` marker by
+/// [`annotate_orphaned_branches`]. This function displays a legend
+/// explaining the marker and directs the user to `twig adopt` for
+/// re-parenting.
 fn display_orphan_note(orphaned: &BTreeSet<BranchName>) {
   if orphaned.is_empty() {
     return;
