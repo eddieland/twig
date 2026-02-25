@@ -4,7 +4,7 @@
 //! branch on its parent(s).
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 use anyhow::{Context, Result};
 use clap::Args;
@@ -14,6 +14,7 @@ use twig_core::tree_renderer::TreeRenderer;
 use twig_core::{detect_repository, twig_theme};
 
 use crate::consts;
+use crate::git_commands::{execute_git_command, execute_git_command_interactive};
 use crate::user_defined_dependency_resolver::UserDefinedDependencyResolver;
 
 /// Command for rebasing the current branch on its parent(s)
@@ -141,7 +142,12 @@ fn rebase_upstream(repo_path: &Path, force: bool, show_graph: bool, autostash: b
           ConflictResolution::Continue => {
             // Continue the rebase (interactive so git can open editors / read stdin)
             let continue_result = execute_git_command_interactive(repo_path, &["rebase", "--continue"])?;
-            print_info(&continue_result);
+            if !continue_result.success {
+              print_error(&format!(
+                "Failed to continue rebase of {current_branch_name} onto {parent}. You may need to resolve conflicts manually."
+              ));
+              return Err(anyhow::anyhow!("Rebase continue failed"));
+            }
             print_success(&format!(
               "Rebase of {current_branch_name} onto {parent} completed after resolving conflicts",
             ));
@@ -149,21 +155,26 @@ fn rebase_upstream(repo_path: &Path, force: bool, show_graph: bool, autostash: b
           ConflictResolution::AbortToOriginal => {
             // Abort the rebase and go back to the original branch
             let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
-            print_info(&abort_result);
+            print_info(&abort_result.output);
             print_info(&format!("Rebase of {current_branch_name} onto {parent} aborted",));
             return Ok(());
           }
           ConflictResolution::AbortStayHere => {
             // Abort the rebase but stay on the current branch
             let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
-            print_info(&abort_result);
+            print_info(&abort_result.output);
             print_info(&format!("Rebase of {current_branch_name} onto {parent} aborted",));
             return Ok(());
           }
           ConflictResolution::Skip => {
             // Skip the current commit (interactive so git can open editors / read stdin)
             let skip_result = execute_git_command_interactive(repo_path, &["rebase", "--skip"])?;
-            print_info(&skip_result);
+            if !skip_result.success {
+              print_error(&format!(
+                "Failed to skip commit during rebase of {current_branch_name} onto {parent}. You may need to resolve conflicts manually."
+              ));
+              return Err(anyhow::anyhow!("Rebase skip failed"));
+            }
             print_info(&format!(
               "Skipped commit during rebase of {current_branch_name} onto {parent}",
             ));
@@ -356,52 +367,4 @@ fn handle_rebase_conflict(_repo_path: &Path, _branch: &str) -> Result<ConflictRe
     3 => Ok(ConflictResolution::Skip),
     _ => Ok(ConflictResolution::AbortToOriginal),
   }
-}
-
-/// Execute a git command with inherited stdin/stdout/stderr.
-///
-/// Used for commands like `rebase --continue` / `--skip` that may need to
-/// open an editor or interact with the user.
-fn execute_git_command_interactive(repo_path: &Path, args: &[&str]) -> Result<String> {
-  let status = Command::new(consts::GIT_EXECUTABLE)
-    .args(args)
-    .current_dir(repo_path)
-    .stdin(Stdio::inherit())
-    .stdout(Stdio::inherit())
-    .stderr(Stdio::inherit())
-    .status()
-    .context(format!("Failed to execute git command: {args:?}"))?;
-
-  if status.success() {
-    Ok(String::new())
-  } else {
-    Ok(format!("Command exited with status: {status}"))
-  }
-}
-
-/// Execute a git command and handle output
-fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<String> {
-  let output = Command::new(consts::GIT_EXECUTABLE)
-    .args(args)
-    .current_dir(repo_path)
-    .output()
-    .context(format!("Failed to execute git command: {args:?}",))?;
-
-  let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-  let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-  let mut result = String::new();
-
-  if !stdout.is_empty() {
-    result.push_str(&stdout);
-  }
-
-  if !stderr.is_empty() {
-    if !result.is_empty() {
-      result.push('\n');
-    }
-    result.push_str(&stderr);
-  }
-
-  Ok(result)
 }

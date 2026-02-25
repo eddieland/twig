@@ -126,6 +126,7 @@ fn run_cascade_command(
     force,
     show_graph,
     autostash,
+    force_push: false,
     preview,
     repo: Some(repo_path.to_string_lossy().to_string()),
   };
@@ -448,6 +449,50 @@ fn test_cascade_preview() -> Result<()> {
   assert!(
     entry.is_none(),
     "main-update.txt should NOT be present in sub-feature after preview (no rebase should occur)"
+  );
+
+  Ok(())
+}
+
+/// When `--force-push` is requested but the repo has no configured remote,
+/// the cascade must report an error rather than silently succeeding.
+#[test]
+fn test_cascade_force_push_fails_without_remote() -> Result<()> {
+  use twig_cli::cli::cascade::{CascadeArgs, handle_cascade_command};
+
+  let git_repo = GitRepoTestGuard::new();
+  let repo = &git_repo.repo;
+  let repo_path = git_repo.path();
+
+  // Create initial commit on main and a child branch so there is something to cascade.
+  create_commit(repo, "base.txt", "base", "Initial commit")?;
+  ensure_main_branch(repo)?;
+  create_branch(repo, "feature", Some("main"))?;
+  checkout_branch(repo, "main")?;
+  create_commit(repo, "main2.txt", "update", "Main update")?;
+  checkout_branch(repo, "feature")?;
+  create_commit(repo, "feat.txt", "feature", "Feature commit")?;
+  checkout_branch(repo, "main")?;
+
+  add_root_branch(repo_path, "main", true)?;
+  add_branch_dependency(repo_path, "feature", "main")?;
+
+  let args = CascadeArgs {
+    max_depth: None,
+    force: false,
+    show_graph: false,
+    autostash: false,
+    force_push: true,
+    preview: false,
+    repo: Some(repo_path.to_string_lossy().to_string()),
+  };
+
+  // The cascade can succeed in rebasing but must fail when it tries to push
+  // (no remote is configured in the temp repo).
+  let result = handle_cascade_command(args);
+  assert!(
+    result.is_err(),
+    "Expected cascade to fail when --force-push is set but no remote is configured"
   );
 
   Ok(())
