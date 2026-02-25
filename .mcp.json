@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "twig": {
+      "type": "stdio",
+      "command": "cargo",
+      "args": ["run", "-p", "twig-mcp", "--quiet"],
+      "env": {
+        "JIRA_HOST": "${JIRA_HOST:-eddieland.atlassian.net}"
+      }
+    }
+  }
+}
