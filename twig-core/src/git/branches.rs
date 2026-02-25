@@ -82,10 +82,7 @@ pub fn checkout_branch(repo: &Repository, branch_name: &str) -> Result<()> {
 
   // Update working tree and index to match the target commit.
   repo
-    .checkout_tree(
-      commit.as_object(),
-      Some(git2::build::CheckoutBuilder::new().safe()),
-    )
+    .checkout_tree(commit.as_object(), Some(git2::build::CheckoutBuilder::new().safe()))
     .with_context(|| format!("Failed to checkout tree for branch '{branch_name}'"))?;
 
   // Now update HEAD to point to the branch.
@@ -224,13 +221,8 @@ mod tests {
     repo
       .checkout_tree(&default_obj, Some(CheckoutBuilder::new().force()))
       .unwrap();
-    repo
-      .set_head(&format!("refs/heads/{default_branch_name}"))
-      .unwrap();
-    assert_eq!(
-      repo.head().unwrap().shorthand(),
-      Some(default_branch_name.as_str())
-    );
+    repo.set_head(&format!("refs/heads/{default_branch_name}")).unwrap();
+    assert_eq!(repo.head().unwrap().shorthand(), Some(default_branch_name.as_str()));
 
     // Now switch to "feature" using the function under test.
     checkout_branch(&repo, "feature").unwrap();
@@ -240,9 +232,7 @@ mod tests {
     // The index must match HEAD — no staged (or other) changes.
     let head_commit = repo.head().unwrap().peel_to_commit().unwrap();
     let head_tree = head_commit.tree().unwrap();
-    let diff = repo
-      .diff_tree_to_index(Some(&head_tree), None, None)
-      .unwrap();
+    let diff = repo.diff_tree_to_index(Some(&head_tree), None, None).unwrap();
     assert_eq!(
       diff.deltas().count(),
       0,
