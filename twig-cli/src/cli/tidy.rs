@@ -26,6 +26,11 @@ pub struct TidyArgs {
   /// Skip confirmation prompt and delete branches immediately
   #[arg(short = 'f', long = "force")]
   pub force: bool,
+
+  /// Aggressively clean up by reparenting branches and using common root
+  /// branches (main/master/develop) as fallback parents
+  #[arg(short = 'a', long = "aggressive")]
+  pub aggressive: bool,
 }
 
 /// Subcommands for the tidy command
@@ -79,7 +84,7 @@ pub(crate) fn handle_tidy_command(tidy: TidyArgs) -> Result<()> {
       let clean_args = CleanArgs {
         dry_run: tidy.dry_run,
         force: tidy.force,
-        aggressive: false,
+        aggressive: tidy.aggressive,
       };
       handle_clean_command(clean_args)
     }
