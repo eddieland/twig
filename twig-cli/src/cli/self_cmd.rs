@@ -98,6 +98,14 @@ the Twig executable so it can be discovered via your PATH. Use this when you wan
 install or update the MCP server binary."
   )]
   Mcp,
+
+  /// Install or update the Twig update plugin
+  #[command(
+    long_about = "Download the latest Twig update plugin release from GitHub and install it alongside\n\
+the Twig executable so it can be discovered via your PATH. Use this when you want to\n\
+install or update the update plugin binary."
+  )]
+  Update,
 }
 
 /// Execute a `twig self` command.
@@ -117,6 +125,7 @@ fn handle_update_command(args: SelfUpdateArgs) -> Result<()> {
     Some(UpdateTarget::Flow) => run_plugin_install("twig-flow", plugin_opts),
     Some(UpdateTarget::Prune) => run_plugin_install("twig-prune", plugin_opts),
     Some(UpdateTarget::Mcp) => run_plugin_install("twig-mcp", plugin_opts),
+    Some(UpdateTarget::Update) => run_plugin_install("twig-update", plugin_opts),
   }
 }
 

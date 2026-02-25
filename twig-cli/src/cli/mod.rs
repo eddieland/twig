@@ -21,7 +21,6 @@ mod self_cmd;
 mod switch;
 mod sync;
 mod tree;
-mod update;
 mod worktree;
 
 use std::ffi::OsString;
@@ -232,16 +231,6 @@ pub enum Commands {
   #[command(alias = "t")]
   Tree(tree::TreeArgs),
 
-  /// Fetch upstream, pull, and cascade-rebase all descendants
-  #[command(long_about = concat!(
-    "Update the repository by switching to the root branch, fetching from origin, ",
-    "pulling the latest commits, and optionally running a cascading rebase to update ",
-    "all dependent branches. This is the one-command way to sync with upstream and ",
-    "propagate changes through your branch tree.",
-  ))]
-  #[command(alias = "up")]
-  Update(update::UpdateArgs),
-
   /// Manage Git worktrees for parallel development
   #[command(long_about = "Manage Git worktrees for efficient multi-branch development.\n\n\
             Worktrees allow you to check out multiple branches simultaneously in separate\n\
@@ -293,7 +282,6 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
       Commands::Switch(switch) => switch::handle_switch_command(switch),
       Commands::Sync(sync) => sync::handle_sync_command(sync),
       Commands::Tree(tree) => tree::handle_tree_command(tree),
-      Commands::Update(update) => update::handle_update_command(update),
       Commands::Worktree(worktree) => worktree::handle_worktree_command(worktree),
       Commands::External(args) => {
         let cmd_name = args[0].to_string_lossy();
