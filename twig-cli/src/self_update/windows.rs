@@ -86,8 +86,7 @@ fn windows_requires_admin(parent: &Path) -> bool {
 }
 
 fn build_powershell_script(_source: &Path, _target: &Path) -> Result<String> {
-  Ok(format!(
-    r#"param(
+  Ok(r#"param(
   [Parameter(Mandatory=$true)][string]$Source,
   [Parameter(Mandatory=$true)][string]$Target,
   [Parameter(Mandatory=$true)][int]$ParentPid
@@ -137,7 +136,7 @@ try {{
   }}
 }} catch {{}}
 "#
-  ))
+  .to_string())
 }
 
 fn start_powershell_helper(
