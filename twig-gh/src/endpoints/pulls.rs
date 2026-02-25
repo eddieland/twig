@@ -281,7 +281,7 @@ impl GitHubClient {
       "title": params.title,
       "head": params.head,
       "base": params.base,
-      "body": params.body.as_deref().unwrap_or(""),
+      "body": params.body,
       "draft": params.draft,
     });
 
@@ -307,6 +307,12 @@ impl GitHubClient {
           .context("Failed to parse created pull request")?;
         info!("Successfully created pull request #{}", pr.number);
         Ok(pr)
+      }
+      reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN => {
+        warn!("Authentication failed when accessing GitHub API");
+        Err(anyhow::anyhow!(
+          "Authentication failed. Please check your GitHub credentials."
+        ))
       }
       reqwest::StatusCode::UNPROCESSABLE_ENTITY => {
         let error_text = response.text().await.unwrap_or_default();
@@ -737,6 +743,97 @@ mod tests {
     assert_eq!(status.check_runs[0].conclusion, Some("success".to_string()));
     assert_eq!(status.check_runs[1].name, "lint");
     assert_eq!(status.check_runs[1].conclusion, Some("failure".to_string()));
+
+    Ok(())
+  }
+
+  #[tokio::test]
+  async fn test_create_pull_request_success() -> anyhow::Result<()> {
+    let mock_server = MockServer::start().await;
+    let auth = GitHubAuth {
+      username: "test_user".to_string(),
+      token: "test_token".to_string(),
+    };
+    let mut client = GitHubClient::new(auth);
+    client.base_url = mock_server.uri();
+
+    Mock::given(method("POST"))
+      .and(path("/repos/octocat/Hello-World/pulls"))
+      .and(header(header::ACCEPT, ACCEPT))
+      .and(header(header::USER_AGENT, USER_AGENT))
+      .and(header(header::AUTHORIZATION, "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
+      .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
+        "id": 1,
+        "number": 1347,
+        "state": "open",
+        "title": "Amazing new feature",
+        "html_url": "https://github.com/octocat/Hello-World/pull/1347",
+        "user": {
+          "login": "octocat",
+          "id": 1,
+          "name": "The Octocat"
+        },
+        "created_at": "2011-01-26T19:01:12Z",
+        "updated_at": "2011-01-26T19:01:12Z",
+        "head": {
+          "label": "octocat:new-feature",
+          "ref": "new-feature",
+          "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
+        },
+        "base": {
+          "label": "octocat:master",
+          "ref": "master",
+          "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
+        },
+        "draft": false
+      })))
+      .mount(&mock_server)
+      .await;
+
+    let params = CreatePullRequestParams {
+      title: "Amazing new feature".to_string(),
+      head: "new-feature".to_string(),
+      base: "master".to_string(),
+      body: Some("This is a great feature".to_string()),
+      draft: false,
+    };
+
+    let pr = client.create_pull_request("octocat", "Hello-World", &params).await?;
+
+    assert_eq!(pr.number, 1347);
+    assert_eq!(pr.title, "Amazing new feature");
+    assert_eq!(pr.state, "open");
+
+    Ok(())
+  }
+
+  #[tokio::test]
+  async fn test_create_pull_request_validation_error() -> anyhow::Result<()> {
+    let mock_server = MockServer::start().await;
+    let auth = GitHubAuth {
+      username: "test_user".to_string(),
+      token: "test_token".to_string(),
+    };
+    let mut client = GitHubClient::new(auth);
+    client.base_url = mock_server.uri();
+
+    Mock::given(method("POST"))
+      .and(path("/repos/octocat/Hello-World/pulls"))
+      .respond_with(ResponseTemplate::new(422).set_body_string("Validation Failed"))
+      .mount(&mock_server)
+      .await;
+
+    let params = CreatePullRequestParams {
+      title: "Bad PR".to_string(),
+      head: "nonexistent-branch".to_string(),
+      base: "master".to_string(),
+      body: None,
+      draft: false,
+    };
+
+    let result = client.create_pull_request("octocat", "Hello-World", &params).await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Validation error"));
 
     Ok(())
   }

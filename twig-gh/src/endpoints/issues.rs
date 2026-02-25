@@ -1,3 +1,5 @@
+//! GitHub Issues API endpoint implementations.
+
 use anyhow::{Context, Result};
 use reqwest::header;
 use tracing::{debug, info, instrument, trace, warn};
@@ -7,7 +9,12 @@ use crate::consts::{ACCEPT, USER_AGENT};
 use crate::models::GitHubIssue;
 
 impl GitHubClient {
-  /// Get a specific issue by number
+  /// Get a specific issue by number.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if the issue is not found, authentication fails,
+  /// the request cannot be sent, or the response cannot be parsed.
   #[instrument(skip(self), level = "debug")]
   pub async fn get_issue(&self, owner: &str, repo: &str, issue_number: u32) -> Result<GitHubIssue> {
     info!("Fetching issue #{} for {}/{}", issue_number, owner, repo);
@@ -39,6 +46,12 @@ impl GitHubClient {
         trace!("Issue: {:?}", issue);
         Ok(issue)
       }
+      reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN => {
+        warn!("Authentication failed when accessing GitHub API");
+        Err(anyhow::anyhow!(
+          "Authentication failed. Please check your GitHub credentials."
+        ))
+      }
       reqwest::StatusCode::NOT_FOUND => Err(anyhow::anyhow!(
         "Issue #{} not found for {}/{}",
         issue_number,
@@ -48,11 +61,7 @@ impl GitHubClient {
       _ => {
         let error_text = response.text().await.unwrap_or_default();
         warn!("Unexpected GitHub API error: HTTP {} - {}", status, error_text);
-        Err(anyhow::anyhow!(
-          "GitHub API returned error status {}: {}",
-          status,
-          error_text
-        ))
+        Err(anyhow::anyhow!("Unexpected error: HTTP {status} - {error_text}"))
       }
     }
   }

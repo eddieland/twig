@@ -42,7 +42,7 @@ pub struct GitHubPullRequest {
 }
 
 /// Represents a GitHub issue
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct GitHubIssue {
   pub number: u32,
   pub title: String,
@@ -57,7 +57,7 @@ pub struct GitHubIssue {
 }
 
 /// Represents a GitHub label
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct GitHubLabel {
   pub name: String,
   pub color: String,
