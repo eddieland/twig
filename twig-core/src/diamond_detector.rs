@@ -14,10 +14,10 @@ pub struct DiamondPattern {
   pub ancestor: String,
   /// The merge point branch (bottom of diamond)
   pub merge_point: String,
-  /// The left path branches (excluding ancestor and merge point)
-  pub left_path: Vec<String>,
-  /// The right path branches (excluding ancestor and merge point)
-  pub right_path: Vec<String>,
+  /// First diverging path branches (excluding ancestor and merge point)
+  pub path_a: Vec<String>,
+  /// Second diverging path branches (excluding ancestor and merge point)
+  pub path_b: Vec<String>,
   /// Depth of the diamond (distance from ancestor to merge point)
   pub depth: u32,
   /// Whether this diamond is nested within another
@@ -31,6 +31,7 @@ pub struct DiamondDetector<'a> {
 
 impl<'a> DiamondDetector<'a> {
   /// Create a new diamond detector
+  #[must_use]
   pub fn new(branch_nodes: &'a HashMap<String, BranchNode>) -> Self {
     Self { branch_nodes }
   }
@@ -42,10 +43,11 @@ impl<'a> DiamondDetector<'a> {
 
     // Find all branches with multiple parents (potential merge points)
     for (branch_name, node) in self.branch_nodes {
-      if node.parents.len() >= 2 && !visited_diamonds.contains(branch_name) {
-        if let Some(diamond) = self.analyze_diamond_pattern(branch_name, &mut visited_diamonds) {
-          patterns.push(diamond);
-        }
+      if node.parents.len() >= 2
+        && !visited_diamonds.contains(branch_name)
+        && let Some(diamond) = self.analyze_diamond_pattern(branch_name, &mut visited_diamonds)
+      {
+        patterns.push(diamond);
       }
     }
 
@@ -99,9 +101,16 @@ impl<'a> DiamondDetector<'a> {
       common_ancestors = common_ancestors.intersection(&ancestors).cloned().collect();
     }
 
-    // Filter to find the most recent common ancestors (closest to merge point)
+    // Sort by maximum distance across all branches to pick most recent common ancestor.
+    // Using max distance avoids the bias toward the first branch in asymmetric diamonds.
     let mut result: Vec<String> = common_ancestors.into_iter().collect();
-    result.sort_by_key(|ancestor| self.calculate_distance_to_merge(ancestor, &branches[0]));
+    result.sort_by_key(|ancestor| {
+      branches
+        .iter()
+        .map(|b| self.calculate_distance_to_merge(ancestor, b))
+        .max()
+        .unwrap_or(0)
+    });
 
     result
   }
@@ -182,8 +191,8 @@ impl<'a> DiamondDetector<'a> {
       Some(DiamondPattern {
         ancestor: ancestor.to_string(),
         merge_point: merge_point.to_string(),
-        left_path: paths.first().cloned().unwrap_or_default(),
-        right_path: paths.get(1).cloned().unwrap_or_default(),
+        path_a: paths.first().cloned().unwrap_or_default(),
+        path_b: paths.get(1).cloned().unwrap_or_default(),
         depth,
         is_nested: false, // Will be determined later
       })
@@ -229,7 +238,13 @@ impl<'a> DiamondDetector<'a> {
     None
   }
 
-  /// Mark diamonds that are nested within other diamonds
+  /// Mark diamonds that are nested within other diamonds.
+  ///
+  /// # Performance
+  ///
+  /// O(n² × graph_traversal) where n is the number of diamond patterns and
+  /// each containment check performs a BFS capped at 50 nodes. Acceptable for
+  /// typical branch counts (<100).
   fn mark_nested_diamonds(&self, patterns: &mut [DiamondPattern]) {
     let pattern_count = patterns.len();
 

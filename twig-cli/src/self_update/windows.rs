@@ -86,58 +86,57 @@ fn windows_requires_admin(parent: &Path) -> bool {
 }
 
 fn build_powershell_script(_source: &Path, _target: &Path) -> Result<String> {
-  Ok(format!(
-    r#"param(
+  Ok(r#"param(
   [Parameter(Mandatory=$true)][string]$Source,
   [Parameter(Mandatory=$true)][string]$Target,
   [Parameter(Mandatory=$true)][int]$ParentPid
 )
 
-function Wait-ForProcess {{
+function Wait-ForProcess {
   param([int]$Pid)
-  while ($true) {{
-    try {{
+  while ($true) {
+    try {
       $proc = Get-Process -Id $Pid -ErrorAction Stop
       Start-Sleep -Milliseconds 200
-    }} catch {{
+    } catch {
       break
-    }}
-  }}
-}}
+    }
+  }
+}
 
 Wait-ForProcess -Pid $ParentPid
 
 $targetDir = Split-Path -Parent $Target
-if (-not (Test-Path -LiteralPath $targetDir)) {{
+if (-not (Test-Path -LiteralPath $targetDir)) {
   Write-Error "Target directory does not exist: $targetDir"
   exit 1
-}}
+}
 
-if (-not (Test-Path -LiteralPath $Source)) {{
+if (-not (Test-Path -LiteralPath $Source)) {
   Write-Error "Staged Twig binary is missing: $Source"
   exit 1
-}}
+}
 
-try {{
+try {
   Move-Item -LiteralPath $Source -Destination $Target -Force
-}} catch {{
+} catch {
   Copy-Item -LiteralPath $Source -Destination $Target -Force
-}}
+}
 
-try {{
+try {
   Remove-Item -LiteralPath $Source -Force -ErrorAction SilentlyContinue
-}} catch {{}}
-try {{
+} catch {}
+try {
   Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
-}} catch {{}}
-try {{
+} catch {}
+try {
   $stagingDir = Split-Path -Parent $Source
-  if ($stagingDir -and (Test-Path -LiteralPath $stagingDir)) {{
+  if ($stagingDir -and (Test-Path -LiteralPath $stagingDir)) {
     Remove-Item -LiteralPath $stagingDir -Force -Recurse -ErrorAction SilentlyContinue
-  }}
-}} catch {{}}
+  }
+} catch {}
 "#
-  ))
+    .to_string())
 }
 
 fn start_powershell_helper(

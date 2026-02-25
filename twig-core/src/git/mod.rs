@@ -66,10 +66,10 @@ pub fn get_commits_ahead_behind(repo: &Git2Repository, branch: &str, base: &str)
 /// Resolve a branch name (or ref-like string) to a commit OID.
 fn resolve_commit_oid(repo: &Git2Repository, name: &str) -> Result<Oid> {
   // Prefer the local branch ref if it exists
-  if let Ok(reference) = repo.find_reference(&format!("refs/heads/{name}")) {
-    if let Some(target) = reference.target() {
-      return Ok(target);
-    }
+  if let Ok(reference) = repo.find_reference(&format!("refs/heads/{name}"))
+    && let Some(target) = reference.target()
+  {
+    return Ok(target);
   }
 
   // Fall back to revparse

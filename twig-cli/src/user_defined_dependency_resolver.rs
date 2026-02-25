@@ -43,6 +43,7 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 use git2::{BranchType, Repository as Git2Repository};
+use tracing::debug;
 use twig_core::RepoState;
 use twig_core::tree_renderer::BranchNode;
 
@@ -192,9 +193,16 @@ impl UserDefinedDependencyResolver {
       .collect();
 
     for (branch_name, parent_name) in pairs {
-      if let Ok((ahead, behind)) = twig_core::git::get_commits_ahead_behind(repo, &branch_name, &parent_name) {
-        if let Some(node) = branch_nodes.get_mut(&branch_name) {
-          node.commit_info = Some(twig_core::tree_renderer::CommitInfo { ahead, behind });
+      match twig_core::git::get_commits_ahead_behind(repo, &branch_name, &parent_name) {
+        Ok((ahead, behind)) => {
+          if let Some(node) = branch_nodes.get_mut(&branch_name) {
+            node.commit_info = Some(twig_core::tree_renderer::CommitInfo { ahead, behind });
+          }
+        }
+        Err(e) => {
+          debug!(
+            "Unable to compute ahead/behind for {branch_name} relative to {parent_name}: {e:#}"
+          );
         }
       }
     }

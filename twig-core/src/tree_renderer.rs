@@ -74,6 +74,39 @@ pub struct CommitInfo {
   pub behind: usize,
 }
 
+/// Context passed through recursive tree rendering calls.
+pub(crate) struct RenderContext {
+  /// Current depth in the tree.
+  pub depth: u32,
+  /// Line prefix strings accumulated from parent levels.
+  pub prefix: Vec<String>,
+  /// Whether this node is the last sibling at its level.
+  pub is_last_sibling: bool,
+}
+
+impl RenderContext {
+  pub(crate) fn new(depth: u32, prefix: &[String], is_last_sibling: bool) -> Self {
+    Self { depth, prefix: prefix.to_vec(), is_last_sibling }
+  }
+
+  /// Derive the rendering context for a child node at the next depth level.
+  pub(crate) fn child(&self, is_last: bool) -> Self {
+    let mut new_prefix = self.prefix.clone();
+    if self.depth > 0 {
+      new_prefix.push(if is_last { "    " } else { "│   " }.to_string());
+    }
+    Self { depth: self.depth + 1, prefix: new_prefix, is_last_sibling: is_last }
+  }
+}
+
+/// Information needed for rendering a page separator.
+pub(crate) struct PaginationInfo {
+  pub page: usize,
+  pub start: usize,
+  pub end: usize,
+  pub total: usize,
+}
+
 /// Represents a branch node in the tree
 #[derive(Debug, Clone)]
 pub struct BranchNode {
@@ -93,7 +126,7 @@ pub struct TreeRenderer<'a> {
   pub cross_refs: HashMap<String, Vec<String>>,
   pub max_depth: Option<u32>,
   pub no_color: bool,
-  pub tree_width: usize, // Add field to store calculated tree width
+  pub tree_width: usize,
 }
 
 impl<'a> TreeRenderer<'a> {
@@ -291,21 +324,17 @@ impl<'a> TreeRenderer<'a> {
     prefix: &[String],
     is_last_sibling: bool,
   ) -> io::Result<()> {
-    // Build the line prefix
     let mut line = String::new();
 
-    // Add the prefix for all but the last level
     for p in prefix {
       line.push_str(p);
     }
 
-    // Add the branch symbol
     if depth > 0 {
       let tree_symbol = if is_last_sibling { "└── " } else { "├── " };
       line.push_str(tree_symbol);
     }
 
-    // Add the branch name
     let branch_display = if node.is_current {
       if self.no_color {
         format!("{} (current)", node.name)
@@ -317,120 +346,8 @@ impl<'a> TreeRenderer<'a> {
     };
     line.push_str(&branch_display);
 
-    // Calculate current display width (without ANSI codes)
-    let current_width = self.display_width(&line);
+    self.add_branch_metadata(&mut line, node);
 
-    // Only add metadata if there's something to show
-    let has_jira = node
-      .metadata
-      .as_ref()
-      .and_then(|issue| issue.jira_issue.as_ref())
-      .map(|jira| !jira.is_empty())
-      .unwrap_or(false);
-    let has_pr = node.metadata.as_ref().and_then(|issue| issue.github_pr).is_some();
-    let has_cross_refs = self
-      .cross_refs
-      .get(&node.name)
-      .map(|parents| parents.len() > 1 && parents.iter().any(|parent| !node.parents.contains(parent)))
-      .unwrap_or(false);
-    let has_commit_info = node.commit_info.is_some();
-
-    if has_jira || has_pr || has_cross_refs || has_commit_info {
-      // Use tree width for metadata alignment with proper spacing
-      let jira_column_pos = std::cmp::max(current_width + 2, self.tree_width);
-      let pr_column_pos = jira_column_pos + 12; // Space for "[JIRA-123]"
-      let cross_ref_column_pos = pr_column_pos + 12; // Space for "[PR#123]"
-
-      // Add issue/PR metadata with proper alignment
-      if let Some(issue) = &node.metadata {
-        let mut current_pos = current_width;
-
-        // Add Jira issue if it exists and is not empty
-        if has_jira {
-          let spaces_needed = jira_column_pos.saturating_sub(current_pos);
-          line.push_str(&" ".repeat(spaces_needed));
-
-          let jira_issue = issue.jira_issue.as_ref().unwrap();
-          let jira_display = if self.no_color {
-            format!("[{jira_issue}]",)
-          } else {
-            format!("[{}]", jira_issue.cyan())
-          };
-          line.push_str(&jira_display);
-          current_pos = self.display_width(&line);
-        }
-
-        // Add GitHub PR if available
-        if let Some(pr_number) = issue.github_pr {
-          // Always position PRs at the PR column position for consistent alignment
-          let spaces_needed = pr_column_pos.saturating_sub(current_pos);
-          line.push_str(&" ".repeat(spaces_needed));
-
-          let pr_display = if self.no_color {
-            format!("[PR#{pr_number}]")
-          } else {
-            format!("[PR#{}]", pr_number.to_string().yellow())
-          };
-          line.push_str(&pr_display);
-        }
-      }
-
-      // Add cross-references with alignment (only if they exist)
-      if let Some(parents) = self.cross_refs.get(&node.name)
-        && parents.len() > 1
-      {
-        // Filter out parents that are already shown in the current branch path
-        let other_parents: Vec<&String> = parents.iter().filter(|parent| !node.parents.contains(parent)).collect();
-
-        if !other_parents.is_empty() {
-          let current_width_final = self.display_width(&line);
-          let spaces_needed = cross_ref_column_pos.saturating_sub(current_width_final);
-          line.push_str(&" ".repeat(spaces_needed));
-
-          let other_parents_str = other_parents
-            .iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<&str>>()
-            .join(", ");
-          let cross_ref_display = if self.no_color {
-            format!("[also: {other_parents_str}]")
-          } else {
-            format!("[also: {}]", other_parents_str.dimmed())
-          };
-          line.push_str(&cross_ref_display);
-        }
-      }
-
-      // Add ahead/behind commit counts
-      if let Some(info) = &node.commit_info {
-        if info.ahead > 0 || info.behind > 0 {
-          let current_width_now = self.display_width(&line);
-          let spaces_needed = if current_width_now > current_width {
-            2 // At least 2 spaces padding after previous badges
-          } else {
-            std::cmp::max(current_width + 2, self.tree_width).saturating_sub(current_width_now)
-          };
-          line.push_str(&" ".repeat(spaces_needed));
-
-          let mut parts = Vec::new();
-          if info.ahead > 0 {
-            parts.push(format!("↑{}", info.ahead));
-          }
-          if info.behind > 0 {
-            parts.push(format!("↓{}", info.behind));
-          }
-          let counts = parts.join(" ");
-          let display = if self.no_color {
-            format!("[{counts}]")
-          } else {
-            format!("[{}]", counts.dimmed())
-          };
-          line.push_str(&display);
-        }
-      }
-    }
-
-    // Write the complete line to the writer
     writeln!(writer, "{line}")
   }
 
@@ -463,11 +380,10 @@ impl<'a> TreeRenderer<'a> {
     if let Some(issue) = &node.metadata {
       let mut current_pos = current_width;
 
-      if has_jira {
+      if let Some(jira_issue) = issue.jira_issue.as_ref().filter(|j| !j.is_empty()) {
         let spaces_needed = jira_column_pos.saturating_sub(current_pos);
         line.push_str(&" ".repeat(spaces_needed));
 
-        let jira_issue = issue.jira_issue.as_ref().unwrap();
         let jira_display = if self.no_color {
           format!("[{jira_issue}]")
         } else {
@@ -514,35 +430,35 @@ impl<'a> TreeRenderer<'a> {
       }
     }
 
-    if let Some(info) = &node.commit_info {
-      if info.ahead > 0 || info.behind > 0 {
-        let current_width_now = self.display_width(line);
-        let spaces_needed = if current_width_now > current_width {
-          2
-        } else {
-          std::cmp::max(current_width + 2, self.tree_width).saturating_sub(current_width_now)
-        };
-        line.push_str(&" ".repeat(spaces_needed));
+    if let Some(info) = &node.commit_info
+      && (info.ahead > 0 || info.behind > 0)
+    {
+      let current_width_now = self.display_width(line);
+      let spaces_needed = if current_width_now > current_width {
+        2
+      } else {
+        std::cmp::max(current_width + 2, self.tree_width).saturating_sub(current_width_now)
+      };
+      line.push_str(&" ".repeat(spaces_needed));
 
-        let mut parts = Vec::new();
-        if info.ahead > 0 {
-          parts.push(format!("↑{}", info.ahead));
-        }
-        if info.behind > 0 {
-          parts.push(format!("↓{}", info.behind));
-        }
-        let counts = parts.join(" ");
-        let display = if self.no_color {
-          format!("[{counts}]")
-        } else {
-          format!("[{}]", counts.dimmed())
-        };
-        line.push_str(&display);
+      let mut parts = Vec::new();
+      if info.ahead > 0 {
+        parts.push(format!("↑{}", info.ahead));
       }
+      if info.behind > 0 {
+        parts.push(format!("↓{}", info.behind));
+      }
+      let counts = parts.join(" ");
+      let display = if self.no_color {
+        format!("[{counts}]")
+      } else {
+        format!("[{}]", counts.dimmed())
+      };
+      line.push_str(&display);
     }
   }
 
-  // ─── Circular dependency detection ────────────────────────────────────
+  // --- Circular dependency detection ---
 
   /// Detect circular dependencies in the branch graph
   pub fn detect_circular_dependencies(&self) -> Vec<Vec<String>> {
@@ -550,13 +466,12 @@ impl<'a> TreeRenderer<'a> {
     let mut visited = HashSet::new();
     let mut rec_stack = HashSet::new();
 
-    for (branch_name, _) in self.branch_nodes {
-      if !visited.contains(branch_name) {
-        if let Some(cycle) =
+    for branch_name in self.branch_nodes.keys() {
+      if !visited.contains(branch_name)
+        && let Some(cycle) =
           self.find_cycle_from_branch(branch_name, &mut visited, &mut rec_stack, &mut Vec::new())
-        {
-          circular_deps.push(cycle);
-        }
+      {
+        circular_deps.push(cycle);
       }
     }
 
@@ -596,7 +511,7 @@ impl<'a> TreeRenderer<'a> {
     None
   }
 
-  // ─── Enhanced cross-reference rendering ───────────────────────────────
+  // --- Enhanced cross-reference rendering ---
 
   /// Enhanced cross-reference rendering with better visual indicators
   pub fn render_with_enhanced_cross_refs<W: Write>(
@@ -633,9 +548,7 @@ impl<'a> TreeRenderer<'a> {
       self.render_tree_with_enhanced_cross_refs(
         writer,
         root,
-        0,
-        &[],
-        is_last_root,
+        RenderContext::new(0, &[], is_last_root),
         max_ref_depth,
         &circular_deps,
       )?;
@@ -657,14 +570,12 @@ impl<'a> TreeRenderer<'a> {
     &mut self,
     writer: &mut W,
     branch_name: &str,
-    depth: u32,
-    prefix: &[String],
-    is_last_sibling: bool,
+    ctx: RenderContext,
     max_ref_depth: Option<u32>,
     circular_deps: &[Vec<String>],
   ) -> io::Result<()> {
     if let Some(max_depth) = self.max_depth
-      && depth > max_depth
+      && ctx.depth > max_depth
     {
       return Ok(());
     }
@@ -674,7 +585,7 @@ impl<'a> TreeRenderer<'a> {
       .any(|cycle| cycle.contains(&branch_name.to_string()));
 
     if self.visited.contains(branch_name) {
-      self.print_branch_reference(writer, branch_name, depth, prefix, is_last_sibling, is_in_circular_dep)?;
+      self.print_branch_reference(writer, branch_name, ctx.depth, &ctx.prefix, ctx.is_last_sibling, is_in_circular_dep)?;
       return Ok(());
     }
 
@@ -692,7 +603,7 @@ impl<'a> TreeRenderer<'a> {
       reference_count: self.count_branch_references(branch_name),
     };
 
-    self.print_branch_with_cross_refs(writer, node, depth, prefix, is_last_sibling, &cross_ref_info)?;
+    self.print_branch_with_cross_refs(writer, node, ctx.depth, &ctx.prefix, ctx.is_last_sibling, &cross_ref_info)?;
 
     let children = node.children.clone();
     let child_count = children.len();
@@ -701,23 +612,16 @@ impl<'a> TreeRenderer<'a> {
       let is_last = i == child_count - 1;
 
       let should_render_child = if let Some(max_ref_depth) = max_ref_depth {
-        depth < max_ref_depth || !self.cross_refs.contains_key(child)
+        ctx.depth < max_ref_depth || !self.cross_refs.contains_key(child)
       } else {
         true
       };
 
       if should_render_child {
-        let mut new_prefix = prefix.to_vec();
-        if depth > 0 {
-          new_prefix.push(if is_last { "    ".to_string() } else { "│   ".to_string() });
-        }
-
         self.render_tree_with_enhanced_cross_refs(
           writer,
           child,
-          depth + 1,
-          &new_prefix,
-          is_last,
+          ctx.child(is_last),
           max_ref_depth,
           circular_deps,
         )?;
@@ -779,9 +683,9 @@ impl<'a> TreeRenderer<'a> {
   }
 
   /// Count how many times a branch is referenced in the tree
-  pub fn count_branch_references(&self, branch_name: &str) -> usize {
+  fn count_branch_references(&self, branch_name: &str) -> usize {
     let mut count = 0;
-    for (_, node) in self.branch_nodes {
+    for node in self.branch_nodes.values() {
       if node.children.contains(&branch_name.to_string()) {
         count += 1;
       }
@@ -900,7 +804,7 @@ impl<'a> TreeRenderer<'a> {
   }
 
   /// Render tree branch with diamond pattern annotations
-  pub fn render_tree_with_diamonds<W: Write>(
+  fn render_tree_with_diamonds<W: Write>(
     &mut self,
     writer: &mut W,
     branch_name: &str,
@@ -952,21 +856,21 @@ impl<'a> TreeRenderer<'a> {
     let mut info = DiamondInfo::default();
 
     for diamond in diamond_patterns {
-      if branch_name == &diamond.ancestor {
+      if branch_name == diamond.ancestor {
         info.is_diamond_ancestor = true;
         info.diamond_roles.push("ancestor".to_string());
       }
-      if branch_name == &diamond.merge_point {
+      if branch_name == diamond.merge_point {
         info.is_diamond_merge = true;
         info.diamond_roles.push("merge".to_string());
       }
-      if diamond.left_path.contains(&branch_name.to_string()) {
+      if diamond.path_a.contains(&branch_name.to_string()) {
         info.is_diamond_path = true;
-        info.diamond_roles.push("left-path".to_string());
+        info.diamond_roles.push("path-a".to_string());
       }
-      if diamond.right_path.contains(&branch_name.to_string()) {
+      if diamond.path_b.contains(&branch_name.to_string()) {
         info.is_diamond_path = true;
-        info.diamond_roles.push("right-path".to_string());
+        info.diamond_roles.push("path-b".to_string());
       }
     }
 
@@ -974,7 +878,7 @@ impl<'a> TreeRenderer<'a> {
   }
 
   /// Print branch with diamond pattern annotations
-  pub fn print_branch_with_diamonds<W: Write>(
+  fn print_branch_with_diamonds<W: Write>(
     &self,
     writer: &mut W,
     node: &BranchNode,
@@ -1049,13 +953,16 @@ impl<'a> TreeRenderer<'a> {
     roots: &[String],
     config: &DeepNestingConfig,
   ) -> io::Result<RenderStats> {
-    let mut stats = RenderStats::default();
-
-    stats.total_branches = self.branch_nodes.len();
-    stats.memory_usage_estimate = self.estimate_memory_usage();
-
     let circular_deps = self.detect_circular_dependencies();
-    stats.circular_deps_detected = circular_deps.len();
+    let total_branches = self.branch_nodes.len();
+    let memory_usage_estimate = self.estimate_memory_usage();
+    let circular_deps_detected = circular_deps.len();
+    let mut stats = RenderStats {
+      total_branches,
+      memory_usage_estimate,
+      circular_deps_detected,
+      ..RenderStats::default()
+    };
 
     if !circular_deps.is_empty() {
       writeln!(writer, "⚠️  {} circular dependencies detected", circular_deps.len())?;
@@ -1087,11 +994,8 @@ impl<'a> TreeRenderer<'a> {
       let branch_stats = self.render_branch_with_deep_nesting(
         writer,
         root,
-        0,
-        &[],
-        true,
+        RenderContext::new(0, &[], true),
         config,
-        &mut stats,
         &circular_deps,
       )?;
 
@@ -1121,22 +1025,18 @@ impl<'a> TreeRenderer<'a> {
     &mut self,
     writer: &mut W,
     branch_name: &str,
-    depth: u32,
-    prefix: &[String],
-    is_last_sibling: bool,
+    ctx: RenderContext,
     config: &DeepNestingConfig,
-    stats: &mut RenderStats,
     circular_deps: &[Vec<String>],
   ) -> io::Result<RenderStats> {
-    let mut branch_stats = RenderStats::default();
-    branch_stats.max_depth_reached = depth;
+    let mut branch_stats = RenderStats { max_depth_reached: ctx.depth, ..RenderStats::default() };
 
-    if let Some(max_depth) = config.max_depth {
-      if depth > max_depth {
-        self.print_depth_truncation_indicator(writer, depth, prefix, is_last_sibling, max_depth)?;
-        branch_stats.branches_pruned += 1;
-        return Ok(branch_stats);
-      }
+    if let Some(max_depth) = config.max_depth
+      && ctx.depth > max_depth
+    {
+      self.print_depth_truncation_indicator(writer, ctx.depth, &ctx.prefix, ctx.is_last_sibling, max_depth)?;
+      branch_stats.branches_pruned += 1;
+      return Ok(branch_stats);
     }
 
     let is_in_circular_dep = circular_deps
@@ -1144,7 +1044,7 @@ impl<'a> TreeRenderer<'a> {
       .any(|cycle| cycle.contains(&branch_name.to_string()));
 
     if self.visited.contains(branch_name) {
-      self.print_branch_reference(writer, branch_name, depth, prefix, is_last_sibling, is_in_circular_dep)?;
+      self.print_branch_reference(writer, branch_name, ctx.depth, &ctx.prefix, ctx.is_last_sibling, is_in_circular_dep)?;
       return Ok(branch_stats);
     }
 
@@ -1155,24 +1055,26 @@ impl<'a> TreeRenderer<'a> {
       None => return Ok(branch_stats),
     };
 
-    if config.enable_pruning && self.should_prune_subtree(node, depth, config) {
-      self.print_pruning_indicator(writer, branch_name, depth, prefix, is_last_sibling, node.children.len())?;
+    if config.enable_pruning && self.should_prune_subtree(node, ctx.depth, config) {
+      self.print_pruning_indicator(writer, branch_name, ctx.depth, &ctx.prefix, ctx.is_last_sibling, node.children.len())?;
       branch_stats.branches_pruned += self.count_subtree_size(node);
       return Ok(branch_stats);
     }
 
-    self.print_branch_with_depth_info(writer, node, depth, prefix, is_last_sibling, config, is_in_circular_dep)?;
+    self.print_branch_with_depth_info(writer, node, &ctx, config, is_in_circular_dep)?;
 
     let children = node.children.clone();
     let child_count = children.len();
+    // Guard against zero page_size to prevent division-by-zero.
+    let page_size = config.page_size.max(1);
 
-    if config.enable_pagination && child_count > config.page_size {
-      for page in 0..((child_count + config.page_size - 1) / config.page_size) {
-        let start = page * config.page_size;
-        let end = std::cmp::min(start + config.page_size, child_count);
+    if config.enable_pagination && child_count > page_size {
+      for page in 0..child_count.div_ceil(page_size) {
+        let start = page * page_size;
+        let end = std::cmp::min(start + page_size, child_count);
 
         if page > 0 {
-          self.print_pagination_separator(writer, depth + 1, prefix, page, start, end, child_count)?;
+          self.print_pagination_separator(writer, &ctx.child(false).prefix, PaginationInfo { page, start, end, total: child_count })?;
         }
 
         for (i, child) in children[start..end].iter().enumerate() {
@@ -1181,19 +1083,11 @@ impl<'a> TreeRenderer<'a> {
           let is_last_overall = global_index == child_count - 1;
           let is_last = is_last_in_page && is_last_overall;
 
-          let mut new_prefix = prefix.to_vec();
-          if depth > 0 {
-            new_prefix.push(if is_last { "    ".to_string() } else { "│   ".to_string() });
-          }
-
           let child_stats = self.render_branch_with_deep_nesting(
             writer,
             child,
-            depth + 1,
-            &new_prefix,
-            is_last,
+            ctx.child(is_last),
             config,
-            stats,
             circular_deps,
           )?;
 
@@ -1205,19 +1099,11 @@ impl<'a> TreeRenderer<'a> {
       for (i, child) in children.iter().enumerate() {
         let is_last = i == child_count - 1;
 
-        let mut new_prefix = prefix.to_vec();
-        if depth > 0 {
-          new_prefix.push(if is_last { "    ".to_string() } else { "│   ".to_string() });
-        }
-
         let child_stats = self.render_branch_with_deep_nesting(
           writer,
           child,
-          depth + 1,
-          &new_prefix,
-          is_last,
+          ctx.child(is_last),
           config,
-          stats,
           circular_deps,
         )?;
 
@@ -1234,32 +1120,30 @@ impl<'a> TreeRenderer<'a> {
     &self,
     writer: &mut W,
     node: &BranchNode,
-    depth: u32,
-    prefix: &[String],
-    is_last_sibling: bool,
+    ctx: &RenderContext,
     config: &DeepNestingConfig,
     is_in_circular_dep: bool,
   ) -> io::Result<()> {
     let mut line = String::new();
 
-    for p in prefix {
+    for p in &ctx.prefix {
       line.push_str(p);
     }
 
-    if depth > 0 {
+    if ctx.depth > 0 {
       let tree_symbol = if is_in_circular_dep {
-        if is_last_sibling {
+        if ctx.is_last_sibling {
           "└🔄─ "
         } else {
           "├🔄─ "
         }
-      } else if depth > 10 {
-        if is_last_sibling {
+      } else if ctx.depth > 10 {
+        if ctx.is_last_sibling {
           "└⼇─ "
         } else {
           "├⼇─ "
         }
-      } else if is_last_sibling {
+      } else if ctx.is_last_sibling {
         "└── "
       } else {
         "├── "
@@ -1278,16 +1162,16 @@ impl<'a> TreeRenderer<'a> {
     };
     line.push_str(&branch_display);
 
-    if config.show_depth_indicators && depth > 0 {
+    if config.show_depth_indicators && ctx.depth > 0 {
       let depth_indicator = if self.no_color {
-        format!(" [depth:{}]", depth)
+        format!(" [depth:{}]", ctx.depth)
       } else {
-        format!(" [depth:{}]", depth.to_string().dimmed())
+        format!(" [depth:{}]", ctx.depth.to_string().dimmed())
       };
       line.push_str(&depth_indicator);
     }
 
-    if depth > 5 && !node.children.is_empty() {
+    if ctx.depth > 5 && !node.children.is_empty() {
       let child_indicator = if self.no_color {
         format!(" [children:{}]", node.children.len())
       } else {
@@ -1381,12 +1265,8 @@ impl<'a> TreeRenderer<'a> {
   fn print_pagination_separator<W: Write>(
     &self,
     writer: &mut W,
-    _depth: u32,
     prefix: &[String],
-    page: usize,
-    start: usize,
-    end: usize,
-    total: usize,
+    pagination: PaginationInfo,
   ) -> io::Result<()> {
     let mut line = String::new();
 
@@ -1397,18 +1277,18 @@ impl<'a> TreeRenderer<'a> {
     let separator_msg = if self.no_color {
       format!(
         "├── ... Page {} ({}-{} of {}) ...",
-        page + 1,
-        start + 1,
-        end,
-        total
+        pagination.page + 1,
+        pagination.start + 1,
+        pagination.end,
+        pagination.total
       )
     } else {
       format!(
         "├── ... Page {} ({}-{} of {}) ...",
-        (page + 1).to_string().cyan(),
-        (start + 1).to_string().cyan(),
-        end.to_string().cyan(),
-        total.to_string().cyan()
+        (pagination.page + 1).to_string().cyan(),
+        (pagination.start + 1).to_string().cyan(),
+        pagination.end.to_string().cyan(),
+        pagination.total.to_string().cyan()
       )
     };
     line.push_str(&separator_msg);
@@ -1423,10 +1303,10 @@ impl<'a> TreeRenderer<'a> {
       return true;
     }
 
-    if let Some(max_branches) = config.max_branches_per_level {
-      if node.children.len() > max_branches {
-        return true;
-      }
+    if let Some(max_branches) = config.max_branches_per_level
+      && node.children.len() > max_branches
+    {
+      return true;
     }
 
     false
@@ -2878,10 +2758,7 @@ mod tests {
       is_current,
       metadata: Some(BranchMetadata {
         branch: name.to_string(),
-        jira_issue: match jira_issue {
-          Some(s) => Some(s.to_string()),
-          None => None,
-        },
+        jira_issue: jira_issue.map(|s| s.to_string()),
         github_pr,
         created_at: "".to_string(),
       }),
