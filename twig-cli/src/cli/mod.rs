@@ -20,6 +20,7 @@ pub mod rebase;
 mod self_cmd;
 mod switch;
 mod sync;
+mod tidy;
 mod tree;
 mod worktree;
 
@@ -219,6 +220,15 @@ pub enum Commands {
   )]
   Sync(sync::SyncArgs),
 
+  /// Clean up empty branches and twig configuration
+  #[command(
+    long_about = "Clean up branches with no unique commits and maintain twig configuration.\n\n\
+            This command helps keep your repository tidy by finding and removing branches\n\
+            that have no unique commits compared to their parent. It can also prune stale\n\
+            references from the twig configuration when branches have been deleted outside of twig."
+  )]
+  Tidy(tidy::TidyArgs),
+
   /// Visualize your custom branch dependency tree
   #[command(
     long_about = "Display local branches in a tree-like view based on user-defined dependencies.\n\n\
@@ -281,6 +291,7 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
       Commands::SelfCmd(self_args) => self_cmd::handle_self_command(self_args),
       Commands::Switch(switch) => switch::handle_switch_command(switch),
       Commands::Sync(sync) => sync::handle_sync_command(sync),
+      Commands::Tidy(tidy) => tidy::handle_tidy_command(tidy),
       Commands::Tree(tree) => tree::handle_tree_command(tree),
       Commands::Worktree(worktree) => worktree::handle_worktree_command(worktree),
       Commands::External(args) => {
