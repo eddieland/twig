@@ -233,12 +233,12 @@ pub enum Commands {
   Tree(tree::TreeArgs),
 
   /// Fetch upstream, pull, and cascade-rebase all descendants
-  #[command(
-    long_about = "Update the repository by switching to the root branch,\n\
-            fetching from origin, pulling the latest commits, and optionally running a cascading\n\
-            rebase to update all dependent branches. This is the one-command way to sync with upstream and\n\
-            propagate changes through your branch tree."
-  )]
+  #[command(long_about = concat!(
+    "Update the repository by switching to the root branch, fetching from origin, ",
+    "pulling the latest commits, and optionally running a cascading rebase to update ",
+    "all dependent branches. This is the one-command way to sync with upstream and ",
+    "propagate changes through your branch tree.",
+  ))]
   #[command(alias = "up")]
   Update(update::UpdateArgs),
 

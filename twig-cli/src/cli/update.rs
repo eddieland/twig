@@ -4,13 +4,13 @@
 //! fetches from origin, pulls the latest commits, and runs the twig cascade
 //! command.
 
-use std::path::PathBuf;
+use std::path::Path;
 use std::process::Command;
 
 use anyhow::{Context, Result};
 use clap::Args;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
-use twig_core::{RepoState, detect_repository};
+use twig_core::{RepoState, git::current_branch};
 
 use super::cascade::{self, CascadeArgs};
 use crate::consts;
@@ -39,21 +39,38 @@ pub struct UpdateArgs {
   pub autostash: bool,
 }
 
-/// Handle the update command
+/// Handle the update command.
+///
+/// Resolves the target repository, optionally stashes dirty working-tree
+/// changes, switches to the configured root branch, fetches and pulls from
+/// origin, then optionally runs a cascading rebase over all dependent
+/// branches.  When `--autostash` is set the stash is always popped on the
+/// branch that was active when the command was invoked.
+///
+/// # Errors
+///
+/// Returns an error if the repository path cannot be resolved, if any
+/// required git operation (checkout, fetch, pull) fails, or if the stash
+/// cannot be applied after a failed branch restore.
+///
+/// # Side Effects
+///
+/// - May switch the current branch to the root branch.
+/// - May create and pop a git stash entry.
+/// - May rebase one or more descendant branches (unless `--no-cascade`).
 pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
-  // Get the repository path
-  let repo_path = if let Some(ref repo_arg) = args.repo {
-    PathBuf::from(repo_arg)
-  } else {
-    detect_repository().context("Not in a git repository")?
-  };
+  let repo_path = crate::utils::resolve_repository_path(args.repo.as_deref())?;
 
   print_info("Starting repository update...");
+
+  // Record the branch we started on so we can return to it before stash pop.
+  let original_branch = current_branch().ok().flatten();
 
   // Check for uncommitted changes and stash if autostash is enabled
   let mut stash_created = false;
   if args.autostash && has_uncommitted_changes(&repo_path)? {
     print_info("Stashing uncommitted changes...");
+    tracing::debug!("Running git stash push in {:?}", repo_path);
     let stash_result = Command::new(consts::GIT_EXECUTABLE)
       .current_dir(&repo_path)
       .args(["stash", "push", "-m", "twig update autostash"])
@@ -69,8 +86,11 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
     stash_created = true;
   }
 
-  // Load repository state to find root branches
-  let repo_state = RepoState::load(&repo_path).unwrap_or_default();
+  // Load repository state to find root branches; warn and fall back to
+  // defaults if the state file is missing or malformed.
+  let repo_state = RepoState::load(&repo_path)
+    .inspect_err(|e| tracing::warn!("Failed to load repo state, using defaults: {}", e))
+    .unwrap_or_default();
   let root_branches = repo_state.get_root_branches();
 
   // Determine which branch to switch to
@@ -79,6 +99,7 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
   print_info(&format!("Switching to root branch: {}", target_branch));
 
   // Switch to the root branch
+  tracing::debug!("Running git checkout {} in {:?}", target_branch, repo_path);
   let switch_result = Command::new(consts::GIT_EXECUTABLE)
     .current_dir(&repo_path)
     .args(["checkout", &target_branch])
@@ -98,6 +119,7 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
 
   // Fetch from origin
   print_info("Fetching from origin...");
+  tracing::debug!("Running git fetch origin in {:?}", repo_path);
   let fetch_result = Command::new(consts::GIT_EXECUTABLE)
     .current_dir(&repo_path)
     .args(["fetch", "origin"])
@@ -108,11 +130,14 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
     let error_output = String::from_utf8_lossy(&fetch_result.stderr);
     print_warning(&format!("Fetch completed with warnings: {}", error_output));
   } else {
+    let fetch_output = String::from_utf8_lossy(&fetch_result.stdout);
+    tracing::debug!("git fetch output: {}", fetch_output);
     print_success("Fetched latest changes from origin");
   }
 
   // Pull latest commits
   print_info("Pulling latest commits...");
+  tracing::debug!("Running git pull origin {} in {:?}", target_branch, repo_path);
   let pull_result = Command::new(consts::GIT_EXECUTABLE)
     .current_dir(&repo_path)
     .args(["pull", "origin", &target_branch])
@@ -129,6 +154,7 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
     }
   } else {
     let pull_output = String::from_utf8_lossy(&pull_result.stdout);
+    tracing::debug!("git pull output: {}", pull_output);
     if pull_output.contains("Already up to date") || pull_output.contains("Already up-to-date") {
       print_info("Branch is already up to date");
     } else {
@@ -145,9 +171,8 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
       force: args.force_cascade,
       show_graph: args.show_graph,
       autostash: args.autostash,
-      force_push: false,
       preview: false,
-      repo: args.repo,
+      repo: args.repo.clone(),
     };
 
     match cascade::handle_cascade_command(cascade_args) {
@@ -159,9 +184,30 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
     }
   }
 
-  // Pop stash if we created one
+  // Pop stash if we created one — restore original branch first so the
+  // stash lands on the right branch.
   if stash_created {
+    if let Some(ref branch) = original_branch {
+      tracing::debug!("Switching back to original branch '{}' before stash pop", branch);
+      let restore_result = Command::new(consts::GIT_EXECUTABLE)
+        .current_dir(&repo_path)
+        .args(["checkout", branch])
+        .output()
+        .context("Failed to switch back to original branch")?;
+
+      if !restore_result.status.success() {
+        let error_output = String::from_utf8_lossy(&restore_result.stderr);
+        print_warning(&format!(
+          "Could not switch back to original branch '{}': {}",
+          branch, error_output
+        ));
+        print_warning("Your stash is still saved — run 'git stash pop' manually on the correct branch");
+        return Ok(());
+      }
+    }
+
     print_info("Restoring stashed changes...");
+    tracing::debug!("Running git stash pop in {:?}", repo_path);
     let pop_result = Command::new(consts::GIT_EXECUTABLE)
       .current_dir(&repo_path)
       .args(["stash", "pop"])
@@ -189,7 +235,7 @@ pub fn handle_update_command(args: UpdateArgs) -> Result<()> {
 /// Checks configured root branches first, then falls back to `main` or
 /// `master`.
 fn determine_target_branch(
-  repo_path: &PathBuf,
+  repo_path: &Path,
   repo_state: &RepoState,
   root_branches: &[String],
 ) -> Result<String> {
@@ -224,24 +270,21 @@ fn determine_target_branch(
   }
 }
 
-/// Check if a branch exists in the repository
-fn branch_exists(repo_path: &PathBuf, branch_name: &str) -> Result<bool> {
-  let result = Command::new(consts::GIT_EXECUTABLE)
-    .current_dir(repo_path)
-    .args([
-      "show-ref",
-      "--verify",
-      "--quiet",
-      &format!("refs/heads/{}", branch_name),
-    ])
-    .output()
-    .context("Failed to check if branch exists")?;
-
-  Ok(result.status.success())
+/// Check if a local branch exists in the repository at `repo_path`.
+///
+/// Uses `git2` directly rather than shelling out, matching the approach used
+/// by `twig_core::git::branch_exists`.
+fn branch_exists(repo_path: &Path, branch_name: &str) -> Result<bool> {
+  let repo = git2::Repository::open(repo_path).context("Failed to open git repository")?;
+  match repo.find_branch(branch_name, git2::BranchType::Local) {
+    Ok(_) => Ok(true),
+    Err(_) => Ok(false),
+  }
 }
 
 /// Check if there are uncommitted changes in the repository
-fn has_uncommitted_changes(repo_path: &PathBuf) -> Result<bool> {
+fn has_uncommitted_changes(repo_path: &Path) -> Result<bool> {
+  tracing::debug!("Checking for uncommitted changes in {:?}", repo_path);
   let result = Command::new(consts::GIT_EXECUTABLE)
     .current_dir(repo_path)
     .args(["diff-index", "--quiet", "HEAD", "--"])
@@ -256,58 +299,21 @@ fn has_uncommitted_changes(repo_path: &PathBuf) -> Result<bool> {
 mod tests {
   use std::fs;
 
-  use git2::Repository;
-  use tempfile::TempDir;
+  use twig_test_utils::{GitRepoTestGuard, create_commit};
 
   use super::*;
 
-  fn create_test_repo() -> (TempDir, PathBuf) {
-    let temp_dir = TempDir::new().expect("create temp dir");
-    let repo_path = temp_dir.path().to_path_buf();
-
-    // Initialize git repository
-    Repository::init(&repo_path).expect("init repo");
-
-    // Configure git user (required for commits)
-    Command::new("git")
-      .current_dir(&repo_path)
-      .args(["config", "user.name", "Test User"])
-      .output()
-      .expect("set user name");
-
-    Command::new("git")
-      .current_dir(&repo_path)
-      .args(["config", "user.email", "test@example.com"])
-      .output()
-      .expect("set user email");
-
-    // Create initial commit
-    fs::write(repo_path.join("README.md"), "# Test Repository").expect("write README");
-    Command::new("git")
-      .current_dir(&repo_path)
-      .args(["add", "README.md"])
-      .output()
-      .expect("git add");
-    Command::new("git")
-      .current_dir(&repo_path)
-      .args(["commit", "-m", "Initial commit"])
-      .output()
-      .expect("git commit");
-
-    (temp_dir, repo_path)
-  }
-
   #[test]
   fn test_branch_exists() {
-    let (_temp_dir, repo_path) = create_test_repo();
+    let guard = GitRepoTestGuard::new_and_change_dir();
+    let repo_path = guard.path().to_path_buf();
 
-    // main branch should exist (created by default in modern git)
-    // But let's check for master first as it might be the default
-    let has_main = branch_exists(&repo_path, "main").expect("check main");
-    let has_master = branch_exists(&repo_path, "master").expect("check master");
+    // Create an initial commit so that the branch ref is established
+    create_commit(&guard.repo, "README.md", "# Test", "Initial commit")
+      .expect("create initial commit");
 
-    // At least one should exist
-    assert!(has_main || has_master);
+    // GitRepoTestGuard initialises with "main"
+    assert!(branch_exists(&repo_path, "main").expect("check main"));
 
     // Non-existent branch should return false
     assert!(!branch_exists(&repo_path, "non-existent-branch").expect("check nonexistent"));
@@ -315,7 +321,11 @@ mod tests {
 
   #[test]
   fn test_has_uncommitted_changes_clean() {
-    let (_temp_dir, repo_path) = create_test_repo();
+    let guard = GitRepoTestGuard::new_and_change_dir();
+    let repo_path = guard.path().to_path_buf();
+
+    create_commit(&guard.repo, "README.md", "# Test", "Initial commit")
+      .expect("create initial commit");
 
     // Clean repo should have no uncommitted changes
     let has_changes = has_uncommitted_changes(&repo_path).expect("check changes");
@@ -324,7 +334,11 @@ mod tests {
 
   #[test]
   fn test_has_uncommitted_changes_dirty() {
-    let (_temp_dir, repo_path) = create_test_repo();
+    let guard = GitRepoTestGuard::new_and_change_dir();
+    let repo_path = guard.path().to_path_buf();
+
+    create_commit(&guard.repo, "README.md", "# Test", "Initial commit")
+      .expect("create initial commit");
 
     // Modify a tracked file to create uncommitted changes
     fs::write(repo_path.join("README.md"), "# Modified").expect("write modified");
