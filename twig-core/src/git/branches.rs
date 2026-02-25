@@ -68,20 +68,30 @@ pub fn get_upstream_branch(branch_name: &str) -> Result<Option<String>> {
 
 /// Checkout an existing local branch using the provided repository.
 pub fn checkout_branch(repo: &Repository, branch_name: &str) -> Result<()> {
-  // Verify the branch exists
-  repo
+  // Resolve the branch tip to a tree object so checkout_tree can update both
+  // the working directory and the index atomically, before we move HEAD.
+  // (Calling set_head first and then checkout_head with a default builder
+  // leaves the index stale, making files that differ between branches appear
+  // as staged changes.)
+  let commit = repo
     .find_branch(branch_name, git2::BranchType::Local)
-    .with_context(|| format!("Branch '{branch_name}' not found"))?;
+    .with_context(|| format!("Branch '{branch_name}' not found"))?
+    .into_reference()
+    .peel_to_commit()
+    .with_context(|| format!("Failed to peel branch '{branch_name}' to commit"))?;
 
-  // Update HEAD to point to the branch
+  // Update working tree and index to match the target commit.
+  repo
+    .checkout_tree(
+      commit.as_object(),
+      Some(git2::build::CheckoutBuilder::new().safe()),
+    )
+    .with_context(|| format!("Failed to checkout tree for branch '{branch_name}'"))?;
+
+  // Now update HEAD to point to the branch.
   repo
     .set_head(&format!("refs/heads/{branch_name}"))
     .with_context(|| format!("Failed to set HEAD to branch '{branch_name}'"))?;
-
-  // Update working directory to match HEAD
-  repo
-    .checkout_head(Some(&mut git2::build::CheckoutBuilder::new()))
-    .with_context(|| format!("Failed to checkout branch '{branch_name}'"))?;
 
   Ok(())
 }
@@ -142,5 +152,102 @@ mod tests {
 
     let head = repo.head().unwrap();
     assert_eq!(head.shorthand(), Some("feature/test"));
+  }
+
+  /// Switching branches must not leave unexpected staged changes.
+  ///
+  /// Regression test: the old implementation called `set_head` before
+  /// `checkout_head` with a no-op `CheckoutBuilder`, so the index was never
+  /// updated to match the new HEAD tree, causing files that differ between
+  /// the two branches to appear staged.
+  #[test]
+  fn checkout_branch_leaves_no_staged_changes() {
+    use std::fs;
+
+    use git2::build::CheckoutBuilder;
+
+    let temp_dir = TempDir::new().unwrap();
+    let repo = git2::Repository::init(temp_dir.path()).unwrap();
+    let mut cfg = repo.config().unwrap();
+    cfg.set_str("user.name", "Test").unwrap();
+    cfg.set_str("user.email", "test@test.com").unwrap();
+    drop(cfg);
+
+    let signature = git2::Signature::now("Test", "test@test.com").unwrap();
+
+    // Commit on the default branch (may be "main" or "master"): only "base.txt" exists.
+    let base_file = temp_dir.path().join("base.txt");
+    fs::write(&base_file, "base content").unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_path(std::path::Path::new("base.txt")).unwrap();
+    index.write().unwrap();
+    let base_tree_oid = index.write_tree().unwrap();
+    let base_tree = repo.find_tree(base_tree_oid).unwrap();
+    let base_commit_oid = repo
+      .commit(Some("HEAD"), &signature, &signature, "base commit", &base_tree, &[])
+      .unwrap();
+    let base_commit = repo.find_commit(base_commit_oid).unwrap();
+
+    // Capture the default branch name now, while HEAD is on it.
+    let default_branch_name = repo.head().unwrap().shorthand().unwrap().to_string();
+
+    // Create a feature branch and add a file unique to it.
+    repo.branch("feature", &base_commit, false).unwrap();
+    let feature_obj = repo.revparse_single("refs/heads/feature").unwrap();
+    repo
+      .checkout_tree(&feature_obj, Some(CheckoutBuilder::new().force()))
+      .unwrap();
+    repo.set_head("refs/heads/feature").unwrap();
+
+    let feature_file = temp_dir.path().join("feature-file.txt");
+    fs::write(&feature_file, "feature content").unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_path(std::path::Path::new("feature-file.txt")).unwrap();
+    index.write().unwrap();
+    let feature_tree_oid = index.write_tree().unwrap();
+    let feature_tree = repo.find_tree(feature_tree_oid).unwrap();
+    repo
+      .commit(
+        Some("HEAD"),
+        &signature,
+        &signature,
+        "feature commit",
+        &feature_tree,
+        &[&base_commit],
+      )
+      .unwrap();
+
+    // Switch back to the default branch so we can test switching TO feature.
+    let default_obj = repo
+      .revparse_single(&format!("refs/heads/{default_branch_name}"))
+      .unwrap();
+    repo
+      .checkout_tree(&default_obj, Some(CheckoutBuilder::new().force()))
+      .unwrap();
+    repo
+      .set_head(&format!("refs/heads/{default_branch_name}"))
+      .unwrap();
+    assert_eq!(
+      repo.head().unwrap().shorthand(),
+      Some(default_branch_name.as_str())
+    );
+
+    // Now switch to "feature" using the function under test.
+    checkout_branch(&repo, "feature").unwrap();
+
+    assert_eq!(repo.head().unwrap().shorthand(), Some("feature"));
+
+    // The index must match HEAD — no staged (or other) changes.
+    let head_commit = repo.head().unwrap().peel_to_commit().unwrap();
+    let head_tree = head_commit.tree().unwrap();
+    let diff = repo
+      .diff_tree_to_index(Some(&head_tree), None, None)
+      .unwrap();
+    assert_eq!(
+      diff.deltas().count(),
+      0,
+      "expected no staged changes after checkout_branch, but found {}",
+      diff.deltas().count()
+    );
   }
 }
