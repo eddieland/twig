@@ -441,8 +441,11 @@ impl RepoState {
     removed
   }
 
-  /// Remove all parent dependencies for the specified child branch and return
-  /// the removed parents
+  /// Remove all parent dependencies for the specified child branch.
+  ///
+  /// # Returns
+  ///
+  /// The names of the removed parent branches (empty if none existed).
   pub fn remove_child_dependencies(&mut self, child: &str) -> Vec<String> {
     let mut removed_parents = Vec::new();
 
@@ -1192,6 +1195,16 @@ mod tests {
 
     assert!(state.get_dependency_parents("feature/child").is_empty());
     assert_eq!(state.get_dependency_parents("feature/sibling"), vec!["main"]);
+  }
+
+  #[test]
+  fn test_remove_child_dependencies_then_readd_same_parent() {
+    let mut state = RepoState::default();
+    state.add_dependency("child".into(), "main".into()).expect("add");
+    let removed = state.remove_child_dependencies("child");
+    assert_eq!(removed, vec!["main"]);
+    state.add_dependency("child".into(), "main".into()).expect("readd");
+    assert_eq!(state.get_dependency_parents("child"), vec!["main"]);
   }
 
   #[test]
