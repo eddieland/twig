@@ -6,6 +6,21 @@ use crate::client::GitHubClient;
 use crate::consts::{ACCEPT, USER_AGENT};
 use crate::models::{GitHubPullRequest, PullRequestReview, PullRequestStatus};
 
+/// Parameters for creating a new pull request via the GitHub API.
+#[derive(Debug, Clone)]
+pub struct CreatePullRequestParams {
+  /// The title of the pull request.
+  pub title: String,
+  /// The name of the branch where changes are implemented.
+  pub head: String,
+  /// The name of the branch you want the changes pulled into.
+  pub base: String,
+  /// An optional body / description for the pull request.
+  pub body: Option<String>,
+  /// Whether the pull request should be created as a draft.
+  pub draft: bool,
+}
+
 /// Pagination options for GitHub API requests
 #[derive(Debug, Clone, Copy)]
 pub struct PaginationOptions {
@@ -245,6 +260,65 @@ impl GitHubClient {
       branch_name
     );
     Ok(matching_prs)
+  }
+
+  /// Create a new pull request.
+  #[instrument(skip(self), level = "debug")]
+  pub async fn create_pull_request(
+    &self,
+    owner: &str,
+    repo: &str,
+    params: &CreatePullRequestParams,
+  ) -> Result<GitHubPullRequest> {
+    info!(
+      "Creating pull request for {}/{}: {} ({} -> {})",
+      owner, repo, params.title, params.head, params.base
+    );
+
+    let url = format!("{}/repos/{}/{}/pulls", self.base_url, owner, repo);
+
+    let body = serde_json::json!({
+      "title": params.title,
+      "head": params.head,
+      "base": params.base,
+      "body": params.body.as_deref().unwrap_or(""),
+      "draft": params.draft,
+    });
+
+    let response = self
+      .client
+      .post(&url)
+      .header(header::ACCEPT, ACCEPT)
+      .header(header::USER_AGENT, USER_AGENT)
+      .basic_auth(&self.auth.username, Some(&self.auth.token))
+      .json(&body)
+      .send()
+      .await
+      .context(format!("POST {url} failed"))?;
+
+    let status = response.status();
+    debug!("GitHub API response status: {}", status);
+
+    match status {
+      reqwest::StatusCode::CREATED => {
+        let pr = response
+          .json::<GitHubPullRequest>()
+          .await
+          .context("Failed to parse created pull request")?;
+        info!("Successfully created pull request #{}", pr.number);
+        Ok(pr)
+      }
+      reqwest::StatusCode::UNPROCESSABLE_ENTITY => {
+        let error_text = response.text().await.unwrap_or_default();
+        warn!("Validation error creating PR: {}", error_text);
+        Err(anyhow::anyhow!("Validation error: {error_text}"))
+      }
+      _ => {
+        let error_text = response.text().await.unwrap_or_default();
+        warn!("Unexpected GitHub API error: HTTP {} - {}", status, error_text);
+        Err(anyhow::anyhow!("Unexpected error: HTTP {status} - {error_text}"))
+      }
+    }
   }
 }
 
