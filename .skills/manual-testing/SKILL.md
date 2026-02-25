@@ -32,6 +32,8 @@ in-progress changes, either:
 d:\code\twig-test-dir
 ```
 
+> **Note:** Adjust this path to match your workspace layout if it differs.
+
 All twig commands must be run **from inside** this directory. Always `cd` (or
 `Push-Location`) into it before executing twig commands.
 
@@ -174,8 +176,8 @@ twig tree
 ```powershell
 Set-Location "d:\code\twig-test-dir"
 twig tree              # Default view
-twig tree --simple     # Simplified view
-twig tree --all        # Include remote branches
+twig tree --max-depth 2    # Limit depth
+twig tree --no-color       # Without ANSI colors
 ```
 
 ### Testing `twig cascade`
@@ -213,14 +215,6 @@ twig branch depend empty-branch main
 
 twig tidy --dry-run    # Preview what would be cleaned
 twig tidy              # Actually clean
-```
-
-### Testing `twig dashboard`
-
-```powershell
-Set-Location "d:\code\twig-test-dir"
-twig dashboard --simple          # No API calls
-twig dashboard --no-github --no-jira  # Offline mode
 ```
 
 ### Testing `twig sync`

@@ -5,7 +5,7 @@ description: >-
   stacks, rebasing branches onto their parents, updating stacks from upstream,
   committing with Jira context, creating fixup commits, or syncing branch
   metadata. Covers twig rebase, twig update, twig commit, twig fixup, twig sync,
-  and twig dashboard.
+  and twig sync.
 ---
 
 # Stacked Branches
@@ -78,8 +78,6 @@ Options:
 twig rebase --force          # Rebase even if up-to-date
 twig rebase --autostash      # Auto-stash/pop uncommitted changes
 twig rebase --show-graph     # Show dependency graph before rebasing
-twig rebase --no-interactive # Fail on conflicts (CI mode)
-twig rebase --skip-commits=<hash1>,<hash2>  # Exclude specific commits
 ```
 
 ## Updating from upstream
@@ -153,19 +151,13 @@ Detected patterns include:
 
 ## Reviewing your work
 
-The dashboard shows branches with their linked PRs and Jira issues:
+Check the branch tree and PR status:
 
 ```
-twig dashboard               # Full dashboard (API calls)
-twig dashboard --simple      # No API calls (branches only)
-twig dashboard --no-github   # Skip GitHub
-twig dashboard --no-jira     # Skip Jira
-twig dashboard --mine        # Only your items
-twig dashboard --recent      # Last 7 days only
-twig dashboard -f json       # JSON output
+twig tree                         # Branch dependency tree with status
+twig github pr list               # List open PRs for the repo
+twig github pr status             # Current branch's PR status
 ```
-
-Aliases: `twig dash`, `twig v`
 
 ## Typical stacking workflow
 
@@ -187,7 +179,7 @@ twig update
 
 # 6. Check status
 twig tree
-twig dashboard --simple
+twig github pr list
 
 # 7. Clean up merged branches
 twig tidy

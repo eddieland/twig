@@ -31,6 +31,7 @@ This is a Cargo workspace. The root `Cargo.toml` defines these members:
 - `twig-test-utils` — test helpers (dev only)
 - `no-worries` — panic handler
 - `plugins/twig-flow` — flow plugin
+- `plugins/twig-prune` — prune plugin
 
 The `default-members` is `["twig-cli"]`, so a bare `cargo build` only builds
 `twig-cli`. Use `--workspace` to build everything.

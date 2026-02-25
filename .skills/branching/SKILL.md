@@ -115,15 +115,33 @@ twig switch feature-api-docs -p=feature-api-tests
 
 ### Fixing orphaned branches
 
-If branches exist without dependencies, reparent them immediately:
+If branches exist without dependencies, reparent them with `twig adopt`:
 
 ```
-# Reparent a single branch
-twig branch depend orphaned-branch main
+twig adopt                       # Auto-detect and attach orphans
+twig adopt --parent main         # Attach all orphans to main
+twig adopt -y                    # Skip confirmation prompt
+```
 
-# Reparent ALL orphans to main in bulk
-twig branch reparent main
-twig branch reparent main --dry-run    # Preview first
+Or to reparent a single branch explicitly:
+
+```
+twig branch depend orphaned-branch main
+```
+
+## Adopting orphaned branches
+
+`twig adopt` re-parents orphaned branches by attaching them to a chosen parent.
+It always previews the proposed tree and asks for confirmation before making
+changes.
+
+```
+twig adopt                                    # Auto-detect parents for orphans
+twig adopt --mode default-root                # Attach all orphans to default root
+twig adopt --parent main                      # Attach all orphans to a specific branch
+twig adopt -y                                 # Confirm without prompting
+twig adopt --max-depth 3                      # Limit preview tree depth
+twig adopt --no-color                         # Disable color in preview
 ```
 
 ## Switching branches
@@ -145,16 +163,6 @@ twig branch root add main              # Add root
 twig branch root add main --default    # Add as default root
 twig branch root list                  # List all roots
 twig branch root remove develop        # Remove root
-```
-
-## Clearing all configuration
-
-Reset all dependencies and root branches:
-
-```
-twig branch clear --dry-run    # Preview
-twig branch clear --force      # No confirmation prompt
-twig branch clear              # Interactive confirmation
 ```
 
 ## Cleaning up stale branches
@@ -201,4 +209,3 @@ directly.
 | `twig branch` | `twig br` |
 | `twig tree` | `twig t` |
 | `twig switch` | `twig sw` |
-| `twig dashboard` | `twig dash` or `twig v` |

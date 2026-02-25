@@ -13,6 +13,13 @@ description: >-
 **Never use `cargo test`.** Always use `cargo nextest run`. This is enforced by
 CI and the Makefile.
 
+**Exception:** Doc tests require `cargo test --doc` since nextest does not
+support them:
+
+```
+cargo test -p twig-core --doc   # Run doc tests for a crate
+```
+
 ## Quick reference
 
 | Task | Command |
@@ -141,15 +148,10 @@ fn test_my_feature() {
 Integration tests live in the `tests/` directory at the workspace root:
 
 - `basic_test.rs` — core functionality
+- `batch_operations_test.rs` — batch operations
+- `jira_strict_mode_test.rs` — Jira strict mode
 - `rebase_cascade_test.rs` — cascade rebase flows
-- `rebase_core_functionality_test.rs` — rebase logic
-- `tidy_comprehensive_test.rs` — branch cleanup
 - `xdg_override_test.rs` — config directory overrides
-
-PowerShell test scripts (for manual testing):
-
-- `setup_cascade_test.ps1` — sets up a cascade test repo
-- `manual_cascade_replaced_commits_test.ps1` — replaced commits scenario
 
 ## Tips
 

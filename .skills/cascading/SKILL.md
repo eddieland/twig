@@ -3,8 +3,8 @@ name: cascading
 description: >-
   Cascade rebases across branch dependency trees with twig. Use when rebasing
   all descendants of a branch, propagating upstream changes through a branch
-  tree, handling rebase conflicts during cascade, force-pushing after cascade,
-  or skipping specific commits. Covers twig cascade and its options.
+  tree, handling rebase conflicts during cascade, or previewing the rebase plan.
+  Covers twig cascade and its options.
 ---
 
 # Cascading Rebase
@@ -46,12 +46,10 @@ Alias: `twig casc`
 
 ```
 twig cascade --force              # Rebase even if branches are up-to-date
-twig cascade --force-push         # Force push to remote after each rebase
 twig cascade --autostash          # Auto-stash/pop uncommitted changes
 twig cascade --show-graph         # Display dependency graph before starting
 twig cascade --max-depth 2        # Limit cascade depth
-twig cascade --no-interactive     # Fail on conflicts (CI/script mode)
-twig cascade --skip-commits=<hashes>  # Exclude specific commits
+twig cascade --preview            # Show the rebase plan without executing
 ```
 
 ## Conflict handling
@@ -72,37 +70,18 @@ Or abort:
 1. `git rebase --abort`
 2. The cascade stops; remaining branches are skipped
 
-### Non-interactive mode (`--no-interactive`)
-
-The cascade fails immediately on the first conflict. Use this in CI/CD or
-scripts where interactive resolution isn't possible.
-
 ## Force pushing
 
 After a cascade rebase, local branches have diverged from their remote tracking
-branches. Use `--force-push` to update remotes:
+branches. Push each rebased branch manually:
 
-```
-twig cascade --force-push
-```
-
-**Warning**: This overwrites remote branch history. Only use on branches you
-own or where force-push is expected (e.g., feature branch stacks with draft
-PRs).
-
-## Skipping commits
-
-Exclude specific commits from the rebase:
-
-```
-# By comma-separated hashes
-twig cascade --skip-commits=abc1234,def5678
-
-# From a file (one hash per line)
-twig cascade --skip-commits=skip-list.txt
+```powershell
+git push --force-with-lease
 ```
 
-Commit hashes must be 7-64 character hex strings.
+Repeat for each branch in the stack. `--force-with-lease` is safer than
+`--force` — it refuses to overwrite if someone else pushed since your last
+fetch.
 
 ## Limiting depth
 
@@ -150,8 +129,8 @@ twig cascade
 # 5. Verify everything is clean
 twig tree
 
-# 6. Push everything (if using remotes)
-twig cascade --force-push
+# 6. Push each branch (if using remotes)
+git push --force-with-lease
 ```
 
 ## Visualizing before cascading

@@ -144,18 +144,14 @@ git checkout feature-api-tests
 twig github pr link <pr-number>
 
 # See everything together
-twig dashboard
+twig tree
+twig github pr status
 ```
 
 ### Updating stacked PRs after rebase
 
-After running `twig cascade`, branches have been rebased and need force-pushing:
-
-```powershell
-twig cascade --force-push
-```
-
-Or push individually:
+After running `twig cascade`, branches have been rebased and need force-pushing.
+Push each branch manually:
 
 ```powershell
 git checkout feature-api
@@ -174,18 +170,6 @@ twig sync                    # Auto-link branches to PRs
 twig sync --dry-run          # Preview what would be linked
 ```
 
-## Dashboard view
-
-See branches with their PRs and Jira issues in one view:
-
-```
-twig dashboard               # Full view with API calls
-twig dashboard --simple      # Branches only, no API calls
-twig dashboard -f json       # JSON output
-```
-
-Aliases: `twig dash`, `twig v`
-
 ## Pre-PR checklist
 
 Before creating a PR, ensure:
@@ -199,7 +183,7 @@ make test         # All tests pass (uses nextest)
 Or run the full pipeline:
 
 ```powershell
-make all          # fmt + lint + test + build + validate
+make all          # fmt + lint + test
 ```
 
 ## Command aliases
@@ -210,4 +194,3 @@ make all          # fmt + lint + test + build + validate
 | `twig github checks` | `twig github ci` |
 | `twig github pr list` | `twig github pr ls` |
 | `twig github pr status` | `twig github pr st` |
-| `twig dashboard` | `twig dash` or `twig v` |

@@ -71,6 +71,21 @@ If auto-fix can't resolve it, address the lint manually. Common categories:
 - **`redundant_closure`** — Pass function directly instead of wrapping in
   closure
 
+## Workspace-level lint bans
+
+The workspace `Cargo.toml` explicitly **denies** these lints — clippy will
+treat them as errors when you run `make lint`:
+
+| Lint | What to do instead |
+|---|---|
+| `unwrap_used` | Use `?` or explicit error handling |
+| `panic` | Return an error; never panic in library code |
+| `print_stdout` | Use `twig_core::output::print_*` functions |
+| `print_stderr` | Use `twig_core::output::print_*` functions |
+| `dbg_macro` | Remove `dbg!()` before committing |
+| `todo` | No unfinished stubs in committed code |
+| `unimplemented` | No unfinished stubs in committed code |
+
 ## Pre-commit hooks
 
 The project supports pre-commit hooks:

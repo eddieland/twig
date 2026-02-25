@@ -5,7 +5,7 @@ description: >-
   Use when troubleshooting unexpected behavior, investigating bugs, adding
   tracing instrumentation to code, understanding error messages, or running
   system diagnostics. Covers verbosity flags, RUST_LOG, tracing macros, and
-  twig self diagnostics.
+  twig self diagnose.
 ---
 
 # Debugging with Logging
@@ -145,7 +145,7 @@ When investigating an error, run the failing command with `-vv` to see the
 Run a full health check:
 
 ```
-twig self diagnostics
+twig self diagnose
 ```
 
 This checks:
