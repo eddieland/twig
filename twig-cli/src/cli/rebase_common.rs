@@ -107,7 +107,7 @@ fn run_rebase(repo_path: &Path, onto: &str, autostash: bool, force: bool) -> Res
     print_info(&result.output);
   }
 
-  if result.output.contains("up to date") {
+  if !force && result.output.contains("up to date") {
     return Ok(RebaseResult::UpToDate);
   }
   if result.output.contains("CONFLICT") {
