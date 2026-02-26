@@ -638,8 +638,9 @@ fn get_rebase_head_commit(repo_path: &Path) -> Result<Option<String>> {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
   use twig_test_utils::git::GitRepoTestGuard;
+
+  use super::*;
 
   /// `get_rebase_head_commit` must return `None` when there is no active rebase.
   #[test]
@@ -662,7 +663,10 @@ mod tests {
       repo: None,
     };
     assert!(args.force_push, "force_push should be true");
-    let args_off = CascadeArgs { force_push: false, ..args };
+    let args_off = CascadeArgs {
+      force_push: false,
+      ..args
+    };
     assert!(!args_off.force_push, "force_push should be false");
   }
 
