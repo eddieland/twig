@@ -219,7 +219,21 @@ fn rebase_downstream(
             ConflictResolution::Continue => {
               // Continue the rebase
               let continue_result = execute_git_command(repo_path, &["rebase", "--continue"])?;
-              print_info(&continue_result.output);
+              if !continue_result.output.is_empty() {
+                print_info(&continue_result.output);
+              }
+              if !continue_result.success {
+                print_error(&format!(
+                  "Failed to continue rebase of {branch} onto {parent}. You may need to resolve conflicts manually."
+                ));
+                // Abort the in-progress rebase so the repo is left in a clean state.
+                let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
+                if !abort_result.output.is_empty() {
+                  print_info(&abort_result.output);
+                }
+                failed_branches.insert(branch.clone());
+                continue 'branches;
+              }
               print_success(&format!(
                 "Rebase of {branch} onto {parent} completed after resolving conflicts",
               ));
@@ -247,7 +261,21 @@ fn rebase_downstream(
             ConflictResolution::Skip => {
               // Skip the current commit
               let skip_result = execute_git_command(repo_path, &["rebase", "--skip"])?;
-              print_info(&skip_result.output);
+              if !skip_result.output.is_empty() {
+                print_info(&skip_result.output);
+              }
+              if !skip_result.success {
+                print_error(&format!(
+                  "Failed to skip commit during rebase of {branch} onto {parent}. You may need to resolve conflicts manually."
+                ));
+                // Abort the in-progress rebase so the repo is left in a clean state.
+                let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
+                if !abort_result.output.is_empty() {
+                  print_info(&abort_result.output);
+                }
+                failed_branches.insert(branch.clone());
+                continue 'branches;
+              }
               print_info(&format!("Skipped commit during rebase of {branch} onto {parent}",));
             }
           }
