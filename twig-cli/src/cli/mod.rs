@@ -8,6 +8,7 @@ mod adopt;
 mod branch;
 pub mod cascade;
 mod commit;
+
 mod completion;
 mod config;
 mod creds;
@@ -17,6 +18,7 @@ mod git;
 mod github;
 mod jira;
 pub mod rebase;
+mod rebase_common;
 mod self_cmd;
 mod switch;
 mod sync;

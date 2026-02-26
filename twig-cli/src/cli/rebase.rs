@@ -4,16 +4,16 @@
 //! branch on its parent(s).
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{Context, Result};
 use clap::Args;
 use git2::Repository as Git2Repository;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
-use twig_core::tree_renderer::TreeRenderer;
-use twig_core::{detect_repository, twig_theme};
 
-use crate::consts;
+use super::rebase_common::{
+  ConflictResolution, RebaseContinueOutcome, RebaseResult, abort_rebase, attempt_rebase_continue, attempt_rebase_skip,
+  handle_rebase_conflict, rebase_branch, rebase_branch_force, show_dependency_tree,
+};
 use crate::user_defined_dependency_resolver::UserDefinedDependencyResolver;
 
 /// Command for rebasing the current branch on its parent(s)
@@ -42,15 +42,11 @@ pub fn handle_rebase_command(args: RebaseArgs) -> Result<()> {
   let repo_path = if let Some(ref repo_arg) = args.repo {
     PathBuf::from(repo_arg)
   } else {
-    detect_repository().context("Not in a git repository")?
+    twig_core::detect_repository().context("Not in a git repository")?
   };
 
   // Rebase the current branch on its parent(s)
-  let force = args.force;
-  let show_graph = args.show_graph;
-  let autostash = args.autostash;
-
-  rebase_upstream(&repo_path, force, show_graph, autostash)
+  rebase_upstream(&repo_path, args.force, args.show_graph, args.autostash)
 }
 
 /// Rebase current branch on its parent(s)
@@ -102,7 +98,7 @@ fn rebase_upstream(repo_path: &Path, force: bool, show_graph: bool, autostash: b
     print_info(&format!("Rebasing {current_branch_name} onto {parent}",));
 
     // Execute the rebase
-    let result = rebase_branch(repo_path, &current_branch_name, parent, autostash)?;
+    let result = rebase_branch(repo_path, parent, autostash)?;
 
     match result {
       RebaseResult::Success => {
@@ -112,7 +108,7 @@ fn rebase_upstream(repo_path: &Path, force: bool, show_graph: bool, autostash: b
         if force {
           // Force rebase even if up-to-date
           print_info("Branch is up-to-date, but force flag is set. Rebasing anyway...");
-          let force_result = rebase_branch_force(repo_path, &current_branch_name, parent, autostash)?;
+          let force_result = rebase_branch_force(repo_path, parent, autostash)?;
           match force_result {
             RebaseResult::Success => {
               print_success(&format!(
@@ -137,49 +133,48 @@ fn rebase_upstream(repo_path: &Path, force: bool, show_graph: bool, autostash: b
           print_warning(&format!(
             "Conflicts detected while rebasing {current_branch_name} onto {parent}",
           ));
-          let resolution = handle_rebase_conflict(repo_path, &current_branch_name)?;
+          let resolution = handle_rebase_conflict()?;
 
           match resolution {
-            ConflictResolution::Continue => {
-              // Continue the rebase
-              let continue_result = execute_git_command(repo_path, &["rebase", "--continue"])?;
-              print_info(&continue_result);
-              if continue_result.contains("CONFLICT") {
-                // Another conflict arose; re-prompt.
-                continue 'conflict_loop;
+            ConflictResolution::Continue => match attempt_rebase_continue(repo_path)? {
+              RebaseContinueOutcome::Completed => {
+                print_success(&format!(
+                  "Rebase of {current_branch_name} onto {parent} completed after resolving conflicts",
+                ));
+                break 'conflict_loop;
               }
-              print_success(&format!(
-                "Rebase of {current_branch_name} onto {parent} completed after resolving conflicts",
-              ));
-              break 'conflict_loop;
-            }
-            ConflictResolution::AbortToOriginal => {
-              // Abort the rebase and go back to the original branch
-              let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
-              print_info(&abort_result);
+              RebaseContinueOutcome::MoreConflicts => continue 'conflict_loop,
+              RebaseContinueOutcome::Failed => {
+                print_error(&format!(
+                  "Failed to continue rebase of {current_branch_name} onto {parent}. \
+                   You may need to resolve conflicts manually."
+                ));
+                abort_rebase(repo_path)?;
+                return Err(anyhow::anyhow!("Rebase failed"));
+              }
+            },
+            ConflictResolution::AbortToOriginal | ConflictResolution::AbortStayHere => {
+              abort_rebase(repo_path)?;
               print_info(&format!("Rebase of {current_branch_name} onto {parent} aborted",));
               return Ok(());
             }
-            ConflictResolution::AbortStayHere => {
-              // Abort the rebase but stay on the current branch
-              let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
-              print_info(&abort_result);
-              print_info(&format!("Rebase of {current_branch_name} onto {parent} aborted",));
-              return Ok(());
-            }
-            ConflictResolution::Skip => {
-              // Skip the current commit
-              let skip_result = execute_git_command(repo_path, &["rebase", "--skip"])?;
-              print_info(&skip_result);
-              if skip_result.contains("CONFLICT") {
-                // Another conflict arose after the skip; re-prompt.
-                continue 'conflict_loop;
+            ConflictResolution::Skip => match attempt_rebase_skip(repo_path)? {
+              RebaseContinueOutcome::Completed => {
+                print_info(&format!(
+                  "Skipped commit during rebase of {current_branch_name} onto {parent}",
+                ));
+                break 'conflict_loop;
               }
-              print_info(&format!(
-                "Skipped commit during rebase of {current_branch_name} onto {parent}",
-              ));
-              break 'conflict_loop;
-            }
+              RebaseContinueOutcome::MoreConflicts => continue 'conflict_loop,
+              RebaseContinueOutcome::Failed => {
+                print_error(&format!(
+                  "Failed to skip commit during rebase of {current_branch_name} onto {parent}. \
+                   You may need to resolve conflicts manually."
+                ));
+                abort_rebase(repo_path)?;
+                return Err(anyhow::anyhow!("Rebase failed"));
+              }
+            },
           }
         }
       }
@@ -191,209 +186,4 @@ fn rebase_upstream(repo_path: &Path, force: bool, show_graph: bool, autostash: b
   }
 
   Ok(())
-}
-
-/// Show the dependency tree
-fn show_dependency_tree(repo_path: &Path, _current_branch: &str) -> Result<()> {
-  // Open the repository
-  let repo =
-    Git2Repository::open(repo_path).context(format!("Failed to open git repository at {}", repo_path.display()))?;
-
-  // Load repository state
-  let repo_state = twig_core::state::RepoState::load(repo_path).unwrap_or_default();
-
-  // Create the user-defined dependency resolver
-  let resolver = UserDefinedDependencyResolver;
-
-  // Build the branch node tree structure
-  let branch_nodes = resolver.resolve_user_dependencies(&repo, &repo_state)?;
-
-  // Get root branches and orphaned branches for the tree
-  let (roots, orphaned) = resolver.build_tree_from_user_dependencies(&branch_nodes, &repo_state);
-
-  if roots.is_empty() {
-    print_warning("No root branches found. Cannot display dependency tree.");
-    return Ok(());
-  }
-
-  print_info("Branch dependency tree:");
-
-  // Create and configure the tree renderer
-  let mut renderer = TreeRenderer::new(&branch_nodes, &roots, None, false);
-
-  // Render all root trees
-  let mut stdout = std::io::stdout();
-  for (i, root) in roots.iter().enumerate() {
-    if i > 0 {
-      println!(); // Add spacing between multiple trees
-    }
-    renderer.render_tree(&mut stdout, root, 0, &[], false)?;
-  }
-
-  // Display orphaned branches if any
-  if !orphaned.is_empty() {
-    println!("\n📝 Orphaned branches (no dependencies defined):");
-    for branch in orphaned {
-      println!("  • {branch}",);
-    }
-  }
-
-  Ok(())
-}
-
-/// Enum representing rebase result
-enum RebaseResult {
-  Success,
-  UpToDate,
-  Conflict,
-  Error,
-}
-
-/// Enum representing rebase conflict resolution options
-enum ConflictResolution {
-  Continue,
-  AbortToOriginal,
-  AbortStayHere,
-  Skip,
-}
-
-/// Rebase a branch onto another branch
-fn rebase_branch(repo_path: &Path, _branch: &str, onto: &str, autostash: bool) -> Result<RebaseResult> {
-  // Build the rebase command
-  let mut args = vec!["rebase"];
-
-  if autostash {
-    args.push("--autostash");
-  }
-
-  args.push(onto);
-
-  // Execute the rebase command
-  let output = Command::new(consts::GIT_EXECUTABLE)
-    .args(&args)
-    .current_dir(repo_path)
-    .output()
-    .context("Failed to execute git rebase command")?;
-
-  let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-  let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-  // Print output
-  if !stdout.is_empty() {
-    print_info(&stdout);
-  }
-
-  if !stderr.is_empty() {
-    // Check for specific error messages
-    if stderr.contains("up to date") || stdout.contains("up to date") {
-      return Ok(RebaseResult::UpToDate);
-    }
-
-    if stderr.contains("CONFLICT") || stdout.contains("CONFLICT") {
-      return Ok(RebaseResult::Conflict);
-    }
-
-    print_warning(&stderr);
-  }
-
-  if output.status.success() {
-    Ok(RebaseResult::Success)
-  } else {
-    Ok(RebaseResult::Error)
-  }
-}
-
-/// Force rebase a branch onto another branch (used with --force flag)
-fn rebase_branch_force(repo_path: &Path, _branch: &str, onto: &str, autostash: bool) -> Result<RebaseResult> {
-  // Build the rebase command with --force-rebase
-  let mut args = vec!["rebase", "--force-rebase"];
-
-  if autostash {
-    args.push("--autostash");
-  }
-
-  args.push(onto);
-
-  // Execute the rebase command
-  let output = Command::new(consts::GIT_EXECUTABLE)
-    .args(&args)
-    .current_dir(repo_path)
-    .output()
-    .context("Failed to execute git rebase command")?;
-
-  let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-  let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-  // Print output
-  if !stdout.is_empty() {
-    print_info(&stdout);
-  }
-
-  if !stderr.is_empty() {
-    // Check for specific error messages
-    if stderr.contains("CONFLICT") || stdout.contains("CONFLICT") {
-      return Ok(RebaseResult::Conflict);
-    }
-
-    print_warning(&stderr);
-  }
-
-  if output.status.success() {
-    Ok(RebaseResult::Success)
-  } else {
-    Ok(RebaseResult::Error)
-  }
-}
-
-/// Handle rebase conflicts
-fn handle_rebase_conflict(_repo_path: &Path, _branch: &str) -> Result<ConflictResolution> {
-  print_info("Rebase conflict detected. You have several options:");
-  println!();
-
-  let choice = dialoguer::Select::with_theme(&twig_theme())
-    .with_prompt("Select an option")
-    .items([
-      "Continue - Resolve conflicts and continue the rebase",
-      "Abort to original - Abort the rebase and return to the original branch",
-      "Abort stay here - Abort the rebase but stay on the current branch",
-      "Skip - Skip the current commit and continue",
-    ])
-    .default(0)
-    .interact()
-    .unwrap_or(0);
-
-  match choice {
-    0 => Ok(ConflictResolution::Continue),
-    1 => Ok(ConflictResolution::AbortToOriginal),
-    2 => Ok(ConflictResolution::AbortStayHere),
-    3 => Ok(ConflictResolution::Skip),
-    _ => Ok(ConflictResolution::AbortToOriginal),
-  }
-}
-
-/// Execute a git command and handle output
-fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<String> {
-  let output = Command::new(consts::GIT_EXECUTABLE)
-    .args(args)
-    .current_dir(repo_path)
-    .output()
-    .context(format!("Failed to execute git command: {args:?}",))?;
-
-  let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-  let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-  let mut result = String::new();
-
-  if !stdout.is_empty() {
-    result.push_str(&stdout);
-  }
-
-  if !stderr.is_empty() {
-    if !result.is_empty() {
-      result.push('\n');
-    }
-    result.push_str(&stderr);
-  }
-
-  Ok(result)
 }
