@@ -131,42 +131,55 @@ fn rebase_upstream(repo_path: &Path, force: bool, show_graph: bool, autostash: b
         }
       }
       RebaseResult::Conflict => {
-        // Handle conflict
-        print_warning(&format!(
-          "Conflicts detected while rebasing {current_branch_name} onto {parent}",
-        ));
-        let resolution = handle_rebase_conflict(repo_path, &current_branch_name)?;
+        // Loop so that a second conflict arising after --continue or --skip re-prompts
+        // the user rather than silently succeeding or failing.
+        'conflict_loop: loop {
+          print_warning(&format!(
+            "Conflicts detected while rebasing {current_branch_name} onto {parent}",
+          ));
+          let resolution = handle_rebase_conflict(repo_path, &current_branch_name)?;
 
-        match resolution {
-          ConflictResolution::Continue => {
-            // Continue the rebase
-            let continue_result = execute_git_command(repo_path, &["rebase", "--continue"])?;
-            print_info(&continue_result);
-            print_success(&format!(
-              "Rebase of {current_branch_name} onto {parent} completed after resolving conflicts",
-            ));
-          }
-          ConflictResolution::AbortToOriginal => {
-            // Abort the rebase and go back to the original branch
-            let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
-            print_info(&abort_result);
-            print_info(&format!("Rebase of {current_branch_name} onto {parent} aborted",));
-            return Ok(());
-          }
-          ConflictResolution::AbortStayHere => {
-            // Abort the rebase but stay on the current branch
-            let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
-            print_info(&abort_result);
-            print_info(&format!("Rebase of {current_branch_name} onto {parent} aborted",));
-            return Ok(());
-          }
-          ConflictResolution::Skip => {
-            // Skip the current commit
-            let skip_result = execute_git_command(repo_path, &["rebase", "--skip"])?;
-            print_info(&skip_result);
-            print_info(&format!(
-              "Skipped commit during rebase of {current_branch_name} onto {parent}",
-            ));
+          match resolution {
+            ConflictResolution::Continue => {
+              // Continue the rebase
+              let continue_result = execute_git_command(repo_path, &["rebase", "--continue"])?;
+              print_info(&continue_result);
+              if continue_result.contains("CONFLICT") {
+                // Another conflict arose; re-prompt.
+                continue 'conflict_loop;
+              }
+              print_success(&format!(
+                "Rebase of {current_branch_name} onto {parent} completed after resolving conflicts",
+              ));
+              break 'conflict_loop;
+            }
+            ConflictResolution::AbortToOriginal => {
+              // Abort the rebase and go back to the original branch
+              let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
+              print_info(&abort_result);
+              print_info(&format!("Rebase of {current_branch_name} onto {parent} aborted",));
+              return Ok(());
+            }
+            ConflictResolution::AbortStayHere => {
+              // Abort the rebase but stay on the current branch
+              let abort_result = execute_git_command(repo_path, &["rebase", "--abort"])?;
+              print_info(&abort_result);
+              print_info(&format!("Rebase of {current_branch_name} onto {parent} aborted",));
+              return Ok(());
+            }
+            ConflictResolution::Skip => {
+              // Skip the current commit
+              let skip_result = execute_git_command(repo_path, &["rebase", "--skip"])?;
+              print_info(&skip_result);
+              if skip_result.contains("CONFLICT") {
+                // Another conflict arose after the skip; re-prompt.
+                continue 'conflict_loop;
+              }
+              print_info(&format!(
+                "Skipped commit during rebase of {current_branch_name} onto {parent}",
+              ));
+              break 'conflict_loop;
+            }
           }
         }
       }

@@ -317,7 +317,7 @@ impl BranchTableRenderer {
     let mut stack = Vec::new();
     let mut visited = BTreeSet::new();
     let mut rows = Vec::new();
-    self.collect_rows(graph, branch, &mut stack, &mut visited, &mut rows)?;
+    Self::collect_rows(graph, branch, &mut stack, &mut visited, &mut rows)?;
 
     let rendered_rows = self.render_rows(graph, &rows, colors_enabled)?;
     let column_widths = self.compute_column_widths(&rendered_rows);
@@ -348,7 +348,6 @@ impl BranchTableRenderer {
 
   #[allow(clippy::only_used_in_recursion)]
   fn collect_rows(
-    &self,
     graph: &BranchGraph,
     branch: &BranchName,
     stack: &mut Vec<bool>,
@@ -377,7 +376,7 @@ impl BranchTableRenderer {
 
     for (idx, child) in children.iter().enumerate() {
       stack.push(idx < children.len() - 1);
-      self.collect_rows(graph, child, stack, visited, rows)?;
+      Self::collect_rows(graph, child, stack, visited, rows)?;
       stack.pop();
     }
 
