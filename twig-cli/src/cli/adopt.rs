@@ -315,4 +315,3 @@ fn display_plan(plan: &[AdoptionPlan]) {
     println!("  • {} -> {} ({})", adoption.child, adoption.parent, adoption.reason);
   }
 }
-

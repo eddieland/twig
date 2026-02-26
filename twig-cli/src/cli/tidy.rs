@@ -158,8 +158,7 @@ fn handle_clean_command(clean: CleanArgs) -> Result<()> {
     }
 
     // Issue #8: only use common-root fallback in --aggressive mode.
-    let parent_branch =
-      find_parent_branch(&repo_state, &repo, &branch_name, clean.aggressive)?;
+    let parent_branch = find_parent_branch(&repo_state, &repo, &branch_name, clean.aggressive)?;
 
     // Issue #5: collapse the two nested `if` into one (clippy::collapsible_if).
     if let Some(parent) = parent_branch
@@ -241,10 +240,7 @@ fn handle_clean_command(clean: CleanArgs) -> Result<()> {
     if repo_state.remove_dependency(&child, &old_parent) {
       match repo_state.add_dependency(child.clone(), new_parent.clone()) {
         Ok(()) => {
-          print_success(&format!(
-            "Reparented {} from {} to {}",
-            child, old_parent, new_parent
-          ));
+          print_success(&format!("Reparented {} from {} to {}", child, old_parent, new_parent));
           reparented_count += 1;
         }
         Err(e) => {
@@ -290,10 +286,7 @@ fn handle_clean_command(clean: CleanArgs) -> Result<()> {
     print_success(&format!("Clean complete: deleted {} branch(es).", deleted_count));
   }
   if reparented_count > 0 {
-    print_success(&format!(
-      "Clean complete: reparented {} branch(es).",
-      reparented_count
-    ));
+    print_success(&format!("Clean complete: reparented {} branch(es).", reparented_count));
   }
 
   Ok(())
@@ -423,11 +416,7 @@ fn is_current_branch(repo: &Git2Repository, branch_name: &str) -> Result<bool> {
 ///
 /// Uses a `visited` set to guard against dependency cycles in corrupt twig
 /// state and prevent unbounded recursion. (Issue #2)
-fn has_non_cleanable_children(
-  repo_state: &RepoState,
-  repo: &Git2Repository,
-  branch_name: &str,
-) -> Result<bool> {
+fn has_non_cleanable_children(repo_state: &RepoState, repo: &Git2Repository, branch_name: &str) -> Result<bool> {
   let mut visited = HashSet::new();
   has_non_cleanable_children_inner(repo_state, repo, branch_name, &mut visited)
 }
@@ -465,10 +454,8 @@ fn has_non_cleanable_children_inner(
 /// Find a cleanable dependency chain starting from a branch.
 ///
 /// # Returns
-/// - `Some(vec)` — clean all branches in `vec` (the chain has ≥ 1 member and
-///   is safe to delete as a unit).
-/// - `None` — `start_branch` is an intermediate node with exactly one child
-///   that has unique commits; skip it.
+/// - `Some(vec)` — clean all branches in `vec` (the chain has ≥ 1 member and is safe to delete as a unit).
+/// - `None` — `start_branch` is an intermediate node with exactly one child that has unique commits; skip it.
 ///
 /// (Issue #12: clearer return-type semantics than returning an empty Vec)
 fn find_cleanable_dependency_chain(
@@ -526,11 +513,7 @@ fn find_reparenting_opportunities(
   repo: &Git2Repository,
 ) -> Result<Vec<(String, String, String)>> {
   // Collect unique intermediate branches (the `parent` side of dependencies).
-  let unique_intermediates: HashSet<&str> = repo_state
-    .dependencies
-    .iter()
-    .map(|d| d.parent.as_str())
-    .collect();
+  let unique_intermediates: HashSet<&str> = repo_state.dependencies.iter().map(|d| d.parent.as_str()).collect();
 
   let mut reparenting_ops = Vec::new();
 
@@ -677,8 +660,7 @@ mod tests {
 
   /// Create a minimal initial commit so that branches can be created.
   fn make_initial_commit(guard: &GitRepoTestGuard) {
-    create_commit(&guard.repo, "README.md", "init", "Initial commit")
-      .expect("initial commit");
+    create_commit(&guard.repo, "README.md", "init", "Initial commit").expect("initial commit");
   }
 
   // -----------------------------------------------------------------------
@@ -759,10 +741,7 @@ mod tests {
     create_branch(&guard.repo, "feature", None).expect("create branch");
 
     // Check out feature and add a commit.
-    guard
-      .repo
-      .set_head("refs/heads/feature")
-      .expect("set head to feature");
+    guard.repo.set_head("refs/heads/feature").expect("set head to feature");
     create_commit(&guard.repo, "feat.txt", "new", "feat commit").expect("feat commit");
 
     let result = has_unique_commits(&guard.repo, "feature", "main");
@@ -888,10 +867,7 @@ mod tests {
     for name in ["intermediate", "child-a", "child-b"] {
       create_branch(&guard.repo, name, None).expect("create");
     }
-    guard
-      .repo
-      .set_head("refs/heads/main")
-      .expect("set head to main");
+    guard.repo.set_head("refs/heads/main").expect("set head to main");
 
     let ops = find_reparenting_opportunities(&state, &guard.repo).expect("ops");
     assert!(
