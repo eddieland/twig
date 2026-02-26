@@ -23,11 +23,18 @@ pub fn create_fixup_commit(repo_path: &Path, target_commit: &CommitCandidate) ->
     return Ok(());
   }
 
-  tracing::debug!("Creating fixup commit for {}", target_commit.hash);
+  run_fixup_commit(repo_path, &target_commit.hash)
+}
 
-  // Create the fixup commit
+/// Run `git commit --fixup <commit_hash>` and report success or failure.
+///
+/// This is the shared implementation used by both the dedicated `fixup` command
+/// and the `commit` command's fixup path.
+pub fn run_fixup_commit(repo_path: &Path, commit_hash: &str) -> Result<()> {
+  tracing::debug!("Creating fixup commit for {}", commit_hash);
+
   let output = Command::new(consts::GIT_EXECUTABLE)
-    .args(["commit", "--fixup", &target_commit.hash])
+    .args(["commit", "--fixup", commit_hash])
     .current_dir(repo_path)
     .output()
     .context("Failed to execute git commit --fixup command")?;
