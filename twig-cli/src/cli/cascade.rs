@@ -15,6 +15,7 @@ use twig_core::tree_renderer::TreeRenderer;
 use twig_core::{RepoState, detect_repository, twig_theme};
 
 use crate::consts;
+use crate::git_commands::{execute_git_command, execute_git_command_interactive, resolve_branch_remote};
 use crate::user_defined_dependency_resolver::UserDefinedDependencyResolver;
 
 /// Command for performing a cascading rebase
@@ -36,6 +37,13 @@ pub struct CascadeArgs {
   #[arg(long)]
   pub autostash: bool,
 
+  /// Force push to remote after successful rebase.
+  ///
+  /// WARNING: This can overwrite remote changes. Uses `--force-with-lease` for
+  /// safety.
+  #[arg(long = "force-push")]
+  pub force_push: bool,
+
   /// Show the rebase plan without executing it
   #[arg(long)]
   pub preview: bool,
@@ -54,26 +62,17 @@ pub fn handle_cascade_command(args: CascadeArgs) -> Result<()> {
     detect_repository().context("Not in a git repository")?
   };
 
-  // Extract the values we need from args
+  rebase_downstream(&repo_path, &args)
+}
+
+/// Perform cascading rebase from current branch to children
+fn rebase_downstream(repo_path: &Path, args: &CascadeArgs) -> Result<()> {
   let max_depth = args.max_depth;
   let force = args.force;
   let show_graph = args.show_graph;
   let autostash = args.autostash;
+  let force_push = args.force_push;
   let preview = args.preview;
-
-  // Perform cascading rebase from current branch to children
-  rebase_downstream(&repo_path, max_depth, force, show_graph, autostash, preview)
-}
-
-/// Perform cascading rebase from current branch to children
-fn rebase_downstream(
-  repo_path: &Path,
-  max_depth: Option<u32>,
-  force: bool,
-  show_graph: bool,
-  autostash: bool,
-  preview: bool,
-) -> Result<()> {
   // Open the repository
   let repo =
     Git2Repository::open(repo_path).context(format!("Failed to open git repository at {}", repo_path.display()))?;
@@ -140,6 +139,9 @@ fn rebase_downstream(
   }
 
   // Perform the cascading rebase
+  // Track commits that were replaced (skipped or resolved conflicts) during the cascade.
+  // These are logged so downstream branches can be aware of replaced commits.
+  let mut replaced_commits: HashSet<String> = HashSet::new();
   for branch in rebase_order {
     // Get the parents of this branch
     let parents = repo_state.get_dependency_parents(&branch);
@@ -169,6 +171,9 @@ fn rebase_downstream(
       match result {
         RebaseResult::Success => {
           print_success(&format!("Successfully rebased {branch} onto {parent}",));
+          if force_push {
+            handle_force_push(repo_path, &branch)?;
+          }
         }
         RebaseResult::UpToDate => {
           if force {
@@ -178,6 +183,9 @@ fn rebase_downstream(
             match force_result {
               RebaseResult::Success => {
                 print_success(&format!("Successfully force-rebased {branch} onto {parent}",));
+                if force_push {
+                  handle_force_push(repo_path, &branch)?;
+                }
               }
               _ => {
                 print_error(&format!("Failed to force-rebase {branch} onto {parent}",));
@@ -196,12 +204,34 @@ fn rebase_downstream(
 
           match resolution {
             ConflictResolution::Continue => {
-              // Continue the rebase
-              let continue_result = execute_git_command(repo_path, &["rebase", "--continue"])?;
-              print_info(&continue_result.output);
+              // Capture the commit being applied before continuing
+              let rebase_commit = get_rebase_head_commit(repo_path)?;
+
+              // Continue the rebase (interactive so git can open editors / read stdin)
+              let continue_result = execute_git_command_interactive(repo_path, &["rebase", "--continue"])?;
+              if !continue_result.success {
+                print_error(&format!(
+                  "Failed to continue rebase of {branch} onto {parent}. You may need to resolve conflicts manually."
+                ));
+                continue;
+              }
+
+              // Track the replaced commit.
+              // TODO: Wire replaced_commits into downstream rebase invocations
+              // (e.g. via `git rebase --onto`) to actually skip these commits in
+              // descendant branches.
+              if let Some(commit_hash) = rebase_commit {
+                let short = &commit_hash[..7.min(commit_hash.len())];
+                print_info(&format!("Noted commit {short} as replaced during conflict resolution"));
+                replaced_commits.insert(commit_hash);
+              }
+
               print_success(&format!(
                 "Rebase of {branch} onto {parent} completed after resolving conflicts",
               ));
+              if force_push {
+                handle_force_push(repo_path, &branch)?;
+              }
             }
             ConflictResolution::AbortToOriginal => {
               // Abort the rebase and go back to the original branch
@@ -223,9 +253,28 @@ fn rebase_downstream(
               continue;
             }
             ConflictResolution::Skip => {
-              // Skip the current commit
-              let skip_result = execute_git_command(repo_path, &["rebase", "--skip"])?;
-              print_info(&skip_result.output);
+              // Capture the commit being skipped
+              let rebase_commit = get_rebase_head_commit(repo_path)?;
+
+              // Skip the current commit (interactive so git can open editors / read stdin)
+              let skip_result = execute_git_command_interactive(repo_path, &["rebase", "--skip"])?;
+              if !skip_result.success {
+                print_error(&format!(
+                  "Failed to skip commit during rebase of {branch} onto {parent}. You may need to resolve conflicts manually."
+                ));
+                continue;
+              }
+
+              // Track the skipped commit.
+              // TODO: Wire replaced_commits into downstream rebase invocations
+              // (e.g. via `git rebase --onto`) to actually skip these commits in
+              // descendant branches.
+              if let Some(commit_hash) = rebase_commit {
+                let short = &commit_hash[..7.min(commit_hash.len())];
+                print_info(&format!("Noted commit {short} as skipped"));
+                replaced_commits.insert(commit_hash);
+              }
+
               print_info(&format!("Skipped commit during rebase of {branch} onto {parent}",));
             }
           }
@@ -242,6 +291,13 @@ fn rebase_downstream(
   // Return to the original branch
   let checkout_result = execute_git_command(repo_path, &["checkout", &current_branch_name])?;
   print_info(&checkout_result.output);
+
+  if !replaced_commits.is_empty() {
+    print_info(&format!(
+      "Noted {} replaced/skipped commit(s) during this cascade",
+      replaced_commits.len()
+    ));
+  }
 
   print_success("Cascading rebase completed successfully");
   Ok(())
@@ -538,42 +594,89 @@ fn handle_rebase_conflict(_repo_path: &Path, _branch: &str) -> Result<ConflictRe
   }
 }
 
-/// Output from a git command, including both the combined stdout/stderr text and
-/// whether the process exited successfully (exit code 0).
-struct GitCommandOutput {
-  /// Combined stdout and stderr text.
-  output: String,
-  /// Whether the command exited with status code 0.
-  success: bool,
+/// Force-push a branch to its upstream remote using `--force-with-lease`.
+///
+/// The remote is resolved from `branch.<name>.remote` git config; it falls
+/// back to `"origin"` when no remote is configured.
+fn handle_force_push(repo_path: &Path, branch: &str) -> Result<()> {
+  // Resolve the upstream remote for this branch; fall back to "origin".
+  let remote = resolve_branch_remote(repo_path, branch).unwrap_or_else(|| "origin".to_string());
+  print_info(&format!("Force-pushing {branch} to {remote}..."));
+  let result = execute_git_command(repo_path, &["push", "--force-with-lease", &remote, branch])?;
+  if result.success {
+    print_success(&format!("Successfully force-pushed {branch} to {remote}"));
+    Ok(())
+  } else {
+    Err(anyhow::anyhow!(
+      "Force-push of {branch} to {remote} failed: {}",
+      result.output.trim()
+    ))
+  }
 }
 
-/// Execute a git command and return its output along with the exit status.
-fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<GitCommandOutput> {
+/// Get the commit hash that is currently being applied during a rebase.
+///
+/// Uses `git rev-parse REBASE_HEAD` to retrieve the original commit hash
+/// of the commit being rebased. Returns `None` if no rebase is in progress
+/// or `REBASE_HEAD` cannot be resolved.
+fn get_rebase_head_commit(repo_path: &Path) -> Result<Option<String>> {
   let output = Command::new(consts::GIT_EXECUTABLE)
-    .args(args)
     .current_dir(repo_path)
+    .args(["rev-parse", "REBASE_HEAD"])
     .output()
-    .context(format!("Failed to execute git command: {args:?}",))?;
+    .context("Failed to get REBASE_HEAD commit")?;
 
-  let success = output.status.success();
-  let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-  let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-  let mut combined = String::new();
-
-  if !stdout.is_empty() {
-    combined.push_str(&stdout);
-  }
-
-  if !stderr.is_empty() {
-    if !combined.is_empty() {
-      combined.push('\n');
+  if output.status.success() {
+    let commit_hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if !commit_hash.is_empty() {
+      return Ok(Some(commit_hash));
     }
-    combined.push_str(&stderr);
   }
 
-  Ok(GitCommandOutput {
-    output: combined,
-    success,
-  })
+  Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+  use twig_test_utils::git::GitRepoTestGuard;
+
+  use super::*;
+
+  /// `get_rebase_head_commit` must return `None` when there is no active rebase.
+  #[test]
+  fn get_rebase_head_commit_returns_none_outside_rebase() {
+    let guard = GitRepoTestGuard::new();
+    let result = get_rebase_head_commit(guard.path()).expect("command should not error");
+    assert!(result.is_none(), "Expected None outside a rebase, got {result:?}");
+  }
+
+  /// Verify that the `force_push` field on `CascadeArgs` is wired up correctly.
+  #[test]
+  fn cascade_args_force_push_field_round_trips() {
+    let args = CascadeArgs {
+      max_depth: None,
+      force: false,
+      show_graph: false,
+      autostash: false,
+      force_push: true,
+      preview: false,
+      repo: None,
+    };
+    assert!(args.force_push, "force_push should be true");
+    let args_off = CascadeArgs {
+      force_push: false,
+      ..args
+    };
+    assert!(!args_off.force_push, "force_push should be false");
+  }
+
+  /// `handle_force_push` must return an error when no remote is configured.
+  /// The git push to the fallback remote \"origin\" should fail in a bare temp
+  /// repo that has no remotes registered.
+  #[test]
+  fn handle_force_push_errors_when_no_remote_configured() {
+    let guard = GitRepoTestGuard::new();
+    let result = handle_force_push(guard.path(), "main");
+    assert!(result.is_err(), "Expected Err when no remote is configured, got Ok(())");
+  }
 }

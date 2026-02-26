@@ -12,6 +12,7 @@ pub mod consts;
 pub mod diagnostics;
 pub mod fixup;
 pub mod git;
+pub mod git_commands;
 pub mod plugin;
 pub mod self_update;
 pub mod user_defined_dependency_resolver;
