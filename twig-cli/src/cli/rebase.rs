@@ -133,7 +133,7 @@ fn rebase_upstream(repo_path: &Path, force: bool, show_graph: bool, autostash: b
           print_warning(&format!(
             "Conflicts detected while rebasing {current_branch_name} onto {parent}",
           ));
-          let resolution = handle_rebase_conflict(repo_path, &current_branch_name)?;
+          let resolution = handle_rebase_conflict()?;
 
           match resolution {
             ConflictResolution::Continue => match attempt_rebase_continue(repo_path)? {

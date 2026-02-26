@@ -214,7 +214,7 @@ fn rebase_downstream(
           // the user rather than treating it as an unrecoverable error.
           'conflict_loop: loop {
             print_warning(&format!("Conflicts detected while rebasing {branch} onto {parent}",));
-            let resolution = handle_rebase_conflict(repo_path, &branch)?;
+            let resolution = handle_rebase_conflict()?;
 
             match resolution {
               ConflictResolution::Continue => match attempt_rebase_continue(repo_path)? {

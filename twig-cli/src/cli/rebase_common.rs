@@ -82,74 +82,38 @@ pub fn execute_git_command(repo_path: &Path, args: &[&str]) -> Result<GitCommand
 
 /// Rebase the currently checked-out branch onto `onto`.
 pub fn rebase_branch(repo_path: &Path, onto: &str, autostash: bool) -> Result<RebaseResult> {
-  let mut args = vec!["rebase"];
-  if autostash {
-    args.push("--autostash");
-  }
-  args.push(onto);
-
-  let output = Command::new(consts::GIT_EXECUTABLE)
-    .args(&args)
-    .current_dir(repo_path)
-    .output()
-    .context("Failed to execute git rebase command")?;
-
-  let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-  let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-  if !stdout.is_empty() {
-    print_info(&stdout);
-  }
-
-  if !stderr.is_empty() {
-    if stderr.contains("up to date") || stdout.contains("up to date") {
-      return Ok(RebaseResult::UpToDate);
-    }
-
-    if stderr.contains("CONFLICT") || stdout.contains("CONFLICT") {
-      return Ok(RebaseResult::Conflict);
-    }
-
-    print_warning(&stderr);
-  }
-
-  if output.status.success() {
-    Ok(RebaseResult::Success)
-  } else {
-    Ok(RebaseResult::Error)
-  }
+  run_rebase(repo_path, onto, autostash, false)
 }
 
 /// Force-rebase the currently checked-out branch onto `onto`.
 pub fn rebase_branch_force(repo_path: &Path, onto: &str, autostash: bool) -> Result<RebaseResult> {
-  let mut args = vec!["rebase", "--force-rebase"];
+  run_rebase(repo_path, onto, autostash, true)
+}
+
+/// Shared implementation for both normal and force rebase.
+fn run_rebase(repo_path: &Path, onto: &str, autostash: bool, force: bool) -> Result<RebaseResult> {
+  let mut args = vec!["rebase"];
+  if force {
+    args.push("--force-rebase");
+  }
   if autostash {
     args.push("--autostash");
   }
   args.push(onto);
 
-  let output = Command::new(consts::GIT_EXECUTABLE)
-    .args(&args)
-    .current_dir(repo_path)
-    .output()
-    .context("Failed to execute git rebase command")?;
+  let result = execute_git_command(repo_path, &args)?;
 
-  let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-  let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-  if !stdout.is_empty() {
-    print_info(&stdout);
+  if !result.output.is_empty() {
+    print_info(&result.output);
   }
 
-  if !stderr.is_empty() {
-    if stderr.contains("CONFLICT") || stdout.contains("CONFLICT") {
-      return Ok(RebaseResult::Conflict);
-    }
-
-    print_warning(&stderr);
+  if result.output.contains("up to date") {
+    return Ok(RebaseResult::UpToDate);
   }
-
-  if output.status.success() {
+  if result.output.contains("CONFLICT") {
+    return Ok(RebaseResult::Conflict);
+  }
+  if result.success {
     Ok(RebaseResult::Success)
   } else {
     Ok(RebaseResult::Error)
@@ -157,7 +121,7 @@ pub fn rebase_branch_force(repo_path: &Path, onto: &str, autostash: bool) -> Res
 }
 
 /// Prompt the user to choose how to resolve a rebase conflict.
-pub fn handle_rebase_conflict(_repo_path: &Path, _branch: &str) -> Result<ConflictResolution> {
+pub fn handle_rebase_conflict() -> Result<ConflictResolution> {
   print_info("Rebase conflict detected. You have several options:");
   println!();
 
