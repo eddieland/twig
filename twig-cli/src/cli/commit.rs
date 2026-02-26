@@ -172,10 +172,18 @@ fn create_fixup_commit(repo_path: &std::path::Path, message: &str) -> Result<()>
     tracing::debug!("{}", String::from_utf8_lossy(&output.stdout));
     Ok(())
   } else {
-    print_error("Failed to create fixup commit.");
-    // Show error details with -v or higher
-    tracing::warn!("{}", String::from_utf8_lossy(&output.stderr));
-    Err(anyhow::anyhow!("Git commit --fixup command failed"))
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let details = if !stderr.is_empty() {
+      stderr.to_string()
+    } else if !stdout.is_empty() {
+      stdout.to_string()
+    } else {
+      "No output from git".to_string()
+    };
+    print_error(&format!("Failed to create fixup commit:\n{details}"));
+    tracing::warn!("Git commit --fixup failed: {}", details);
+    Err(anyhow::anyhow!("Git commit --fixup command failed: {details}"))
   }
 }
 
