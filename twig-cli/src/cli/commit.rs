@@ -11,6 +11,7 @@ use twig_core::{detect_repository, get_current_branch_jira_issue};
 use twig_jira::{create_jira_runtime_and_client, get_jira_host};
 
 use crate::consts;
+use crate::fixup::creator::run_fixup_commit;
 
 /// Arguments for the commit command
 #[derive(Args)]
@@ -160,23 +161,9 @@ fn create_fixup_commit(repo_path: &std::path::Path, message: &str) -> Result<()>
 
   tracing::info!("Creating fixup commit for commit {commit_hash}");
 
-  let output = std::process::Command::new(consts::GIT_EXECUTABLE)
-    .args(["commit", "--fixup", &commit_hash])
-    .current_dir(repo_path)
-    .output()
-    .context("Failed to execute git commit --fixup command")?;
-
-  if output.status.success() {
-    print_success("Fixup commit created successfully.");
-    // Only show git output with -vv or higher
-    tracing::debug!("{}", String::from_utf8_lossy(&output.stdout));
-    Ok(())
-  } else {
-    print_error("Failed to create fixup commit.");
-    // Show error details with -v or higher
-    tracing::warn!("{}", String::from_utf8_lossy(&output.stderr));
-    Err(anyhow::anyhow!("Git commit --fixup command failed"))
-  }
+  run_fixup_commit(repo_path, &commit_hash)?;
+  print_success("Fixup commit created successfully.");
+  Ok(())
 }
 
 /// Generate a commit message using Jira issue information
