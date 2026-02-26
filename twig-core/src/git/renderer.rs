@@ -346,6 +346,7 @@ impl BranchTableRenderer {
     Ok(())
   }
 
+  #[allow(clippy::only_used_in_recursion)]
   fn collect_rows(
     &self,
     graph: &BranchGraph,
