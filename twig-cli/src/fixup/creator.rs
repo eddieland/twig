@@ -47,13 +47,14 @@ pub fn run_fixup_commit(repo_path: &Path, commit_hash: &str) -> Result<()> {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let details = if !stderr.is_empty() {
-      stderr.to_string()
+      stderr.into_owned()
     } else if !stdout.is_empty() {
-      stdout.to_string()
+      stdout.into_owned()
     } else {
       "No output from git".to_string()
     };
-    print_error(&format!("Failed to create fixup commit:\n{details}"));
+    let trimmed = details.trim_end();
+    print_error(&format!("Failed to create fixup commit:\n{trimmed}"));
     tracing::warn!("Git commit --fixup failed: {}", details);
     Err(anyhow::anyhow!("Git commit --fixup command failed: {details}"))
   }
