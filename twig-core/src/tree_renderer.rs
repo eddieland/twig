@@ -86,7 +86,11 @@ pub(crate) struct RenderContext {
 
 impl RenderContext {
   pub(crate) fn new(depth: u32, prefix: &[String], is_last_sibling: bool) -> Self {
-    Self { depth, prefix: prefix.to_vec(), is_last_sibling }
+    Self {
+      depth,
+      prefix: prefix.to_vec(),
+      is_last_sibling,
+    }
   }
 
   /// Derive the rendering context for a child node at the next depth level.
@@ -95,7 +99,11 @@ impl RenderContext {
     if self.depth > 0 {
       new_prefix.push(if is_last { "    " } else { "│   " }.to_string());
     }
-    Self { depth: self.depth + 1, prefix: new_prefix, is_last_sibling: is_last }
+    Self {
+      depth: self.depth + 1,
+      prefix: new_prefix,
+      is_last_sibling: is_last,
+    }
   }
 }
 
@@ -468,8 +476,7 @@ impl<'a> TreeRenderer<'a> {
 
     for branch_name in self.branch_nodes.keys() {
       if !visited.contains(branch_name)
-        && let Some(cycle) =
-          self.find_cycle_from_branch(branch_name, &mut visited, &mut rec_stack, &mut Vec::new())
+        && let Some(cycle) = self.find_cycle_from_branch(branch_name, &mut visited, &mut rec_stack, &mut Vec::new())
       {
         circular_deps.push(cycle);
       }
@@ -585,7 +592,14 @@ impl<'a> TreeRenderer<'a> {
       .any(|cycle| cycle.contains(&branch_name.to_string()));
 
     if self.visited.contains(branch_name) {
-      self.print_branch_reference(writer, branch_name, ctx.depth, &ctx.prefix, ctx.is_last_sibling, is_in_circular_dep)?;
+      self.print_branch_reference(
+        writer,
+        branch_name,
+        ctx.depth,
+        &ctx.prefix,
+        ctx.is_last_sibling,
+        is_in_circular_dep,
+      )?;
       return Ok(());
     }
 
@@ -603,7 +617,14 @@ impl<'a> TreeRenderer<'a> {
       reference_count: self.count_branch_references(branch_name),
     };
 
-    self.print_branch_with_cross_refs(writer, node, ctx.depth, &ctx.prefix, ctx.is_last_sibling, &cross_ref_info)?;
+    self.print_branch_with_cross_refs(
+      writer,
+      node,
+      ctx.depth,
+      &ctx.prefix,
+      ctx.is_last_sibling,
+      &cross_ref_info,
+    )?;
 
     let children = node.children.clone();
     let child_count = children.len();
@@ -618,13 +639,7 @@ impl<'a> TreeRenderer<'a> {
       };
 
       if should_render_child {
-        self.render_tree_with_enhanced_cross_refs(
-          writer,
-          child,
-          ctx.child(is_last),
-          max_ref_depth,
-          circular_deps,
-        )?;
+        self.render_tree_with_enhanced_cross_refs(writer, child, ctx.child(is_last), max_ref_depth, circular_deps)?;
       }
     }
 
@@ -649,11 +664,7 @@ impl<'a> TreeRenderer<'a> {
 
     if depth > 0 {
       let ref_symbol = if is_in_circular_dep {
-        if is_last_sibling {
-          "└🔄─ "
-        } else {
-          "├🔄─ "
-        }
+        if is_last_sibling { "└🔄─ " } else { "├🔄─ " }
       } else if is_last_sibling {
         "└→─ "
       } else {
@@ -711,23 +722,11 @@ impl<'a> TreeRenderer<'a> {
 
     if depth > 0 {
       let tree_symbol = if cross_ref_info.is_in_circular_dep {
-        if is_last_sibling {
-          "└🔄─ "
-        } else {
-          "├🔄─ "
-        }
+        if is_last_sibling { "└🔄─ " } else { "├🔄─ " }
       } else if cross_ref_info.has_multiple_parents {
-        if is_last_sibling {
-          "└◈─ "
-        } else {
-          "├◈─ "
-        }
+        if is_last_sibling { "└◈─ " } else { "├◈─ " }
       } else if cross_ref_info.reference_count > 1 {
-        if is_last_sibling {
-          "└◇─ "
-        } else {
-          "├◇─ "
-        }
+        if is_last_sibling { "└◇─ " } else { "├◇─ " }
       } else if is_last_sibling {
         "└── "
       } else {
@@ -842,7 +841,11 @@ impl<'a> TreeRenderer<'a> {
 
       let mut new_prefix = prefix.to_vec();
       if depth > 0 {
-        new_prefix.push(if is_last { "    ".to_string() } else { "│   ".to_string() });
+        new_prefix.push(if is_last {
+          "    ".to_string()
+        } else {
+          "│   ".to_string()
+        });
       }
 
       self.render_tree_with_diamonds(writer, child, depth + 1, &new_prefix, is_last, diamond_patterns)?;
@@ -991,13 +994,8 @@ impl<'a> TreeRenderer<'a> {
         writeln!(writer)?;
       }
 
-      let branch_stats = self.render_branch_with_deep_nesting(
-        writer,
-        root,
-        RenderContext::new(0, &[], true),
-        config,
-        &circular_deps,
-      )?;
+      let branch_stats =
+        self.render_branch_with_deep_nesting(writer, root, RenderContext::new(0, &[], true), config, &circular_deps)?;
 
       stats.max_depth_reached = stats.max_depth_reached.max(branch_stats.max_depth_reached);
       stats.branches_pruned += branch_stats.branches_pruned;
@@ -1029,7 +1027,10 @@ impl<'a> TreeRenderer<'a> {
     config: &DeepNestingConfig,
     circular_deps: &[Vec<String>],
   ) -> io::Result<RenderStats> {
-    let mut branch_stats = RenderStats { max_depth_reached: ctx.depth, ..RenderStats::default() };
+    let mut branch_stats = RenderStats {
+      max_depth_reached: ctx.depth,
+      ..RenderStats::default()
+    };
 
     if let Some(max_depth) = config.max_depth
       && ctx.depth > max_depth
@@ -1044,7 +1045,14 @@ impl<'a> TreeRenderer<'a> {
       .any(|cycle| cycle.contains(&branch_name.to_string()));
 
     if self.visited.contains(branch_name) {
-      self.print_branch_reference(writer, branch_name, ctx.depth, &ctx.prefix, ctx.is_last_sibling, is_in_circular_dep)?;
+      self.print_branch_reference(
+        writer,
+        branch_name,
+        ctx.depth,
+        &ctx.prefix,
+        ctx.is_last_sibling,
+        is_in_circular_dep,
+      )?;
       return Ok(branch_stats);
     }
 
@@ -1056,7 +1064,14 @@ impl<'a> TreeRenderer<'a> {
     };
 
     if config.enable_pruning && self.should_prune_subtree(node, ctx.depth, config) {
-      self.print_pruning_indicator(writer, branch_name, ctx.depth, &ctx.prefix, ctx.is_last_sibling, node.children.len())?;
+      self.print_pruning_indicator(
+        writer,
+        branch_name,
+        ctx.depth,
+        &ctx.prefix,
+        ctx.is_last_sibling,
+        node.children.len(),
+      )?;
       branch_stats.branches_pruned += self.count_subtree_size(node);
       return Ok(branch_stats);
     }
@@ -1074,7 +1089,16 @@ impl<'a> TreeRenderer<'a> {
         let end = std::cmp::min(start + page_size, child_count);
 
         if page > 0 {
-          self.print_pagination_separator(writer, &ctx.child(false).prefix, PaginationInfo { page, start, end, total: child_count })?;
+          self.print_pagination_separator(
+            writer,
+            &ctx.child(false).prefix,
+            PaginationInfo {
+              page,
+              start,
+              end,
+              total: child_count,
+            },
+          )?;
         }
 
         for (i, child) in children[start..end].iter().enumerate() {
@@ -1083,13 +1107,8 @@ impl<'a> TreeRenderer<'a> {
           let is_last_overall = global_index == child_count - 1;
           let is_last = is_last_in_page && is_last_overall;
 
-          let child_stats = self.render_branch_with_deep_nesting(
-            writer,
-            child,
-            ctx.child(is_last),
-            config,
-            circular_deps,
-          )?;
+          let child_stats =
+            self.render_branch_with_deep_nesting(writer, child, ctx.child(is_last), config, circular_deps)?;
 
           branch_stats.max_depth_reached = branch_stats.max_depth_reached.max(child_stats.max_depth_reached);
           branch_stats.branches_pruned += child_stats.branches_pruned;
@@ -1099,13 +1118,8 @@ impl<'a> TreeRenderer<'a> {
       for (i, child) in children.iter().enumerate() {
         let is_last = i == child_count - 1;
 
-        let child_stats = self.render_branch_with_deep_nesting(
-          writer,
-          child,
-          ctx.child(is_last),
-          config,
-          circular_deps,
-        )?;
+        let child_stats =
+          self.render_branch_with_deep_nesting(writer, child, ctx.child(is_last), config, circular_deps)?;
 
         branch_stats.max_depth_reached = branch_stats.max_depth_reached.max(child_stats.max_depth_reached);
         branch_stats.branches_pruned += child_stats.branches_pruned;
@@ -1244,10 +1258,7 @@ impl<'a> TreeRenderer<'a> {
     line.push_str(symbol);
 
     let pruning_msg = if self.no_color {
-      format!(
-        "{} ... [pruned subtree with {} children] ...",
-        branch_name, child_count
-      )
+      format!("{} ... [pruned subtree with {} children] ...", branch_name, child_count)
     } else {
       format!(
         "{} ... [pruned subtree with {} children] ...",
@@ -2242,7 +2253,12 @@ mod tests {
     // Create a simple diamond: main -> feature1, feature2 -> merge
     branches.insert(
       "main".to_string(),
-      create_test_branch("main", false, vec![], vec!["feature1".to_string(), "feature2".to_string()]),
+      create_test_branch(
+        "main",
+        false,
+        vec![],
+        vec!["feature1".to_string(), "feature2".to_string()],
+      ),
     );
     branches.insert(
       "feature1".to_string(),
@@ -2290,7 +2306,12 @@ mod tests {
 
     branches.insert(
       "main".to_string(),
-      create_test_branch("main", false, vec![], vec!["feature1".to_string(), "feature2".to_string()]),
+      create_test_branch(
+        "main",
+        false,
+        vec![],
+        vec!["feature1".to_string(), "feature2".to_string()],
+      ),
     );
     branches.insert(
       "feature1".to_string(),
@@ -2319,11 +2340,16 @@ mod tests {
 
     renderer.visited.clear(); // Reset for second rendering
     let mut diamond_output = Vec::new();
-    renderer.render_with_diamonds(&mut diamond_output, &roots, None, true).unwrap();
+    renderer
+      .render_with_diamonds(&mut diamond_output, &roots, None, true)
+      .unwrap();
     let diamond_str = String::from_utf8(diamond_output).unwrap();
 
     // They should be different (diamond rendering should have special symbols)
-    assert_ne!(regular_str, diamond_str, "Diamond and regular rendering should be different");
+    assert_ne!(
+      regular_str, diamond_str,
+      "Diamond and regular rendering should be different"
+    );
 
     // Both should contain all branch names
     for branch in ["main", "feature1", "feature2", "merge"] {
@@ -2369,7 +2395,12 @@ mod tests {
 
     branches.insert(
       "main".to_string(),
-      create_test_branch("main", false, vec![], vec!["feature1".to_string(), "feature2".to_string()]),
+      create_test_branch(
+        "main",
+        false,
+        vec![],
+        vec!["feature1".to_string(), "feature2".to_string()],
+      ),
     );
     branches.insert(
       "feature1".to_string(),
@@ -2430,12 +2461,7 @@ mod tests {
     );
     branches.insert(
       "common".to_string(),
-      create_test_branch(
-        "common",
-        false,
-        vec!["sub1".to_string(), "sub2".to_string()],
-        vec![],
-      ),
+      create_test_branch("common", false, vec!["sub1".to_string(), "sub2".to_string()], vec![]),
     );
 
     let roots = vec!["main".to_string()];
@@ -2454,7 +2480,12 @@ mod tests {
 
     branches.insert(
       "main".to_string(),
-      create_test_branch("main", false, vec![], vec!["feature1".to_string(), "feature2".to_string()]),
+      create_test_branch(
+        "main",
+        false,
+        vec![],
+        vec!["feature1".to_string(), "feature2".to_string()],
+      ),
     );
     branches.insert(
       "feature1".to_string(),
@@ -2469,7 +2500,10 @@ mod tests {
     let renderer = TreeRenderer::new(&branches, &roots, None, true);
 
     let circular_deps = renderer.detect_circular_dependencies();
-    assert!(circular_deps.is_empty(), "Normal tree should have no circular dependencies");
+    assert!(
+      circular_deps.is_empty(),
+      "Normal tree should have no circular dependencies"
+    );
   }
 
   #[test]
@@ -2700,7 +2734,12 @@ mod tests {
 
     branches.insert(
       "main".to_string(),
-      create_test_branch("main", false, vec![], vec!["feature1".to_string(), "feature2".to_string()]),
+      create_test_branch(
+        "main",
+        false,
+        vec![],
+        vec!["feature1".to_string(), "feature2".to_string()],
+      ),
     );
     branches.insert(
       "feature1".to_string(),

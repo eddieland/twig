@@ -168,12 +168,7 @@ impl<'a> DiamondDetector<'a> {
   }
 
   /// Construct a diamond pattern from ancestor and merge point
-  fn construct_diamond(
-    &self,
-    ancestor: &str,
-    merge_point: &str,
-    merge_parents: &[String],
-  ) -> Option<DiamondPattern> {
+  fn construct_diamond(&self, ancestor: &str, merge_point: &str, merge_parents: &[String]) -> Option<DiamondPattern> {
     // Find paths from ancestor to merge point through different parents
     let mut paths = Vec::new();
 
@@ -325,12 +320,7 @@ mod tests {
   use crate::state::BranchMetadata;
   use crate::tree_renderer::BranchNode;
 
-  fn create_test_branch(
-    name: &str,
-    is_current: bool,
-    parents: Vec<String>,
-    children: Vec<String>,
-  ) -> BranchNode {
+  fn create_test_branch(name: &str, is_current: bool, parents: Vec<String>, children: Vec<String>) -> BranchNode {
     BranchNode {
       name: name.to_string(),
       is_current,
@@ -353,7 +343,12 @@ mod tests {
     // Create a simple diamond: main -> feature1, feature2 -> merge
     branches.insert(
       "main".to_string(),
-      create_test_branch("main", false, vec![], vec!["feature1".to_string(), "feature2".to_string()]),
+      create_test_branch(
+        "main",
+        false,
+        vec![],
+        vec!["feature1".to_string(), "feature2".to_string()],
+      ),
     );
     branches.insert(
       "feature1".to_string(),
@@ -395,7 +390,12 @@ mod tests {
     );
     branches.insert(
       "feature1".to_string(),
-      create_test_branch("feature1", false, vec!["main".to_string()], vec!["feature2".to_string()]),
+      create_test_branch(
+        "feature1",
+        false,
+        vec!["main".to_string()],
+        vec!["feature2".to_string()],
+      ),
     );
     branches.insert(
       "feature2".to_string(),
@@ -415,15 +415,30 @@ mod tests {
     // Create nested diamonds: main -> feature1, feature2 -> inner_merge -> outer_merge
     branches.insert(
       "main".to_string(),
-      create_test_branch("main", false, vec![], vec!["feature1".to_string(), "feature2".to_string()]),
+      create_test_branch(
+        "main",
+        false,
+        vec![],
+        vec!["feature1".to_string(), "feature2".to_string()],
+      ),
     );
     branches.insert(
       "feature1".to_string(),
-      create_test_branch("feature1", false, vec!["main".to_string()], vec!["inner_merge".to_string()]),
+      create_test_branch(
+        "feature1",
+        false,
+        vec!["main".to_string()],
+        vec!["inner_merge".to_string()],
+      ),
     );
     branches.insert(
       "feature2".to_string(),
-      create_test_branch("feature2", false, vec!["main".to_string()], vec!["inner_merge".to_string()]),
+      create_test_branch(
+        "feature2",
+        false,
+        vec!["main".to_string()],
+        vec!["inner_merge".to_string()],
+      ),
     );
     branches.insert(
       "inner_merge".to_string(),
@@ -458,7 +473,9 @@ mod tests {
 
     assert!(diamonds.len() >= 1);
     // Verify at least one diamond was detected
-    let has_main_diamond = diamonds.iter().any(|d| d.ancestor == "main" && d.merge_point == "inner_merge");
+    let has_main_diamond = diamonds
+      .iter()
+      .any(|d| d.ancestor == "main" && d.merge_point == "inner_merge");
     assert!(has_main_diamond);
   }
 }

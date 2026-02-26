@@ -52,8 +52,7 @@ pub use crate::github::{GitHubPr, GitHubRepo, GitRemoteScheme};
 /// Returns an error if either branch cannot be resolved or if the computation
 /// fails.
 pub fn get_commits_ahead_behind(repo: &Git2Repository, branch: &str, base: &str) -> Result<(usize, usize)> {
-  let branch_oid =
-    resolve_commit_oid(repo, branch).with_context(|| format!("Failed to resolve branch '{branch}'"))?;
+  let branch_oid = resolve_commit_oid(repo, branch).with_context(|| format!("Failed to resolve branch '{branch}'"))?;
   let base_oid = resolve_commit_oid(repo, base).with_context(|| format!("Failed to resolve branch '{base}'"))?;
 
   let (ahead, behind) = repo
@@ -96,7 +95,9 @@ mod tests {
   fn configure_identity(repo: &Repository) {
     let mut config = repo.config().expect("config");
     config.set_str("user.name", "Twig Bot").expect("set user.name");
-    config.set_str("user.email", "twig@example.com").expect("set user.email");
+    config
+      .set_str("user.email", "twig@example.com")
+      .expect("set user.email");
   }
 
   fn checkout_branch(repo: &Repository, name: &str) {
@@ -109,7 +110,9 @@ mod tests {
   fn commit_file(repo: &Repository, path: &Path, contents: &str, message: &str) {
     fs::write(path, contents).expect("write file");
     let mut index = repo.index().expect("index");
-    let rel_path = path.strip_prefix(repo.workdir().expect("workdir")).expect("strip prefix");
+    let rel_path = path
+      .strip_prefix(repo.workdir().expect("workdir"))
+      .expect("strip prefix");
     index.add_path(rel_path).expect("add path");
     index.write().expect("write index");
 
@@ -158,7 +161,9 @@ mod tests {
 
     // create feature branch from current main
     let current_commit = repo.head().expect("head").peel_to_commit().expect("peel");
-    repo.branch("feature/work", &current_commit, true).expect("create feature");
+    repo
+      .branch("feature/work", &current_commit, true)
+      .expect("create feature");
     checkout_branch(&repo, "feature/work");
 
     // feature commit — makes branch 1 ahead

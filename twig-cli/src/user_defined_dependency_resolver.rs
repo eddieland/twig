@@ -200,9 +200,7 @@ impl UserDefinedDependencyResolver {
           }
         }
         Err(e) => {
-          debug!(
-            "Unable to compute ahead/behind for {branch_name} relative to {parent_name}: {e:#}"
-          );
+          debug!("Unable to compute ahead/behind for {branch_name} relative to {parent_name}: {e:#}");
         }
       }
     }
