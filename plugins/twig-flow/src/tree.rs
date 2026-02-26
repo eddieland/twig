@@ -3,22 +3,19 @@
 //! This module orchestrates [`twig_core`]'s graph, tree-algorithm, and renderer
 //! primitives into the end-to-end workflow behind `twig-flow` (no `--target`):
 //!
-//! 1. **Repository & state loading** — [`get_repository`] locates the Git repo;
-//!    [`RepoState`] provides persisted branch dependencies and root configuration
-//!    from `.twig/state.json`.
-//! 2. **Optional branch switching** — The `--root` and `--parent` CLI flags
-//!    check out a branch before rendering, delegating to [`checkout_branch`].
-//! 3. **Graph construction** — [`BranchGraphBuilder`] materialises a
-//!    [`BranchGraph`] DAG from the repository's local branches and their
-//!    configured dependency edges.
-//! 4. **Orphan handling** — Branches without declared parents are detected by
-//!    [`find_orphaned_branches`], grafted under the default root via
-//!    [`attach_orphans_to_default_root`], and annotated with a visual marker
-//!    through [`annotate_orphaned_branches`].
-//! 5. **Filtering** — An optional `--include` glob narrows the graph to matching
-//!    branches (plus ancestors) with [`filter_branch_graph`].
-//! 6. **Rendering** — [`BranchTableRenderer`] formats the final graph as a
-//!    styled, tree-aligned table written to stdout.
+//! 1. **Repository & state loading** — [`get_repository`] locates the Git repo; [`RepoState`] provides persisted branch
+//!    dependencies and root configuration from `.twig/state.json`.
+//! 2. **Optional branch switching** — The `--root` and `--parent` CLI flags check out a branch before rendering,
+//!    delegating to [`checkout_branch`].
+//! 3. **Graph construction** — [`BranchGraphBuilder`] materialises a [`BranchGraph`] DAG from the repository's local
+//!    branches and their configured dependency edges.
+//! 4. **Orphan handling** — Branches without declared parents are detected by [`find_orphaned_branches`], grafted under
+//!    the default root via [`attach_orphans_to_default_root`], and annotated with a visual marker through
+//!    [`annotate_orphaned_branches`].
+//! 5. **Filtering** — An optional `--include` glob narrows the graph to matching branches (plus ancestors) with
+//!    [`filter_branch_graph`].
+//! 6. **Rendering** — [`BranchTableRenderer`] formats the final graph as a styled, tree-aligned table written to
+//!    stdout.
 //!
 //! All heavy lifting lives in `twig_core::git`; this module is the
 //! user-facing orchestrator that wires those building blocks together with
@@ -172,8 +169,8 @@ fn load_repo_state(repo: &Repository) -> Result<RepoState> {
 /// different branch before rendering the tree. `Selection` carries the
 /// outcome back to [`run`]:
 ///
-/// * `render_root` — if set, overrides [`determine_render_root`]'s default
-///   heuristic so the tree is rooted at the branch the user switched to.
+/// * `render_root` — if set, overrides [`determine_render_root`]'s default heuristic so the tree is rooted at the
+///   branch the user switched to.
 /// * `message` — an optional success message to display after the checkout.
 ///
 /// A default (empty) `Selection` means no branch switch was requested and
@@ -268,11 +265,10 @@ fn current_branch_name(repo: &Repository) -> Option<String> {
 /// Configures the core rendering pipeline:
 ///
 /// * [`BranchTableSchema`] — uses `"—"` as the placeholder for empty cells.
-/// * [`BranchTableStyle`] — color mode resolved from the `TWIG_COLORS`
-///   environment variable (see [`resolve_color_mode`]).
-/// * [`BranchTableRenderer`] — receives the schema, style, and any
-///   `highlighted` branches (those matched by an `--include` filter) so
-///   they are visually distinguished in the output.
+/// * [`BranchTableStyle`] — color mode resolved from the `TWIG_COLORS` environment variable (see
+///   [`resolve_color_mode`]).
+/// * [`BranchTableRenderer`] — receives the schema, style, and any `highlighted` branches (those matched by an
+///   `--include` filter) so they are visually distinguished in the output.
 ///
 /// # Errors
 ///
@@ -293,8 +289,8 @@ fn render_table(graph: &BranchGraph, root: &BranchName, highlighted: &BTreeSet<B
 ///
 /// * `"yes"` → [`BranchTableColorMode::Always`]
 /// * `"no"`  → [`BranchTableColorMode::Never`]
-/// * Anything else (including unset) → [`BranchTableColorMode::Auto`], which
-///   lets the renderer decide based on terminal capability.
+/// * Anything else (including unset) → [`BranchTableColorMode::Auto`], which lets the renderer decide based on terminal
+///   capability.
 fn resolve_color_mode() -> BranchTableColorMode {
   match std::env::var("TWIG_COLORS").as_deref() {
     Ok("yes") => BranchTableColorMode::Always,
