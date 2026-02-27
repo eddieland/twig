@@ -240,11 +240,10 @@ pub fn run() -> Result<()> {
 
   // --- Display candidates ---
   println!();
-  println!(
-    "{} Found {}:",
-    "✔".green(),
-    pluralize(candidates.len(), "branch to prune", "branches to prune").yellow(),
-  );
+  print_success(&format!(
+    "Found {}:",
+    pluralize(candidates.len(), "branch to prune", "branches to prune"),
+  ));
   println!();
 
   for (i, candidate) in candidates.iter().enumerate() {
@@ -267,18 +266,19 @@ pub fn run() -> Result<()> {
     println!();
     let labels: Vec<String> = candidates.iter().map(|c| c.select_label()).collect();
 
-    let selections = MultiSelect::with_theme(&twig_theme())
+    match MultiSelect::with_theme(&twig_theme())
       .with_prompt("Select branches to delete (space to toggle, enter to confirm)")
       .items(&labels)
       .defaults(&vec![true; labels.len()])
       .interact_opt()
-      .unwrap_or(None);
-
-    match selections {
-      Some(s) => s,
-      None => {
+    {
+      Ok(Some(s)) => s,
+      Ok(None) => {
         print_info("Aborted — no branches were deleted.");
         return Ok(());
+      }
+      Err(e) => {
+        return Err(anyhow::anyhow!("Failed to display selection prompt: {e}"));
       }
     }
   };
