@@ -33,8 +33,8 @@ pub use git::switch::{
   select_repo_url, store_github_pr_association, store_jira_association, try_checkout_remote_branch,
 };
 pub use git::{
-  checkout_branch, current_branch, detect_repository, detect_repository_from_path, get_repository, in_git_repository,
-  resolve_to_main_repo_path,
+  checkout_branch, current_branch, delete_local_branch, detect_repository, detect_repository_from_path, get_repository,
+  in_git_repository, resolve_to_main_repo_path,
 };
 pub use github::{GitHubPr, GitHubRepo, GitRemoteScheme};
 pub use jira_parser::{JiraParseError, JiraParsingConfig, JiraParsingMode, JiraTicketParser, create_jira_parser};

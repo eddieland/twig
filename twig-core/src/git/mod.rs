@@ -11,7 +11,9 @@ pub mod repository;
 pub mod switch;
 pub mod tree;
 
-pub use branches::{branch_exists, checkout_branch, current_branch, get_local_branches, get_upstream_branch};
+pub use branches::{
+  branch_exists, checkout_branch, current_branch, delete_local_branch, get_local_branches, get_upstream_branch,
+};
 pub use detection::{detect_repository, detect_repository_from_path, in_git_repository, resolve_to_main_repo_path};
 pub use graph::{
   BranchAnnotationValue, BranchDivergence, BranchEdge, BranchGraph, BranchGraphBuilder, BranchGraphError, BranchHead,

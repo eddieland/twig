@@ -93,6 +93,42 @@ pub fn checkout_branch(repo: &Repository, branch_name: &str) -> Result<()> {
   Ok(())
 }
 
+/// Delete a local branch by name.
+///
+/// Handles a known libgit2 issue where branch deletion reports an error when
+/// trying to clean up config entries that don't exist (e.g., when a branch has
+/// partial config from external tools like GitHub CLI). The error looks like:
+/// `"could not find key 'branch.<name>.<key>' to delete"`
+///
+/// When we see this specific config-cleanup error we verify that the branch
+/// reference was actually removed and, if so, treat the operation as
+/// successful.
+///
+/// See: <https://github.com/libgit2/libgit2/issues/4247>
+pub fn delete_local_branch(repo: &Repository, branch_name: &str) -> Result<()> {
+  let mut branch = repo
+    .find_branch(branch_name, git2::BranchType::Local)
+    .with_context(|| format!("Branch '{branch_name}' not found"))?;
+
+  match branch.delete() {
+    Ok(()) => Ok(()),
+    Err(e) => {
+      let is_config_key_error = e.class() == git2::ErrorClass::Config && e.message().contains("could not find key");
+
+      if is_config_key_error {
+        // Verify whether the branch was actually deleted despite the config error.
+        if let Err(lookup_err) = repo.find_branch(branch_name, git2::BranchType::Local)
+          && lookup_err.code() == git2::ErrorCode::NotFound
+        {
+          return Ok(());
+        }
+      }
+
+      Err(e.into())
+    }
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use twig_test_utils::git::{GitRepoTestGuard, create_commit};
@@ -232,5 +268,29 @@ mod tests {
       "Switching to feature should leave no staged changes, but the index \
        does not match the feature branch tree."
     );
+  }
+
+  #[test]
+  fn delete_local_branch_removes_branch() {
+    let guard = repo_with_feature_branch();
+    let repo = &guard.repo;
+
+    // Switch back to main so we can delete the feature branch
+    checkout_branch(repo, "main").unwrap();
+
+    assert!(repo.find_branch("feature", git2::BranchType::Local).is_ok());
+
+    delete_local_branch(repo, "feature").unwrap();
+
+    assert!(repo.find_branch("feature", git2::BranchType::Local).is_err());
+  }
+
+  #[test]
+  fn delete_local_branch_errors_for_missing_branch() {
+    let guard = GitRepoTestGuard::new();
+    create_commit(&guard.repo, "base.txt", "base content\n", "initial commit").unwrap();
+
+    let result = delete_local_branch(&guard.repo, "nonexistent");
+    assert!(result.is_err());
   }
 }

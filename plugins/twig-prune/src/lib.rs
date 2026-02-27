@@ -8,6 +8,7 @@ use clap::Parser;
 use dialoguer::MultiSelect;
 use git2::BranchType;
 use owo_colors::OwoColorize;
+use twig_core::git::delete_local_branch;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::plugin::PluginContext;
 use twig_core::state::RepoState;
@@ -391,34 +392,5 @@ fn display_summary(summary: &PruneSummary) {
         .collect::<Vec<_>>()
         .join(", "),
     );
-  }
-}
-
-fn delete_local_branch(repo: &git2::Repository, branch_name: &str) -> Result<()> {
-  let mut branch = repo
-    .find_branch(branch_name, BranchType::Local)
-    .with_context(|| format!("Branch '{branch_name}' not found"))?;
-
-  match branch.delete() {
-    Ok(()) => Ok(()),
-    Err(e) => {
-      // Handle a known libgit2 issue where branch deletion fails when trying to
-      // clean up config entries that don't exist. Despite the error, the branch
-      // reference itself may have been deleted.
-      // See: https://github.com/libgit2/libgit2/issues/4247
-      let is_config_key_error = e.class() == git2::ErrorClass::Config && e.message().contains("could not find key");
-
-      if is_config_key_error {
-        match repo.find_branch(branch_name, BranchType::Local) {
-          Err(lookup_err) if lookup_err.code() == git2::ErrorCode::NotFound => {
-            // Branch is gone — deletion succeeded despite the config cleanup error
-            return Ok(());
-          }
-          _ => {}
-        }
-      }
-
-      Err(e.into())
-    }
   }
 }
