@@ -441,6 +441,30 @@ impl RepoState {
     removed
   }
 
+  /// Remove all parent dependencies for the specified child branch.
+  ///
+  /// # Returns
+  ///
+  /// The names of the removed parent branches (empty if none existed).
+  pub fn remove_child_dependencies(&mut self, child: &str) -> Vec<String> {
+    let mut removed_parents = Vec::new();
+
+    self.dependencies.retain(|d| {
+      if d.child == child {
+        removed_parents.push(d.parent.clone());
+        false
+      } else {
+        true
+      }
+    });
+
+    if !removed_parents.is_empty() {
+      self.rebuild_indices();
+    }
+
+    removed_parents
+  }
+
   /// Remove all dependencies for a branch (both as child and parent)
   #[allow(dead_code)]
   pub fn remove_all_dependencies_for_branch(&mut self, branch: &str) -> usize {
@@ -1148,6 +1172,39 @@ mod tests {
     // Check indices were updated
     assert_eq!(state.get_dependency_children("parent-branch"), vec!["child-branch"]);
     assert_eq!(state.get_dependency_parents("child-branch"), vec!["parent-branch"]);
+  }
+
+  #[test]
+  fn test_remove_child_dependencies() {
+    let mut state = RepoState::default();
+
+    state
+      .add_dependency("feature/child".to_string(), "main".to_string())
+      .expect("add dep 1");
+    state
+      .add_dependency("feature/child".to_string(), "develop".to_string())
+      .expect("add dep 2");
+    state
+      .add_dependency("feature/sibling".to_string(), "main".to_string())
+      .expect("add dep 3");
+
+    let removed = state.remove_child_dependencies("feature/child");
+    assert_eq!(removed.len(), 2);
+    assert!(removed.contains(&"main".to_string()));
+    assert!(removed.contains(&"develop".to_string()));
+
+    assert!(state.get_dependency_parents("feature/child").is_empty());
+    assert_eq!(state.get_dependency_parents("feature/sibling"), vec!["main"]);
+  }
+
+  #[test]
+  fn test_remove_child_dependencies_then_readd_same_parent() {
+    let mut state = RepoState::default();
+    state.add_dependency("child".into(), "main".into()).expect("add");
+    let removed = state.remove_child_dependencies("child");
+    assert_eq!(removed, vec!["main"]);
+    state.add_dependency("child".into(), "main".into()).expect("readd");
+    assert_eq!(state.get_dependency_parents("child"), vec!["main"]);
   }
 
   #[test]
