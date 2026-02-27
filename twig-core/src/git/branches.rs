@@ -213,10 +213,12 @@ mod tests {
        the file was not checked out (branch changes appear reverted)."
     );
 
-    // The file's content must match what was committed.
+    // The file's content must match what was committed (trim to tolerate
+    // Windows \r\n line endings from core.autocrlf).
     let content = std::fs::read_to_string(repo_path.join("feature.txt")).unwrap();
     assert_eq!(
-      content, "feature work\n",
+      content.trim(),
+      "feature work",
       "feature.txt has unexpected content after branch switch."
     );
 
