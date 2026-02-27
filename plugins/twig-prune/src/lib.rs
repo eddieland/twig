@@ -1,23 +1,69 @@
 mod cli;
 
 use std::collections::HashSet;
+use std::fmt;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use dialoguer::Confirm;
+use dialoguer::MultiSelect;
 use git2::BranchType;
-use twig_core::GitHubRepo;
+use owo_colors::OwoColorize;
 use twig_core::output::{print_error, print_info, print_success, print_warning};
 use twig_core::plugin::PluginContext;
 use twig_core::state::RepoState;
+use twig_core::{GitHubRepo, twig_theme};
 
 use crate::cli::Cli;
+
+/// Why a branch is eligible for pruning.
+enum PruneReason {
+  /// Associated GitHub PR was merged.
+  MergedPr { number: u32, title: String },
+  /// Associated Jira issue reached a done status.
+  JiraDone { key: String, status: String },
+}
 
 /// A local branch eligible for pruning.
 struct Candidate {
   branch_name: String,
-  /// Human-readable reason, e.g. "PR #42 (Add feature)" or "PROJ-123 (Done)".
-  description: String,
+  reason: PruneReason,
+}
+
+impl Candidate {
+  /// Short label shown in the multi-select list.
+  fn select_label(&self) -> String {
+    match &self.reason {
+      PruneReason::MergedPr { number, title } => {
+        format!("{} — 🔀 PR #{number} ({title})", self.branch_name)
+      }
+      PruneReason::JiraDone { key, status } => {
+        format!("{} — 🎫 {key} ({status})", self.branch_name)
+      }
+    }
+  }
+}
+
+impl fmt::Display for Candidate {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}", self.select_label())
+  }
+}
+
+/// Tracks results across the prune operation.
+#[derive(Default)]
+struct PruneSummary {
+  total_candidates: usize,
+  deleted: Vec<String>,
+  skipped: Vec<String>,
+  errors: Vec<(String, String)>,
+}
+
+fn pluralize(count: usize, singular: &str, plural: &str) -> String {
+  if count == 1 {
+    format!("{count} {singular}")
+  } else {
+    format!("{count} {plural}")
+  }
 }
 
 /// Execute the plugin with the provided command-line arguments.
@@ -73,7 +119,10 @@ pub fn run() -> Result<()> {
     return Ok(());
   }
 
-  print_info(&format!("Found {} eligible local branch(es)", eligible_branches.len()));
+  println!(
+    "{}",
+    format!("Scanning {} for prunable branches...", eligible_branches.len()).dimmed()
+  );
 
   // Partition into branches with PRs
   let branches_with_prs: Vec<(String, u32)> = eligible_branches
@@ -90,14 +139,12 @@ pub fn run() -> Result<()> {
   let mut candidates: Vec<Candidate> = Vec::new();
 
   // --- GitHub PR check ---
-  if branches_with_prs.is_empty() {
-    print_info("No branches with associated GitHub PRs.");
-  } else {
+  if !branches_with_prs.is_empty() {
     match twig_gh::create_github_runtime_and_client(home.home_dir()) {
       Ok((rt, gh)) => {
         print_info(&format!(
-          "Checking {} PR(s) for {}",
-          branches_with_prs.len(),
+          "Checking {} for {}",
+          pluralize(branches_with_prs.len(), "PR", "PRs"),
           github_repo.full_name()
         ));
 
@@ -106,7 +153,10 @@ pub fn run() -> Result<()> {
             Ok(pr) if pr.merged_at.is_some() => {
               candidates.push(Candidate {
                 branch_name: branch_name.clone(),
-                description: format!("PR #{} ({})", pr.number, pr.title),
+                reason: PruneReason::MergedPr {
+                  number: pr.number,
+                  title: pr.title.clone(),
+                },
               });
             }
             Ok(_) => {} // PR exists but not merged
@@ -136,38 +186,48 @@ pub fn run() -> Result<()> {
     })
     .collect();
 
-  if branches_with_jira.is_empty() {
-    print_info("No branches with associated Jira issues.");
-  } else if let Ok(jira_host) = twig_jira::get_jira_host()
-    && let Ok((jira_rt, jira)) = twig_jira::create_jira_runtime_and_client(home.home_dir(), &jira_host)
-  {
-    const DONE_STATUSES: &[&str] = &["done", "closed", "resolved"];
+  if !branches_with_jira.is_empty() {
+    if let Ok(jira_host) = twig_jira::get_jira_host()
+      && let Ok((jira_rt, jira)) = twig_jira::create_jira_runtime_and_client(home.home_dir(), &jira_host)
+    {
+      const DONE_STATUSES: &[&str] = &["done", "closed", "resolved"];
 
-    print_info(&format!("Checking {} Jira issue(s)", branches_with_jira.len()));
+      print_info(&format!(
+        "Checking {}",
+        pluralize(branches_with_jira.len(), "Jira issue", "Jira issues"),
+      ));
 
-    for (branch_name, issue_key) in &branches_with_jira {
-      match jira_rt.block_on(jira.get_issue(issue_key)) {
-        Ok(issue) => {
-          let status = issue.fields.status.name.to_lowercase();
-          if DONE_STATUSES.contains(&status.as_str()) {
-            candidates.push(Candidate {
-              branch_name: branch_name.clone(),
-              description: format!("{} ({})", issue_key, issue.fields.status.name),
-            });
+      for (branch_name, issue_key) in &branches_with_jira {
+        match jira_rt.block_on(jira.get_issue(issue_key)) {
+          Ok(issue) => {
+            let status = issue.fields.status.name.to_lowercase();
+            if DONE_STATUSES.contains(&status.as_str()) {
+              candidates.push(Candidate {
+                branch_name: branch_name.clone(),
+                reason: PruneReason::JiraDone {
+                  key: issue_key.clone(),
+                  status: issue.fields.status.name.clone(),
+                },
+              });
+            }
+          }
+          Err(e) => {
+            print_warning(&format!(
+              "Could not fetch Jira issue {issue_key} for '{branch_name}': {e}"
+            ));
           }
         }
-        Err(e) => {
-          print_warning(&format!(
-            "Could not fetch Jira issue {issue_key} for '{branch_name}': {e}"
-          ));
-        }
       }
+    } else {
+      print_warning(&format!(
+        "Skipping {} (JIRA_HOST not set or credentials unavailable).",
+        pluralize(
+          branches_with_jira.len(),
+          "branch with Jira issue",
+          "branches with Jira issues"
+        ),
+      ));
     }
-  } else {
-    print_info(&format!(
-      "Skipping {} branch(es) with Jira issues (JIRA_HOST not set or credentials unavailable).",
-      branches_with_jira.len()
-    ));
   }
 
   if candidates.is_empty() {
@@ -177,50 +237,80 @@ pub fn run() -> Result<()> {
 
   candidates.sort_by(|a, b| a.branch_name.cmp(&b.branch_name));
 
-  print_info(&format!("Found {} branch(es) to prune:\n", candidates.len()));
+  // --- Display candidates ---
+  println!();
+  println!(
+    "{} Found {}:",
+    "✔".green(),
+    pluralize(candidates.len(), "branch to prune", "branches to prune").yellow(),
+  );
+  println!();
 
+  for (i, candidate) in candidates.iter().enumerate() {
+    display_candidate(candidate, i + 1, candidates.len());
+  }
+
+  // --- Dry-run: just list and exit ---
   if cli.dry_run {
-    for candidate in &candidates {
-      println!("  {} \u{2014} {}", candidate.branch_name, candidate.description);
-    }
     println!();
-    print_info("Dry run \u{2014} no branches were deleted.");
+    print_info("Dry run — no branches were deleted.");
     return Ok(());
   }
 
-  let mut deleted_count: u32 = 0;
-  let mut skipped_count: u32 = 0;
+  // --- Deletion ---
+  let selected_indices = if cli.skip_prompts {
+    // Select all
+    (0..candidates.len()).collect::<Vec<_>>()
+  } else {
+    // Multi-select prompt
+    println!();
+    let labels: Vec<String> = candidates.iter().map(|c| c.select_label()).collect();
 
-  for candidate in &candidates {
-    println!("  {} \u{2014} {}", candidate.branch_name, candidate.description);
+    let selections = MultiSelect::with_theme(&twig_theme())
+      .with_prompt("Select branches to delete (space to toggle, enter to confirm)")
+      .items(&labels)
+      .defaults(&vec![true; labels.len()])
+      .interact_opt()
+      .unwrap_or(None);
 
-    let should_delete = if cli.skip_prompts {
-      true
-    } else {
-      Confirm::new()
-        .with_prompt(format!("  Delete '{}'?", candidate.branch_name))
-        .default(false)
-        .interact()
-        .unwrap_or(false)
-    };
-
-    if should_delete {
-      match delete_local_branch(&repo, &candidate.branch_name) {
-        Ok(()) => {
-          print_success(&format!("  Deleted {}", candidate.branch_name));
-          deleted_count += 1;
-        }
-        Err(e) => {
-          print_error(&format!("  Failed to delete {}: {}", candidate.branch_name, e));
-        }
+    match selections {
+      Some(s) => s,
+      None => {
+        print_info("Aborted — no branches were deleted.");
+        return Ok(());
       }
-    } else {
-      skipped_count += 1;
+    }
+  };
+
+  let selected_set: HashSet<usize> = selected_indices.iter().copied().collect();
+
+  let mut summary = PruneSummary {
+    total_candidates: candidates.len(),
+    ..Default::default()
+  };
+
+  println!();
+
+  for (i, candidate) in candidates.iter().enumerate() {
+    if !selected_set.contains(&i) {
+      summary.skipped.push(candidate.branch_name.clone());
+      continue;
+    }
+
+    match delete_local_branch(&repo, &candidate.branch_name) {
+      Ok(()) => {
+        print_success(&format!("Deleted {}", candidate.branch_name.cyan()));
+        summary.deleted.push(candidate.branch_name.clone());
+      }
+      Err(e) => {
+        print_error(&format!("Failed to delete {}: {e}", candidate.branch_name));
+        summary.errors.push((candidate.branch_name.clone(), e.to_string()));
+      }
     }
   }
 
   // Clean up twig state for any deleted branches
-  if deleted_count > 0 {
+  if !summary.deleted.is_empty() {
     let local_branches: HashSet<String> = repo
       .branches(Some(BranchType::Local))
       .into_iter()
@@ -236,24 +326,99 @@ pub fn run() -> Result<()> {
     }
   }
 
-  // Summary
-  println!();
-  if deleted_count > 0 {
-    print_success(&format!("Pruned {deleted_count} branch(es)"));
-  }
-  if skipped_count > 0 {
-    print_info(&format!("Skipped {skipped_count} branch(es)"));
-  }
+  // --- Summary ---
+  display_summary(&summary);
 
   Ok(())
+}
+
+/// Display a single candidate with rich formatting and a progress divider.
+fn display_candidate(candidate: &Candidate, current: usize, total: usize) {
+  let separator = "─".repeat(22);
+  println!(
+    "{} [{}/{}] {}",
+    separator.dimmed(),
+    current.to_string().dimmed(),
+    total.to_string().dimmed(),
+    separator.dimmed()
+  );
+
+  println!("🌿 Branch: {}", candidate.branch_name.cyan().bold());
+
+  match &candidate.reason {
+    PruneReason::MergedPr { number, title } => {
+      println!(
+        "🔀 PR:     #{} {}",
+        number.to_string().yellow(),
+        format!("({title})").dimmed(),
+      );
+    }
+    PruneReason::JiraDone { key, status } => {
+      println!("🎫 Jira:   {} {}", key.yellow(), format!("({status})").dimmed(),);
+    }
+  }
+  println!();
+}
+
+/// Display the final prune summary.
+fn display_summary(summary: &PruneSummary) {
+  println!();
+  println!("{}", "Prune Summary".bold());
+  println!("  • Candidates:  {}", summary.total_candidates);
+
+  if !summary.deleted.is_empty() {
+    println!(
+      "  {} {}     ({})",
+      "• Deleted:".green(),
+      summary.deleted.len(),
+      summary.deleted.join(", "),
+    );
+  }
+
+  if !summary.skipped.is_empty() {
+    println!("  {} {}", "• Skipped:".yellow(), summary.skipped.len(),);
+  }
+
+  if !summary.errors.is_empty() {
+    println!(
+      "  {} {}     ({})",
+      "• Errors:".red(),
+      summary.errors.len(),
+      summary
+        .errors
+        .iter()
+        .map(|(branch, _)| branch.as_str())
+        .collect::<Vec<_>>()
+        .join(", "),
+    );
+  }
 }
 
 fn delete_local_branch(repo: &git2::Repository, branch_name: &str) -> Result<()> {
   let mut branch = repo
     .find_branch(branch_name, BranchType::Local)
     .with_context(|| format!("Branch '{branch_name}' not found"))?;
-  branch
-    .delete()
-    .with_context(|| format!("Failed to delete branch '{branch_name}'"))?;
-  Ok(())
+
+  match branch.delete() {
+    Ok(()) => Ok(()),
+    Err(e) => {
+      // Handle a known libgit2 issue where branch deletion fails when trying to
+      // clean up config entries that don't exist. Despite the error, the branch
+      // reference itself may have been deleted.
+      // See: https://github.com/libgit2/libgit2/issues/4247
+      let is_config_key_error = e.class() == git2::ErrorClass::Config && e.message().contains("could not find key");
+
+      if is_config_key_error {
+        match repo.find_branch(branch_name, BranchType::Local) {
+          Err(lookup_err) if lookup_err.code() == git2::ErrorCode::NotFound => {
+            // Branch is gone — deletion succeeded despite the config cleanup error
+            return Ok(());
+          }
+          _ => {}
+        }
+      }
+
+      Err(e.into())
+    }
+  }
 }
