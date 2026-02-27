@@ -13,6 +13,7 @@ use git2::{BranchType, FetchOptions, Repository as Git2Repository};
 use owo_colors::OwoColorize;
 use serde::Serialize;
 use tokio::{task, time};
+use twig_core::git::delete_local_branch;
 use twig_core::output::{
   format_command, format_repo_name, format_repo_path, format_timestamp, print_error, print_header, print_success,
   print_warning,
@@ -560,7 +561,7 @@ fn interactive_prune_branches<P: AsRef<Path>>(
 
     // Prompt user for deletion
     if prompt_for_deletion(&enhanced_info.name)? {
-      match delete_branch(repo, &enhanced_info.name) {
+      match delete_local_branch(repo, &enhanced_info.name) {
         Ok(()) => {
           summary.deleted.push(enhanced_info.name.clone());
           println!(); // Add spacing after deletion
@@ -732,58 +733,6 @@ fn prompt_for_deletion(branch_name: &str) -> Result<bool> {
 
   let input = input.trim().to_lowercase();
   Ok(input == "y" || input == "yes")
-}
-
-/// Delete a git branch.
-///
-/// This handles a known libgit2 issue where branch deletion fails when trying
-/// to clean up config entries that don't exist (e.g., when a branch has partial
-/// config from external tools like GitHub CLI). The error message looks like:
-/// "could not find key 'branch.<name>.<key>' to delete"
-///
-/// See: <https://github.com/libgit2/libgit2/issues/4247>
-fn delete_branch(repo: &Git2Repository, branch_name: &str) -> Result<()> {
-  let mut branch = repo.find_branch(branch_name, git2::BranchType::Local)?;
-  match branch.delete() {
-    Ok(()) => Ok(()),
-    Err(e) => {
-      // Check if this is a config-related error (class 7) with "could not find key"
-      // This happens when libgit2 tries to delete config entries that don't exist.
-      // Despite the error, the branch reference itself may have been deleted.
-      let is_config_key_error = e.class() == git2::ErrorClass::Config && e.message().contains("could not find key");
-
-      if is_config_key_error {
-        // Verify if the branch was actually deleted despite the config error
-        match repo.find_branch(branch_name, git2::BranchType::Local) {
-          Err(lookup_err) if lookup_err.code() == git2::ErrorCode::NotFound => {
-            // Branch is gone, the deletion succeeded despite the config cleanup error
-            tracing::debug!(
-              branch = branch_name,
-              error = %e,
-              "Branch deleted successfully despite config cleanup error"
-            );
-            return Ok(());
-          }
-          Ok(_) => {
-            // Branch still exists, fall through to return the original error
-          }
-          Err(lookup_err) => {
-            // Unexpected lookup error (I/O, permissions, etc.) - log and return original
-            // error
-            tracing::warn!(
-              branch = branch_name,
-              original_error = %e,
-              lookup_error = %lookup_err,
-              "Branch deletion failed; could not verify branch state due to lookup error"
-            );
-          }
-        }
-      }
-
-      // Either not a config error, or the branch still exists - propagate the error
-      Err(e.into())
-    }
-  }
 }
 
 /// Display prune summary
@@ -1002,7 +951,7 @@ mod tests {
     assert!(repo.find_branch("test-branch", git2::BranchType::Local).is_ok());
 
     // Delete branch
-    delete_branch(repo, "test-branch").unwrap();
+    delete_local_branch(repo, "test-branch").unwrap();
 
     // Verify branch is deleted
     assert!(repo.find_branch("test-branch", git2::BranchType::Local).is_err());

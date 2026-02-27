@@ -11,9 +11,11 @@ description = "Twig plugin to delete local branches whose GitHub PRs have been m
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
+console = { workspace = true }
 dialoguer = { workspace = true }
 directories = { workspace = true }
 git2 = { workspace = true }
+owo-colors = { workspace = true }
 twig-core = { path = "../../twig-core" }
 twig-gh = { path = "../../twig-gh" }
 twig-jira = { path = "../../twig-jira" }
