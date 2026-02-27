@@ -95,149 +95,142 @@ pub fn checkout_branch(repo: &Repository, branch_name: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-  use git2::Repository as GitRepository;
-  use tempfile::TempDir;
+  use twig_test_utils::git::{GitRepoTestGuard, create_commit};
 
   use super::*;
 
-  fn init_repo_with_commit(temp_dir: &TempDir) -> GitRepository {
-    let repo = GitRepository::init(temp_dir.path()).unwrap();
+  /// Create a test repo with a `main` branch containing `base.txt` and a
+  /// `feature` branch that adds `feature.txt`.  Returns with `feature`
+  /// checked out.
+  fn repo_with_feature_branch() -> GitRepoTestGuard {
+    let guard = GitRepoTestGuard::new();
 
-    let signature = git2::Signature::now("Test User", "test@example.com").unwrap();
-    let tree_id = {
-      let mut index = repo.index().unwrap();
-      index.write_tree().unwrap()
-    };
-    let tree = repo.find_tree(tree_id).unwrap();
+    create_commit(&guard.repo, "base.txt", "base content\n", "initial commit").unwrap();
 
-    repo
-      .commit(Some("HEAD"), &signature, &signature, "Initial commit", &tree, &[])
-      .unwrap();
+    {
+      let main_head = guard.repo.head().unwrap().peel_to_commit().unwrap();
+      guard.repo.branch("feature", &main_head, false).unwrap();
+    }
+    checkout_branch(&guard.repo, "feature").unwrap();
+    create_commit(&guard.repo, "feature.txt", "feature work\n", "add feature file").unwrap();
 
-    drop(tree);
-
-    repo
+    guard
   }
 
   #[test]
   fn get_local_branches_lists_branches() {
-    let temp_dir = TempDir::new().unwrap();
-    let repo_path = temp_dir.path();
-
-    let repo = init_repo_with_commit(&temp_dir);
-
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(repo_path).unwrap();
+    let guard = GitRepoTestGuard::new_and_change_dir();
+    create_commit(&guard.repo, "base.txt", "base content\n", "initial commit").unwrap();
 
     let branches = get_local_branches().unwrap();
     assert!(!branches.is_empty());
-
-    std::env::set_current_dir(original_dir).unwrap();
-
-    drop(repo);
   }
 
   #[test]
   fn checkout_branch_switches_head() {
-    let temp_dir = TempDir::new().unwrap();
-    let repo = init_repo_with_commit(&temp_dir);
+    let guard = GitRepoTestGuard::new();
 
-    let head_commit = repo.head().unwrap().peel_to_commit().unwrap();
-    repo.branch("feature/test", &head_commit, false).unwrap();
+    create_commit(&guard.repo, "base.txt", "base content\n", "initial commit").unwrap();
 
-    checkout_branch(&repo, "feature/test").unwrap();
+    {
+      let head_commit = guard.repo.head().unwrap().peel_to_commit().unwrap();
+      guard.repo.branch("feature/test", &head_commit, false).unwrap();
+    }
 
-    let head = repo.head().unwrap();
+    checkout_branch(&guard.repo, "feature/test").unwrap();
+
+    let head = guard.repo.head().unwrap();
     assert_eq!(head.shorthand(), Some("feature/test"));
   }
 
-  /// Switching branches must not leave unexpected staged changes.
-  ///
-  /// Regression test: the old implementation called `set_head` before
-  /// `checkout_head` with a no-op `CheckoutBuilder`, so the index was never
-  /// updated to match the new HEAD tree, causing files that differ between
-  /// the two branches to appear staged.
+  /// Regression test: switching away from a branch that has additional files
+  /// must update the index and working directory so `git status` is clean on
+  /// the target branch. When `checkout_branch` leaves the index stale, the
+  /// source branch's files appear as phantom staged additions on the target.
   #[test]
-  fn checkout_branch_leaves_no_staged_changes() {
-    use std::fs;
+  fn checkout_branch_updates_index_on_switch() {
+    let guard = repo_with_feature_branch();
+    let repo = &guard.repo;
+    let repo_path = guard.path();
 
-    use git2::build::CheckoutBuilder;
+    // --- Operation under test ---
+    checkout_branch(repo, "main").unwrap();
 
-    let temp_dir = TempDir::new().unwrap();
-    let repo = git2::Repository::init(temp_dir.path()).unwrap();
-    let mut cfg = repo.config().unwrap();
-    cfg.set_str("user.name", "Test").unwrap();
-    cfg.set_str("user.email", "test@test.com").unwrap();
-    drop(cfg);
+    // HEAD must point to main.
+    assert_eq!(repo.head().unwrap().shorthand(), Some("main"));
 
-    let signature = git2::Signature::now("Test", "test@test.com").unwrap();
-
-    // Commit on the default branch (may be "main" or "master"): only "base.txt" exists.
-    let base_file = temp_dir.path().join("base.txt");
-    fs::write(&base_file, "base content").unwrap();
-    let mut index = repo.index().unwrap();
-    index.add_path(std::path::Path::new("base.txt")).unwrap();
-    index.write().unwrap();
-    let base_tree_oid = index.write_tree().unwrap();
-    let base_tree = repo.find_tree(base_tree_oid).unwrap();
-    let base_commit_oid = repo
-      .commit(Some("HEAD"), &signature, &signature, "base commit", &base_tree, &[])
-      .unwrap();
-    let base_commit = repo.find_commit(base_commit_oid).unwrap();
-
-    // Capture the default branch name now, while HEAD is on it.
-    let default_branch_name = repo.head().unwrap().shorthand().unwrap().to_string();
-
-    // Create a feature branch and add a file unique to it.
-    repo.branch("feature", &base_commit, false).unwrap();
-    let feature_obj = repo.revparse_single("refs/heads/feature").unwrap();
-    repo
-      .checkout_tree(&feature_obj, Some(CheckoutBuilder::new().force()))
-      .unwrap();
-    repo.set_head("refs/heads/feature").unwrap();
-
-    let feature_file = temp_dir.path().join("feature-file.txt");
-    fs::write(&feature_file, "feature content").unwrap();
-    let mut index = repo.index().unwrap();
-    index.add_path(std::path::Path::new("feature-file.txt")).unwrap();
-    index.write().unwrap();
-    let feature_tree_oid = index.write_tree().unwrap();
-    let feature_tree = repo.find_tree(feature_tree_oid).unwrap();
-    repo
-      .commit(
-        Some("HEAD"),
-        &signature,
-        &signature,
-        "feature commit",
-        &feature_tree,
-        &[&base_commit],
-      )
-      .unwrap();
-
-    // Switch back to the default branch so we can test switching TO feature.
-    let default_obj = repo
-      .revparse_single(&format!("refs/heads/{default_branch_name}"))
-      .unwrap();
-    repo
-      .checkout_tree(&default_obj, Some(CheckoutBuilder::new().force()))
-      .unwrap();
-    repo.set_head(&format!("refs/heads/{default_branch_name}")).unwrap();
-    assert_eq!(repo.head().unwrap().shorthand(), Some(default_branch_name.as_str()));
-
-    // Now switch to "feature" using the function under test.
-    checkout_branch(&repo, "feature").unwrap();
-
-    assert_eq!(repo.head().unwrap().shorthand(), Some("feature"));
-
-    // The index must match HEAD — no staged (or other) changes.
-    let head_commit = repo.head().unwrap().peel_to_commit().unwrap();
-    let head_tree = head_commit.tree().unwrap();
-    let diff = repo.diff_tree_to_index(Some(&head_tree), None, None).unwrap();
+    // The index must match main's tree — no phantom staged changes.
+    let head_tree = repo.head().unwrap().peel_to_tree().unwrap();
+    let index = repo.index().unwrap();
+    let staged_diff = repo.diff_tree_to_index(Some(&head_tree), Some(&index), None).unwrap();
     assert_eq!(
-      diff.deltas().count(),
+      staged_diff.deltas().count(),
       0,
-      "expected no staged changes after checkout_branch, but found {}",
-      diff.deltas().count()
+      "Switching to main should leave no staged changes, but the index still \
+       contains entries from the feature branch (stale index)."
+    );
+
+    // The working directory must match the index — no phantom unstaged changes.
+    let workdir_diff = repo.diff_index_to_workdir(Some(&index), None).unwrap();
+    assert_eq!(
+      workdir_diff.deltas().count(),
+      0,
+      "Switching to main should leave no unstaged changes, but the working \
+       directory still contains files from the feature branch."
+    );
+
+    // Concretely, feature.txt must not exist on main.
+    assert!(
+      !repo_path.join("feature.txt").exists(),
+      "feature.txt should not be present in the working directory after \
+       switching to main."
+    );
+  }
+
+  /// Regression test: switching TO a branch whose tree has files not present
+  /// on the current branch must materialise those files. When the checkout is
+  /// incomplete the target branch's changes appear to be reverted—its unique
+  /// files never appear and the index shows phantom staged deletions.
+  #[test]
+  fn checkout_branch_materializes_target_branch_files() {
+    let guard = repo_with_feature_branch();
+    let repo = &guard.repo;
+    let repo_path = guard.path();
+
+    // Return to main so the operation under test is the switch *to* feature.
+    checkout_branch(repo, "main").unwrap();
+
+    // Precondition: we are on main with a clean tree.
+    assert!(!repo_path.join("feature.txt").exists());
+
+    // --- Operation under test ---
+    checkout_branch(repo, "feature").unwrap();
+
+    // feature.txt must appear in the working directory.
+    assert!(
+      repo_path.join("feature.txt").exists(),
+      "feature.txt should exist after switching to the feature branch, but \
+       the file was not checked out (branch changes appear reverted)."
+    );
+
+    // The file's content must match what was committed (trim to tolerate
+    // Windows \r\n line endings from core.autocrlf).
+    let content = std::fs::read_to_string(repo_path.join("feature.txt")).unwrap();
+    assert_eq!(
+      content.trim(),
+      "feature work",
+      "feature.txt has unexpected content after branch switch."
+    );
+
+    // No phantom staged changes — the index must match the feature tree.
+    let head_tree = repo.head().unwrap().peel_to_tree().unwrap();
+    let index = repo.index().unwrap();
+    let staged_diff = repo.diff_tree_to_index(Some(&head_tree), Some(&index), None).unwrap();
+    assert_eq!(
+      staged_diff.deltas().count(),
+      0,
+      "Switching to feature should leave no staged changes, but the index \
+       does not match the feature branch tree."
     );
   }
 }
