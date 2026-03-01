@@ -11,6 +11,35 @@ what the system does today. Don't invent new behavior — document what exists.
 
 ______________________________________________________________________
 
+## Completion Status
+
+All 20 specs have been seeded with WHEN/THEN/AND requirements from existing codebase behavior.
+
+| Priority | Capability | Status |
+|----------|-----------|--------|
+| P0 | branch-dependencies | Done |
+| P0 | initialization | Done |
+| P0 | credentials | Done |
+| P1 | rebase | Done |
+| P1 | cascade-rebase | Done |
+| P1 | branch-tree | Done |
+| P1 | branch-switching | Done |
+| P1 | commit-prefill | Done |
+| P1 | fixup-commits | Done |
+| P2 | github-integration | Done |
+| P2 | jira-integration | Done |
+| P2 | auto-sync | Done |
+| P2 | repository-registry | Done |
+| P2 | branch-adoption | Done |
+| P2 | stale-branch-cleanup | Done |
+| P2 | worktrees | Done |
+| P2 | repository-resolution | Done |
+| P3 | plugin-system | Done |
+| P3 | mcp-server | Done |
+| P3 | self-management | Done |
+
+______________________________________________________________________
+
 ## Dependency Graph
 
 ```
