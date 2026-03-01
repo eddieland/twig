@@ -148,6 +148,21 @@ install-dev-tools: ## Install development tools
 	cargo install cargo-insta
 	uv tool install pre-commit
 
+### Demo GIFs
+
+.PHONY: demo-gifs
+demo-gifs: build ## Generate demo GIFs from tape files (requires vhs)
+	@command -v vhs >/dev/null 2>&1 || { echo "Error: vhs is not installed. See https://github.com/charmbracelet/vhs"; exit 1; }
+	@mkdir -p docs/demos
+	@for tape in docs/tapes/*.tape; do \
+		[ "$$(basename "$$tape")" = "setup.tape" ] && continue; \
+		echo "Recording $$tape ..."; \
+		PATH="$(PWD)/target/debug:$$PATH" vhs "$$tape"; \
+	done
+	@echo "GIFs written to docs/demos/"
+
+### Hooks
+
 .PHONY: pre-commit-setup
 pre-commit-setup: ## Set up pre-commit hooks
 	pre-commit install
