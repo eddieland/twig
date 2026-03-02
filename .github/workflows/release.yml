@@ -63,19 +63,19 @@ jobs:
           tar -czf twig-mcp-linux-x86_64-v${VERSION}.tar.gz -C target/release twig-mcp
           shasum -a 256 twig-mcp-linux-x86_64-v${VERSION}.tar.gz > twig-mcp-linux-x86_64-v${VERSION}.tar.gz.sha256
       - name: Generate build provenance
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Generate build provenance (twig-flow)
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: twig-flow-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Generate build provenance (twig-prune)
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: twig-prune-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Generate build provenance (twig-mcp)
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: twig-mcp-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Upload twig artifact
@@ -143,19 +143,19 @@ jobs:
           tar -czf twig-mcp-macos-x86_64-v${VERSION}.tar.gz -C target/release twig-mcp
           shasum -a 256 twig-mcp-macos-x86_64-v${VERSION}.tar.gz > twig-mcp-macos-x86_64-v${VERSION}.tar.gz.sha256
       - name: Generate build provenance
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Generate build provenance (twig-flow)
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: twig-flow-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Generate build provenance (twig-prune)
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: twig-prune-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Generate build provenance (twig-mcp)
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: twig-mcp-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Upload twig artifact
@@ -235,19 +235,19 @@ jobs:
           done
 
       - name: Generate build provenance
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip
       - name: Generate build provenance (twig-flow)
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: twig-flow-windows-x86_64-v${{ steps.version.outputs.version }}.zip
       - name: Generate build provenance (twig-prune)
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: twig-prune-windows-x86_64-v${{ steps.version.outputs.version }}.zip
       - name: Generate build provenance (twig-mcp)
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: twig-mcp-windows-x86_64-v${{ steps.version.outputs.version }}.zip
 
