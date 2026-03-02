@@ -79,28 +79,28 @@ jobs:
         with:
           subject-path: twig-mcp-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Upload twig artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: twig-linux
           path: |
             twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
             twig-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Upload twig-flow artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: twig-flow-linux
           path: |
             twig-flow-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
             twig-flow-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Upload twig-prune artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: twig-prune-linux
           path: |
             twig-prune-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
             twig-prune-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Upload twig-mcp artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: twig-mcp-linux
           path: |
@@ -159,28 +159,28 @@ jobs:
         with:
           subject-path: twig-mcp-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
       - name: Upload twig artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: twig-macos
           path: |
             twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
             twig-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Upload twig-flow artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: twig-flow-macos
           path: |
             twig-flow-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
             twig-flow-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Upload twig-prune artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: twig-prune-macos
           path: |
             twig-prune-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
             twig-prune-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Upload twig-mcp artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: twig-mcp-macos
           path: |
@@ -252,28 +252,28 @@ jobs:
           subject-path: twig-mcp-windows-x86_64-v${{ steps.version.outputs.version }}.zip
 
       - name: Upload twig artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: twig-windows
           path: |
             twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip
             twig-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
       - name: Upload twig-flow artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: twig-flow-windows
           path: |
             twig-flow-windows-x86_64-v${{ steps.version.outputs.version }}.zip
             twig-flow-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
       - name: Upload twig-prune artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: twig-prune-windows
           path: |
             twig-prune-windows-x86_64-v${{ steps.version.outputs.version }}.zip
             twig-prune-windows-x86_64-v${{ steps.version.outputs.version }}.zip.sha256
       - name: Upload twig-mcp artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: twig-mcp-windows
           path: |
