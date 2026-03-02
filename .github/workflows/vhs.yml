@@ -1,0 +1,73 @@
+name: Demo GIFs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/tapes/**"
+      - "twig-cli/src/**"
+      - "twig-core/src/**"
+      - ".github/workflows/vhs.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/tapes/**"
+      - ".github/workflows/vhs.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  generate-gifs:
+    name: Generate demo GIFs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-ubuntu-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build twig
+        run: cargo build -p twig --release
+
+      - name: Add twig to PATH
+        run: echo "${{ github.workspace }}/target/release" >> "$GITHUB_PATH"
+
+      - name: Install VHS
+        uses: charmbracelet/vhs-action@v2
+        with:
+          install-fonts: true
+
+      - name: Generate GIFs from tape files
+        run: |
+          mkdir -p docs/demos
+          for tape in docs/tapes/*.tape; do
+            # Skip the shared setup tape — it's sourced by other tapes
+            [ "$(basename "$tape")" = "setup.tape" ] && continue
+            echo "::group::Processing $tape"
+            vhs "$tape"
+            echo "::endgroup::"
+          done
+
+      - name: Upload GIFs as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-gifs
+          path: docs/demos/*.gif
+
+      - name: Auto-commit updated GIFs
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: regenerate demo GIFs"
+          file_pattern: "docs/demos/*.gif"
