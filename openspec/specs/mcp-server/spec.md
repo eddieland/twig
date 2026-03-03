@@ -125,9 +125,54 @@ object containing `code` (machine-readable string), `message` (human-readable ex
 (actionable guidance) AND the `is_error` flag is set to `true` AND the `hint` field is omitted from serialization when
 not present
 
+### Requirement: Canonical error codes
+
+All structured error responses use the following machine-readable codes. Every scenario in this spec that produces a
+structured error references one of these codes.
+
+| Code                  | Meaning                                                                                   | Canonical hint pattern                                                                                                       |
+| --------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `no_repo`             | The server was started outside a git repository.                                          | "Run twig-mcp from within a git repository."                                                                                 |
+| `no_twig_state`       | `.twig/state.json` is missing or unreadable. Message includes the underlying cause.       | "Run \`twig init\` in this repository first."                                                                                |
+| `credentials_missing` | GitHub or Jira credentials could not be loaded from `~/.netrc`.                           | Service-specific: "Add credentials for github.com to \`~/.netrc\`…" or "Set $JIRA_HOST and add credentials to \`~/.netrc\`…" |
+| `not_found`           | A requested resource (branch, PR, issue, remote, root) does not exist or is not linked.   | Varies by context (e.g., "Use \`list_branches\` to see tracked branches.")                                                   |
+| `invalid_params`      | A required parameter is missing and could not be inferred from context.                   | "Provide an explicit {param} parameter."                                                                                     |
+| `network_error`       | A GitHub or Jira API call failed. Message format: "{Service} API error: {e}".             | _(none)_                                                                                                                     |
+| `internal`            | An unexpected failure (registry load, git open, graph build). Message includes the cause. | _(none)_                                                                                                                     |
+
+## Shared Resolution Patterns
+
+The following resolution patterns are used by multiple tools. Individual tool requirements reference these patterns
+rather than re-specifying the logic.
+
+### Requirement: Repository and state resolution
+
+Tools that need repository context call `require_repo()` (see
+[Repository context resolution](#requirement-repository-context-resolution)). Tools that need twig state call
+`require_repo_state()` (see [Twig state loading](#requirement-twig-state-loading)). Tools that need a GitHub client call
+`get_github_client()` and `get_github_repo()` (see
+[Lazy GitHub client initialization](#requirement-lazy-github-client-initialization) and
+[GitHub repository extraction from remote](#requirement-github-repository-extraction-from-remote)). Tools that need a
+Jira client call `get_jira_client()` (see
+[Lazy Jira client initialization](#requirement-lazy-jira-client-initialization)).
+
+### Requirement: Branch-linked identifier resolution
+
+Both PR number resolution and Jira issue key resolution follow the same three-step pattern:
+
+1. If an explicit parameter is provided, use it directly.
+1. Otherwise, detect the current branch via git. If HEAD is detached, return `invalid_params`.
+1. Look up the linked identifier (`github_pr` or `jira_issue`) in the twig state. If missing, return `not_found` with a
+   hint to provide the parameter explicitly.
+
+See [PR number resolution](#requirement-pr-number-resolution) and
+[Jira issue key resolution](#requirement-jira-issue-key-resolution) for the tool-specific details.
+
 ## Local State Tools
 
-All local state tools are annotated with `read_only_hint = true` and `idempotent_hint = true`.
+All local state tools are annotated with `read_only_hint = true` and `idempotent_hint = true`. Unless otherwise noted,
+each tool resolves repository context and twig state via the shared patterns described in
+[Repository and state resolution](#requirement-repository-and-state-resolution).
 
 ### Requirement: Get current branch
 
@@ -234,11 +279,14 @@ each worktree's `name`, `path`, and `branch`
 ## GitHub Tools
 
 All GitHub tools are annotated with `read_only_hint = true`. They are not annotated as idempotent because PR state can
-change between calls.
+change between calls. Each tool resolves the GitHub client and repository via the shared patterns in
+[Repository and state resolution](#requirement-repository-and-state-resolution).
 
 ### Requirement: PR number resolution
 
-This resolution is shared by `get_pull_request` and `get_pr_status`.
+This resolution is shared by `get_pull_request` and `get_pr_status`. It follows the
+[Branch-linked identifier resolution](#requirement-branch-linked-identifier-resolution) pattern with `github_pr` as the
+linked field.
 
 #### Scenario: PR number provided explicitly
 
@@ -293,11 +341,14 @@ each PR
 
 ## Jira Tools
 
-All Jira tools are annotated with `read_only_hint = true`.
+All Jira tools are annotated with `read_only_hint = true`. Each tool resolves the Jira client via the shared pattern in
+[Repository and state resolution](#requirement-repository-and-state-resolution).
 
 ### Requirement: Jira issue key resolution
 
-This resolution is shared by `get_jira_issue`.
+This resolution is shared by `get_jira_issue`. It follows the
+[Branch-linked identifier resolution](#requirement-branch-linked-identifier-resolution) pattern with `jira_issue` as the
+linked field.
 
 #### Scenario: Issue key provided explicitly
 
