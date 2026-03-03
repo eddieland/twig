@@ -51,8 +51,8 @@ git remote add upstream https://github.com/eddieland/twig.git
 # Install development tools
 make install-dev-tools
 
-# Set up pre-commit hooks
-make pre-commit-setup
+# Set up prek hooks
+make prek-setup
 
 # Build the project
 cargo build
@@ -85,12 +85,13 @@ All contributions should pass the following checks:
 **Note**: This project requires [nextest](https://nexte.st/) for testing. The standard `cargo test` command will not
 work correctly.
 
-These checks are automatically enforced by pre-commit hooks and our CI pipeline.
+These checks are automatically enforced by prek hooks and our CI pipeline.
 
-### Pre-commit Hooks
+### Prek Hooks
 
-This project uses pre-commit hooks to ensure code quality standards are met before each commit. Pre-commit is installed
-using [uv tool](https://github.com/astral-sh/uv), which installs Python tools without requiring a virtual environment.
+This project uses [prek](https://prek.j178.dev/) hooks to ensure code quality standards are met before each commit. Prek
+is a fast, Rust-based drop-in replacement for pre-commit, installed using
+[uv tool](https://github.com/astral-sh/uv).
 
 The hooks will:
 
@@ -104,7 +105,7 @@ The hooks will:
 If a hook fails, the commit will be aborted. You can run the hooks manually with:
 
 ```bash
-make pre-commit-run
+make prek-run
 ```
 
 To temporarily bypass the hooks (not recommended), use the `--no-verify` flag with git commit.
@@ -122,7 +123,7 @@ Key Makefile targets include:
 
 - **Development**: `fmt`, `lint`, `test`, `check`, `doc`
 - **Build**: `build`, `release`, `clean`, `run`
-- **Installation**: `install`, `install-dev-tools`, `pre-commit-setup`
+- **Installation**: `install`, `install-dev-tools`, `prek-setup`
 - **Snapshot Testing**: `insta-review`, `insta-accept`, `insta-reject`, `update-snapshots`
 
 **Important**: All test-related targets use [nextest](https://nexte.st/) instead of the standard `cargo test`. This
