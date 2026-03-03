@@ -44,8 +44,8 @@ WHEN a tool calls `require_repo()` AND a repository path was detected at startup
 
 #### Scenario: Repository is not available
 
-WHEN a tool calls `require_repo()` AND no repository was detected THEN the tool returns a structured error with
-code `no_repo`, message "twig-mcp was started outside a git repository", and hint "Run twig-mcp from within a git
+WHEN a tool calls `require_repo()` AND no repository was detected THEN the tool returns a structured error with code
+`no_repo`, message "twig-mcp was started outside a git repository", and hint "Run twig-mcp from within a git
 repository."
 
 ### Requirement: Twig state loading
@@ -70,8 +70,8 @@ WHEN a GitHub tool is called for the first time THEN the server calls
 
 #### Scenario: Subsequent GitHub tool invocations
 
-WHEN a GitHub tool is called after the client has been initialized THEN the cached client is returned immediately without
-re-initialization
+WHEN a GitHub tool is called after the client has been initialized THEN the cached client is returned immediately
+without re-initialization
 
 #### Scenario: GitHub credentials are missing
 
@@ -158,9 +158,9 @@ WHEN `get_branch_metadata` is called with a branch name that exists in `state.br
 
 #### Scenario: Branch not tracked in twig state
 
-WHEN `get_branch_metadata` is called with a branch name not found in `state.branches` THEN the tool returns a
-structured error with code `not_found`, message "Branch '{branch}' not found in twig state", and hint "Use
-`list_branches` to see tracked branches."
+WHEN `get_branch_metadata` is called with a branch name not found in `state.branches` THEN the tool returns a structured
+error with code `not_found`, message "Branch '{branch}' not found in twig state", and hint "Use `list_branches` to see
+tracked branches."
 
 ### Requirement: Get branch tree
 
@@ -180,8 +180,8 @@ default root candidate
 
 #### Scenario: No branches in repository
 
-WHEN `get_branch_tree` is called AND the graph contains no branches THEN the tool returns a structured error with
-code `not_found` and message "No branches found in repository"
+WHEN `get_branch_tree` is called AND the graph contains no branches THEN the tool returns a structured error with code
+`not_found` and message "No branches found in repository"
 
 #### Scenario: No root branch found
 
@@ -196,8 +196,8 @@ Parameters: `branch` (optional string, defaults to current)
 
 WHEN `get_branch_stack` is called THEN the tool determines the start branch (from the parameter or the current branch)
 AND walks up the dependency chain using `state.get_dependency_parents()`, following the first parent at each step AND
-maintains a `HashSet` for cycle protection AND returns a `BranchStackResponse` with a stack vector ordered from the start
-branch (index 0) to the root (last element) AND each entry includes full branch metadata
+maintains a `HashSet` for cycle protection AND returns a `BranchStackResponse` with a stack vector ordered from the
+start branch (index 0) to the root (last element) AND each entry includes full branch metadata
 
 #### Scenario: Detached HEAD with no branch parameter
 
@@ -221,8 +221,8 @@ repository context (it reads the global registry)
 
 #### Scenario: Registry load fails
 
-WHEN `list_repositories` is called AND the registry cannot be loaded THEN the tool returns a structured error with
-code `internal` and message "Failed to load registry: {e}"
+WHEN `list_repositories` is called AND the registry cannot be loaded THEN the tool returns a structured error with code
+`internal` and message "Failed to load registry: {e}"
 
 ### Requirement: Get worktrees
 
@@ -277,8 +277,8 @@ Parameters: `pr_number` (optional u32)
 #### Scenario: Fetching PR with reviews and checks
 
 WHEN `get_pr_status` is called AND the PR number is resolved THEN the tool calls
-`gh.get_pr_status(&owner, &repo, pr_number)` AND returns a `PrStatusResponse` with the `pull_request` details, a list
-of `reviews` (each with `author` and `state`), and a list of `checks` (each with `name`, `status`, and optional
+`gh.get_pr_status(&owner, &repo, pr_number)` AND returns a `PrStatusResponse` with the `pull_request` details, a list of
+`reviews` (each with `author` and `state`), and a list of `checks` (each with `name`, `status`, and optional
 `conclusion`)
 
 ### Requirement: List pull requests
@@ -305,8 +305,8 @@ WHEN a Jira tool is called with an `issue_key` parameter THEN that key is used d
 
 #### Scenario: Issue key resolved from current branch
 
-WHEN a Jira tool is called without an `issue_key` parameter THEN the tool looks up the current branch name AND finds
-the linked `jira_issue` from the twig state
+WHEN a Jira tool is called without an `issue_key` parameter THEN the tool looks up the current branch name AND finds the
+linked `jira_issue` from the twig state
 
 #### Scenario: No issue linked to current branch
 
@@ -337,8 +337,7 @@ error: {e}"
 
 ### Requirement: List Jira issues
 
-Parameters: `project` (required string), `status` (optional string), `assignee` (optional string, "me" for current
-user)
+Parameters: `project` (required string), `status` (optional string), `assignee` (optional string, "me" for current user)
 
 #### Scenario: Listing issues with filters
 

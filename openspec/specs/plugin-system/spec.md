@@ -74,8 +74,9 @@ and stderr from the parent process
 #### Scenario: Unknown subcommand with no matching plugin
 
 WHEN the user runs `twig <name>` AND `<name>` does not match any built-in subcommand AND no plugin named `twig-<name>`
-is found on PATH THEN the command prints an error: "'<name>' is not a twig command or installed plugin" AND prints a tip:
-"External plugins are executables named 'twig-<name>' on your PATH. Run 'twig self plugins' to list installed plugins."
+is found on PATH THEN the command prints an error: "'<name>' is not a twig command or installed plugin" AND prints a
+tip: "External plugins are executables named 'twig-<name>' on your PATH. Run 'twig self plugins' to list installed
+plugins."
 
 ### Requirement: Plugin exit code propagation
 
@@ -135,8 +136,8 @@ value maps to `false` (links enabled)
 
 #### Scenario: Verbosity parsing
 
-WHEN `TWIG_VERBOSITY` is read by `PluginContext::discover()` THEN the value is parsed as a `u8` AND if parsing fails,
-it defaults to `0`
+WHEN `TWIG_VERBOSITY` is read by `PluginContext::discover()` THEN the value is parsed as a `u8` AND if parsing fails, it
+defaults to `0`
 
 ### Requirement: Plugin-specific directories
 

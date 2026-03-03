@@ -58,17 +58,17 @@ operating system: <os>"
 
 #### Scenario: Matching release assets to the current platform
 
-WHEN matching a release asset THEN the command performs case-insensitive matching on the archive extension, product name,
-OS marker (substring match), and architecture marker (substring match) AND the product name is derived from the asset
-filename by stripping the `.exe` suffix on Windows
+WHEN matching a release asset THEN the command performs case-insensitive matching on the archive extension, product
+name, OS marker (substring match), and architecture marker (substring match) AND the product name is derived from the
+asset filename by stripping the `.exe` suffix on Windows
 
 ### Requirement: Archive extraction
 
 #### Scenario: Extracting from tar.gz on Unix
 
 WHEN the downloaded archive is `.tar.gz` THEN the command decompresses and iterates through tar entries searching for
-the binary by filename AND unpacks the binary to the staging directory AND sets executable permissions (mode `0o755`) AND
-if the binary is not found in the archive, returns an error "Binary <name> not found in archive"
+the binary by filename AND unpacks the binary to the staging directory AND sets executable permissions (mode `0o755`)
+AND if the binary is not found in the archive, returns an error "Binary <name> not found in archive"
 
 #### Scenario: Extracting from zip on Windows
 
@@ -94,8 +94,9 @@ falls back to `sudo install -m 755 <new_binary> <current_exe>`
 
 WHEN installing a new binary on Windows THEN the command tests write permissions in the target directory AND generates a
 PowerShell helper script that waits for the parent twig process to exit, moves the staged binary to the target location,
-and cleans up AND if the directory requires elevated permissions, launches the helper via `Start-Process PowerShell -Verb
-RunAs` AND returns an `InstallOutcome::Deferred` indicating the installation will complete after twig exits
+and cleans up AND if the directory requires elevated permissions, launches the helper via
+`Start-Process PowerShell -Verb RunAs` AND returns an `InstallOutcome::Deferred` indicating the installation will
+complete after twig exits
 
 ### Requirement: Version tag handling
 
