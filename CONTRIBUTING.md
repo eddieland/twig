@@ -51,8 +51,8 @@ git remote add upstream https://github.com/eddieland/twig.git
 # Install development tools
 make install-dev-tools
 
-# Set up prek hooks
-make prek-setup
+# Set up pre-commit hooks
+make pre-commit-setup
 
 # Build the project
 cargo build
@@ -105,7 +105,7 @@ The hooks will:
 If a hook fails, the commit will be aborted. You can run the hooks manually with:
 
 ```bash
-make prek-run
+make pre-commit-run
 ```
 
 To temporarily bypass the hooks (not recommended), use the `--no-verify` flag with git commit.
@@ -123,7 +123,7 @@ Key Makefile targets include:
 
 - **Development**: `fmt`, `lint`, `test`, `check`, `doc`
 - **Build**: `build`, `release`, `clean`, `run`
-- **Installation**: `install`, `install-dev-tools`, `prek-setup`
+- **Installation**: `install`, `install-dev-tools`, `pre-commit-setup`
 - **Snapshot Testing**: `insta-review`, `insta-accept`, `insta-reject`, `update-snapshots`
 
 **Important**: All test-related targets use [nextest](https://nexte.st/) instead of the standard `cargo test`. This

@@ -148,10 +148,10 @@ install-dev-tools: ## Install development tools
 	cargo install cargo-insta
 	uv tool install prek
 
-.PHONY: prek-setup
-prek-setup: ## Set up prek hooks
+.PHONY: pre-commit-setup
+pre-commit-setup: ## Set up pre-commit hooks
 	prek install
 
-.PHONY: prek-run
-prek-run: ## Run prek hooks manually
+.PHONY: pre-commit-run
+pre-commit-run: ## Run pre-commit hooks manually
 	prek run --all-files
