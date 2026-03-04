@@ -95,7 +95,7 @@ Import helpers instead of reimplementing scaffolding.
 
 ## Code Quality
 
-Prek hooks enforce formatting and linting. Setup: `make pre-commit-setup`
+Pre-commit hooks (via [prek](https://prek.j178.dev/)) enforce formatting and linting. Setup: `make pre-commit-setup`
 
 Workspace-level clippy lints prohibit: `unwrap_used`, `panic`, `print_stdout`, `print_stderr`, `dbg_macro`, `todo`,
 `unimplemented`

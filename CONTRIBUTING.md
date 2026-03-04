@@ -85,12 +85,12 @@ All contributions should pass the following checks:
 **Note**: This project requires [nextest](https://nexte.st/) for testing. The standard `cargo test` command will not
 work correctly.
 
-These checks are automatically enforced by prek hooks and our CI pipeline.
+These checks are automatically enforced by pre-commit hooks and our CI pipeline.
 
-### Prek Hooks
+### Pre-commit Hooks
 
-This project uses [prek](https://prek.j178.dev/) hooks to ensure code quality standards are met before each commit. Prek
-is a fast, Rust-based drop-in replacement for pre-commit, installed using
+This project uses [prek](https://prek.j178.dev/) to run pre-commit hooks ensuring code quality standards are met before
+each commit. Prek is a fast, Rust-based drop-in replacement for pre-commit, installed using
 [uv tool](https://github.com/astral-sh/uv).
 
 The hooks will:
