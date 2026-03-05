@@ -146,12 +146,12 @@ install-dev-tools: ## Install development tools
 	cargo install cargo-nextest
 	cargo install cargo-llvm-cov
 	cargo install cargo-insta
-	uv tool install pre-commit
+	uv tool install prek
 
 .PHONY: pre-commit-setup
 pre-commit-setup: ## Set up pre-commit hooks
-	pre-commit install
+	prek install
 
 .PHONY: pre-commit-run
 pre-commit-run: ## Run pre-commit hooks manually
-	pre-commit run --all-files
+	prek run --all-files

@@ -89,8 +89,9 @@ These checks are automatically enforced by pre-commit hooks and our CI pipeline.
 
 ### Pre-commit Hooks
 
-This project uses pre-commit hooks to ensure code quality standards are met before each commit. Pre-commit is installed
-using [uv tool](https://github.com/astral-sh/uv), which installs Python tools without requiring a virtual environment.
+This project uses [prek](https://prek.j178.dev/) to run pre-commit hooks ensuring code quality standards are met before
+each commit. Prek is a fast, Rust-based drop-in replacement for pre-commit, installed using
+[uv tool](https://github.com/astral-sh/uv).
 
 The hooks will:
 
