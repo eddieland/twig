@@ -171,10 +171,11 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
 
 /// Pre-computes the set of commit OIDs that are unique to the current branch.
 ///
-/// Uses `merge_base(HEAD, comparison_tip)` to find the fork point, then walks
-/// from HEAD to that fork point to collect all branch-unique OIDs. This is
-/// O(branch_length) rather than O(n * graph_depth) from per-commit
-/// `graph_descendant_of` calls.
+/// Walks from HEAD and hides everything reachable from `comparison_tip`, so
+/// only commits reachable from HEAD but NOT from the comparison branch are
+/// yielded. This preserves the original `!graph_descendant_of(tip, oid)`
+/// semantics while being O(branch_length) rather than O(n * graph_depth)
+/// from per-commit `graph_descendant_of` calls.
 fn build_branch_unique_set(repo: &Repository, comparison_tip: Option<Oid>) -> HashSet<Oid> {
   let Some(tip) = comparison_tip else {
     return HashSet::new();
@@ -182,30 +183,42 @@ fn build_branch_unique_set(repo: &Repository, comparison_tip: Option<Oid>) -> Ha
 
   let head_oid = match repo.head().ok().and_then(|h| h.target()) {
     Some(oid) => oid,
-    None => return HashSet::new(),
-  };
-
-  let merge_base = match repo.merge_base(head_oid, tip) {
-    Ok(mb) => mb,
-    Err(_) => return HashSet::new(),
+    None => {
+      tracing::warn!("Could not resolve HEAD for branch-unique detection; falling back to non-optimized path");
+      return HashSet::new();
+    }
   };
 
   let mut unique_oids = HashSet::new();
   let mut revwalk = match repo.revwalk() {
     Ok(rw) => rw,
-    Err(_) => return unique_oids,
+    Err(e) => {
+      tracing::warn!("Failed to create revwalk for branch-unique detection: {e}");
+      return unique_oids;
+    }
   };
 
-  if revwalk.push(head_oid).is_err() {
+  if let Err(e) = revwalk.push(head_oid) {
+    tracing::warn!("Failed to push HEAD to revwalk for branch-unique detection: {e}");
     return unique_oids;
   }
-  // Hide everything reachable from the merge base so only branch-unique commits are yielded
-  if revwalk.hide(merge_base).is_err() {
+  // Hide everything reachable from the comparison tip so only branch-unique commits are yielded.
+  // This matches the original semantics of `!graph_descendant_of(tip, oid) && oid != tip`.
+  if let Err(e) = revwalk.hide(tip) {
+    tracing::warn!("Failed to hide comparison tip in revwalk for branch-unique detection: {e}");
     return unique_oids;
   }
 
-  for oid in revwalk.flatten() {
-    unique_oids.insert(oid);
+  for oid_result in &mut revwalk {
+    match oid_result {
+      Ok(oid) => {
+        unique_oids.insert(oid);
+      }
+      Err(e) => {
+        tracing::warn!("Error during branch-unique revwalk, stopping early: {e}");
+        break;
+      }
+    }
   }
 
   tracing::debug!("Pre-computed {} branch-unique commits", unique_oids.len());
