@@ -5,6 +5,7 @@
 //! retrieve commit history and extracts relevant metadata for scoring and
 //! selection.
 
+use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -79,6 +80,11 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
     comparison_tip
   );
 
+  // Pre-compute the set of branch-unique commit OIDs using merge_base + revwalk.
+  // This replaces per-commit graph_descendant_of calls (O(n * graph_depth)) with
+  // a single merge_base computation + bounded revwalk + O(1) HashSet lookups.
+  let branch_unique_oids = build_branch_unique_set(&repo, comparison_tip);
+
   // Calculate the cutoff timestamp for filtering by days
   let since_timestamp = (Utc::now() - Duration::days(args.days as i64)).timestamp();
 
@@ -117,15 +123,7 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
     // Determine if this commit is unique to the current branch BEFORE author
     // filtering. Branch-unique commits should always be included regardless
     // of author, since they are the most relevant fixup targets.
-    // A commit is branch-unique if it's NOT reachable from the comparison branch tip
-    // (i.e., the comparison tip is NOT a descendant of this commit, and they're not equal)
-    let is_branch_unique = comparison_tip.is_some_and(|tip| {
-      // The commit is reachable from the comparison tip if:
-      // - The tip is a descendant of the commit (commit is an ancestor of tip), OR
-      // - The commit equals the tip
-      // So branch-unique means: tip is NOT a descendant AND not equal
-      oid != tip && !repo.graph_descendant_of(tip, oid).unwrap_or(true)
-    });
+    let is_branch_unique = branch_unique_oids.contains(&oid);
 
     let author = commit.author();
     let author_name = author.name().unwrap_or("").to_string();
@@ -169,6 +167,62 @@ pub fn collect_commits(repo_path: &Path, args: &FixupArgs) -> Result<Vec<CommitC
 
   tracing::debug!("Collected {} commit candidates", candidates.len());
   Ok(candidates)
+}
+
+/// Pre-computes the set of commit OIDs that are unique to the current branch.
+///
+/// Walks from HEAD and hides everything reachable from `comparison_tip`, so
+/// only commits reachable from HEAD but NOT from the comparison branch are
+/// yielded. This preserves the original `!graph_descendant_of(tip, oid)`
+/// semantics while being O(branch_length) rather than O(n * graph_depth)
+/// from per-commit `graph_descendant_of` calls.
+fn build_branch_unique_set(repo: &Repository, comparison_tip: Option<Oid>) -> HashSet<Oid> {
+  let Some(tip) = comparison_tip else {
+    return HashSet::new();
+  };
+
+  let head_oid = match repo.head().ok().and_then(|h| h.target()) {
+    Some(oid) => oid,
+    None => {
+      tracing::warn!("Could not resolve HEAD for branch-unique detection; falling back to non-optimized path");
+      return HashSet::new();
+    }
+  };
+
+  let mut unique_oids = HashSet::new();
+  let mut revwalk = match repo.revwalk() {
+    Ok(rw) => rw,
+    Err(e) => {
+      tracing::warn!("Failed to create revwalk for branch-unique detection: {e}");
+      return unique_oids;
+    }
+  };
+
+  if let Err(e) = revwalk.push(head_oid) {
+    tracing::warn!("Failed to push HEAD to revwalk for branch-unique detection: {e}");
+    return unique_oids;
+  }
+  // Hide everything reachable from the comparison tip so only branch-unique commits are yielded.
+  // This matches the original semantics of `!graph_descendant_of(tip, oid) && oid != tip`.
+  if let Err(e) = revwalk.hide(tip) {
+    tracing::warn!("Failed to hide comparison tip in revwalk for branch-unique detection: {e}");
+    return unique_oids;
+  }
+
+  for oid_result in &mut revwalk {
+    match oid_result {
+      Ok(oid) => {
+        unique_oids.insert(oid);
+      }
+      Err(e) => {
+        tracing::warn!("Error during branch-unique revwalk, stopping early: {e}");
+        break;
+      }
+    }
+  }
+
+  tracing::debug!("Pre-computed {} branch-unique commits", unique_oids.len());
+  unique_oids
 }
 
 /// Get the current git user name
