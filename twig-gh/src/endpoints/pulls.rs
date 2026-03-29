@@ -6,6 +6,21 @@ use crate::client::GitHubClient;
 use crate::consts::{ACCEPT, USER_AGENT};
 use crate::models::{GitHubPullRequest, PullRequestReview, PullRequestStatus};
 
+/// Parameters for creating a new pull request via the GitHub API.
+#[derive(Debug, Clone)]
+pub struct CreatePullRequestParams {
+  /// The title of the pull request.
+  pub title: String,
+  /// The name of the branch where changes are implemented.
+  pub head: String,
+  /// The name of the branch you want the changes pulled into.
+  pub base: String,
+  /// An optional body / description for the pull request.
+  pub body: Option<String>,
+  /// Whether the pull request should be created as a draft.
+  pub draft: bool,
+}
+
 /// Pagination options for GitHub API requests
 #[derive(Debug, Clone, Copy)]
 pub struct PaginationOptions {
@@ -245,6 +260,71 @@ impl GitHubClient {
       branch_name
     );
     Ok(matching_prs)
+  }
+
+  /// Create a new pull request.
+  #[instrument(skip(self), level = "debug")]
+  pub async fn create_pull_request(
+    &self,
+    owner: &str,
+    repo: &str,
+    params: &CreatePullRequestParams,
+  ) -> Result<GitHubPullRequest> {
+    info!(
+      "Creating pull request for {}/{}: {} ({} -> {})",
+      owner, repo, params.title, params.head, params.base
+    );
+
+    let url = format!("{}/repos/{}/{}/pulls", self.base_url, owner, repo);
+
+    let body = serde_json::json!({
+      "title": params.title,
+      "head": params.head,
+      "base": params.base,
+      "body": params.body,
+      "draft": params.draft,
+    });
+
+    let response = self
+      .client
+      .post(&url)
+      .header(header::ACCEPT, ACCEPT)
+      .header(header::USER_AGENT, USER_AGENT)
+      .basic_auth(&self.auth.username, Some(&self.auth.token))
+      .json(&body)
+      .send()
+      .await
+      .context(format!("POST {url} failed"))?;
+
+    let status = response.status();
+    debug!("GitHub API response status: {}", status);
+
+    match status {
+      reqwest::StatusCode::CREATED => {
+        let pr = response
+          .json::<GitHubPullRequest>()
+          .await
+          .context("Failed to parse created pull request")?;
+        info!("Successfully created pull request #{}", pr.number);
+        Ok(pr)
+      }
+      reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN => {
+        warn!("Authentication failed when accessing GitHub API");
+        Err(anyhow::anyhow!(
+          "Authentication failed. Please check your GitHub credentials."
+        ))
+      }
+      reqwest::StatusCode::UNPROCESSABLE_ENTITY => {
+        let error_text = response.text().await.unwrap_or_default();
+        warn!("Validation error creating PR: {}", error_text);
+        Err(anyhow::anyhow!("Validation error: {error_text}"))
+      }
+      _ => {
+        let error_text = response.text().await.unwrap_or_default();
+        warn!("Unexpected GitHub API error: HTTP {} - {}", status, error_text);
+        Err(anyhow::anyhow!("Unexpected error: HTTP {status} - {error_text}"))
+      }
+    }
   }
 }
 
@@ -663,6 +743,97 @@ mod tests {
     assert_eq!(status.check_runs[0].conclusion, Some("success".to_string()));
     assert_eq!(status.check_runs[1].name, "lint");
     assert_eq!(status.check_runs[1].conclusion, Some("failure".to_string()));
+
+    Ok(())
+  }
+
+  #[tokio::test]
+  async fn test_create_pull_request_success() -> anyhow::Result<()> {
+    let mock_server = MockServer::start().await;
+    let auth = GitHubAuth {
+      username: "test_user".to_string(),
+      token: "test_token".to_string(),
+    };
+    let mut client = GitHubClient::new(auth);
+    client.base_url = mock_server.uri();
+
+    Mock::given(method("POST"))
+      .and(path("/repos/octocat/Hello-World/pulls"))
+      .and(header(header::ACCEPT, ACCEPT))
+      .and(header(header::USER_AGENT, USER_AGENT))
+      .and(header(header::AUTHORIZATION, "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
+      .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
+        "id": 1,
+        "number": 1347,
+        "state": "open",
+        "title": "Amazing new feature",
+        "html_url": "https://github.com/octocat/Hello-World/pull/1347",
+        "user": {
+          "login": "octocat",
+          "id": 1,
+          "name": "The Octocat"
+        },
+        "created_at": "2011-01-26T19:01:12Z",
+        "updated_at": "2011-01-26T19:01:12Z",
+        "head": {
+          "label": "octocat:new-feature",
+          "ref": "new-feature",
+          "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
+        },
+        "base": {
+          "label": "octocat:master",
+          "ref": "master",
+          "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
+        },
+        "draft": false
+      })))
+      .mount(&mock_server)
+      .await;
+
+    let params = CreatePullRequestParams {
+      title: "Amazing new feature".to_string(),
+      head: "new-feature".to_string(),
+      base: "master".to_string(),
+      body: Some("This is a great feature".to_string()),
+      draft: false,
+    };
+
+    let pr = client.create_pull_request("octocat", "Hello-World", &params).await?;
+
+    assert_eq!(pr.number, 1347);
+    assert_eq!(pr.title, "Amazing new feature");
+    assert_eq!(pr.state, "open");
+
+    Ok(())
+  }
+
+  #[tokio::test]
+  async fn test_create_pull_request_validation_error() -> anyhow::Result<()> {
+    let mock_server = MockServer::start().await;
+    let auth = GitHubAuth {
+      username: "test_user".to_string(),
+      token: "test_token".to_string(),
+    };
+    let mut client = GitHubClient::new(auth);
+    client.base_url = mock_server.uri();
+
+    Mock::given(method("POST"))
+      .and(path("/repos/octocat/Hello-World/pulls"))
+      .respond_with(ResponseTemplate::new(422).set_body_string("Validation Failed"))
+      .mount(&mock_server)
+      .await;
+
+    let params = CreatePullRequestParams {
+      title: "Bad PR".to_string(),
+      head: "nonexistent-branch".to_string(),
+      base: "master".to_string(),
+      body: None,
+      draft: false,
+    };
+
+    let result = client.create_pull_request("octocat", "Hello-World", &params).await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Validation error"));
 
     Ok(())
   }
