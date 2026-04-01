@@ -28,7 +28,8 @@ use git2::Repository;
 use twig_core::git::{
   BranchGraph, BranchGraphBuilder, BranchGraphError, BranchName, BranchTableColorMode, BranchTableRenderer,
   BranchTableSchema, BranchTableStyle, annotate_orphaned_branches, attach_orphans_to_default_root, checkout_branch,
-  default_root_branch, determine_render_root, filter_branch_graph, find_orphaned_branches, get_repository,
+  collect_tree_order, default_root_branch, determine_render_root, filter_branch_graph, find_orphaned_branches,
+  get_repository,
 };
 use twig_core::output::{format_command, print_error, print_success, print_warning};
 use twig_core::state::RepoState;
@@ -77,10 +78,15 @@ pub fn run(cli: &Cli) -> Result<()> {
     return Ok(());
   }
 
+  // Build the graph early when --up/--down needs it for navigation.
+  let needs_tree_nav = cli.up || cli.down;
+
   let selection = if cli.root {
     select_root_branch(&repo, &repo_state)?
   } else if cli.parent {
     select_parent_branch(&repo, &repo_state)?
+  } else if needs_tree_nav {
+    select_tree_neighbor(&repo, &repo_state, cli.up)?
   } else {
     Selection::default()
   };
@@ -250,6 +256,80 @@ fn select_parent_branch(repo: &Repository, state: &RepoState) -> Result<Selectio
   Ok(Selection {
     render_root: Some(parent.clone()),
     message: Some(format!("Switched to parent branch \"{parent}\"")),
+  })
+}
+
+/// Navigates to the previous (`up = true`) or next (`up = false`) branch in
+/// tree-display order.
+///
+/// Builds a temporary [`BranchGraph`] and flattens it into depth-first order
+/// (matching the rendered tree). The current branch's position is located and
+/// the adjacent entry is checked out.
+///
+/// # Errors
+///
+/// Propagates errors from graph building or [`checkout_branch`].
+fn select_tree_neighbor(repo: &Repository, state: &RepoState, up: bool) -> Result<Selection> {
+  let Some(current) = current_branch_name(repo) else {
+    print_warning("Repository is in a detached HEAD state; cannot navigate the tree.");
+    return Ok(Selection::default());
+  };
+
+  let graph = match BranchGraphBuilder::new().build(repo) {
+    Ok(g) => g,
+    Err(err) => {
+      handle_graph_error(err);
+      return Ok(Selection::default());
+    }
+  };
+
+  if graph.is_empty() {
+    print_warning("No branches found to navigate.");
+    return Ok(Selection::default());
+  }
+
+  // Apply the same orphan handling as the render pipeline so the order matches.
+  let graph = attach_orphans_to_default_root(graph, state);
+
+  let Some(root) = determine_render_root(&graph, state, None) else {
+    print_warning("Unable to determine a branch to render.");
+    return Ok(Selection::default());
+  };
+
+  let order = collect_tree_order(&graph, &root);
+  let current_name = BranchName::from(current.as_str());
+
+  let Some(pos) = order.iter().position(|b| b == &current_name) else {
+    print_warning("Current branch is not part of the rendered tree.");
+    return Ok(Selection::default());
+  };
+
+  let direction = if up { "up" } else { "down" };
+
+  let target_pos = if up {
+    if pos == 0 {
+      print_warning("Already at the top of the tree.");
+      return Ok(Selection::default());
+    }
+    pos - 1
+  } else {
+    if pos + 1 >= order.len() {
+      print_warning("Already at the bottom of the tree.");
+      return Ok(Selection::default());
+    }
+    pos + 1
+  };
+
+  let target = &order[target_pos];
+  checkout_branch(repo, target.as_str())
+    .with_context(|| format!("Failed to checkout {}", target.as_str()))?;
+
+  Ok(Selection {
+    render_root: None,
+    message: Some(format!(
+      "Switched {direction} to branch \"{}\"",
+      target.as_str()
+    )),
   })
 }
 
