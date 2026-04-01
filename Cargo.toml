@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "no-worries",
     "twig-cli",
     "twig-core",
     "twig-gh",
