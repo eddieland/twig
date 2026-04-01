@@ -186,11 +186,11 @@ fn collect_tree_order_recursive(
     return;
   };
 
-  order.push(branch.clone());
-
   if !visited.insert(branch.clone()) {
     return;
   }
+
+  order.push(branch.clone());
 
   for child in &node.topology.children {
     collect_tree_order_recursive(graph, child, visited, order);

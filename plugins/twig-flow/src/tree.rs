@@ -78,7 +78,6 @@ pub fn run(cli: &Cli) -> Result<()> {
     return Ok(());
   }
 
-  // Build the graph early when --up/--down needs it for navigation.
   let needs_tree_nav = cli.up || cli.down;
 
   let selection = if cli.root {
