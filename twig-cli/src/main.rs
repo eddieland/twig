@@ -6,14 +6,18 @@
 use anyhow::Result;
 use clap::{CommandFactory, Parser};
 use clap_complete::CompleteEnv;
-use human_panic::setup_panic;
+use human_panic::{Metadata, setup_panic};
 use tracing::debug;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 use twig_cli::cli::{self, handle_cli};
 
 fn main() -> Result<()> {
-  setup_panic!();
+  setup_panic!(Metadata::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
+    .authors("Edward Jones <e@eddie.land>")
+    .homepage("https://github.com/eddieland/twig")
+    .support("- Open an issue at https://github.com/eddieland/twig/issues\n- Email: e@eddie.land")
+  );
 
   // Handle shell completion via CompleteEnv (activated by COMPLETE=<shell> env var)
   CompleteEnv::with_factory(cli::Cli::command).complete();
