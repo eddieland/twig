@@ -1,0 +1,11 @@
+---
+source: twig-core/src/git/renderer.rs
+expression: output
+---
+Branch                       Story     PR    
+* main                       --        --    
+├─ feature/auth-refresh (+…  PROJ-451  --    
+│  └─ feature/auth-refresh…  PROJ-451  #982  
+└─ feature/payment-refacto…  --        draft 
+   ├─ feature/payment-api …  --        --    
+   └─ feature/payment-ui (…  --        --

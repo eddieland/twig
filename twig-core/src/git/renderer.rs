@@ -260,6 +260,7 @@ pub struct BranchTableRenderer {
   schema: BranchTableSchema,
   style: BranchTableStyle,
   highlighted_branches: BTreeSet<BranchName>,
+  max_width: Option<usize>,
 }
 
 impl Default for BranchTableRenderer {
@@ -275,12 +276,24 @@ impl BranchTableRenderer {
       schema,
       style: BranchTableStyle::default(),
       highlighted_branches: BTreeSet::new(),
+      max_width: None,
     }
   }
 
   /// Apply additional styling options before rendering.
   pub fn with_style(mut self, style: BranchTableStyle) -> Self {
     self.style = style;
+    self
+  }
+
+  /// Set a maximum total width (in columns) for the rendered table.
+  ///
+  /// When the natural column widths exceed this limit the renderer
+  /// progressively shrinks columns from right to left (keeping the
+  /// branch-tree column as wide as possible) and truncates oversized
+  /// cell values with an ellipsis (`…`).
+  pub fn with_max_width(mut self, max_width: usize) -> Self {
+    self.max_width = Some(max_width);
     self
   }
 
@@ -522,6 +535,10 @@ impl BranchTableRenderer {
       }
     }
 
+    if let Some(max_width) = self.max_width {
+      constrain_column_widths(&mut widths, &self.schema, max_width);
+    }
+
     widths
   }
 
@@ -533,7 +550,12 @@ impl BranchTableRenderer {
     spacing: &str,
   ) -> Result<(), BranchTableRenderError> {
     for (idx, cell) in cells.iter().enumerate() {
-      let padded = pad_cell(cell, widths[idx]);
+      let cell = if self.max_width.is_some() {
+        truncate_cell(cell, widths[idx])
+      } else {
+        cell.to_string()
+      };
+      let padded = pad_cell(&cell, widths[idx]);
       writer.write_str(&padded)?;
       if idx < cells.len() - 1 {
         writer.write_str(spacing)?;
@@ -626,6 +648,73 @@ fn pad_cell(value: &str, width: usize) -> String {
     output.push_str(&" ".repeat(width - current_width));
     output
   }
+}
+
+/// Shrinks column widths so they fit within `max_width`.
+///
+/// Columns are shrunk from right to left (preserving the branch-tree column
+/// as much as possible). Each column is reduced down to its minimum width
+/// before moving on to the next column to the left.
+fn constrain_column_widths(widths: &mut [usize], schema: &BranchTableSchema, max_width: usize) {
+  let spacing = schema.column_spacing();
+  let total_spacing = if widths.len() > 1 {
+    spacing * (widths.len() - 1)
+  } else {
+    0
+  };
+
+  let total: usize = widths.iter().sum::<usize>() + total_spacing;
+  if total <= max_width {
+    return;
+  }
+
+  let mut excess = total - max_width;
+  let columns = schema.columns();
+
+  // Shrink from rightmost column to leftmost, respecting min_width.
+  for idx in (0..widths.len()).rev() {
+    if excess == 0 {
+      break;
+    }
+    let min = columns.get(idx).map_or(1, |c| c.min_width().max(1));
+    let shrinkable = widths[idx].saturating_sub(min);
+    let shrink = shrinkable.min(excess);
+    widths[idx] -= shrink;
+    excess -= shrink;
+  }
+}
+
+/// Truncates a cell value to fit within `width` visible columns.
+///
+/// When the cell's visible width exceeds the target, the text is trimmed
+/// and a trailing `…` is appended. ANSI escape sequences are stripped before
+/// measurement so that color codes do not count towards the width budget.
+fn truncate_cell(value: &str, width: usize) -> String {
+  let current = visible_width(value);
+  if current <= width {
+    return value.to_string();
+  }
+  if width == 0 {
+    return String::new();
+  }
+
+  let plain = strip_ansi_codes(value);
+  let ellipsis = "…";
+  let target = width.saturating_sub(1); // leave room for the ellipsis
+
+  let mut truncated = String::new();
+  let mut w = 0;
+  for ch in plain.chars() {
+    let cw = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
+    if w + cw > target {
+      break;
+    }
+    truncated.push(ch);
+    w += cw;
+  }
+
+  truncated.push_str(ellipsis);
+  truncated
 }
 
 fn style_text(value: impl AsRef<str>, style: Style, colors_enabled: bool) -> String {
@@ -841,6 +930,78 @@ mod tests {
       .unwrap();
 
     assert!(output.contains(&format!("{} †", orphan_name)));
+  }
+
+  #[test]
+  fn constrains_columns_to_max_width() {
+    let (graph, root) = sample_graph();
+    let mut output = String::new();
+    BranchTableRenderer::default()
+      .with_style(BranchTableStyle::new(BranchTableColorMode::Never))
+      .with_max_width(60)
+      .render(&mut output, &graph, &root)
+      .unwrap();
+
+    assert_snapshot!("flow_renderer__max_width_60", output);
+
+    // Every line should fit within 60 columns (trailing whitespace excluded).
+    for line in output.lines() {
+      let trimmed = line.trim_end();
+      let width = measure_text_width(trimmed);
+      assert!(width <= 60, "line exceeds 60 cols ({width}): {trimmed:?}");
+    }
+  }
+
+  #[test]
+  fn constrains_columns_to_narrow_width() {
+    let (graph, root) = sample_graph();
+    let mut output = String::new();
+    BranchTableRenderer::default()
+      .with_style(BranchTableStyle::new(BranchTableColorMode::Never))
+      .with_max_width(45)
+      .render(&mut output, &graph, &root)
+      .unwrap();
+
+    assert_snapshot!("flow_renderer__max_width_45", output);
+
+    for line in output.lines() {
+      let trimmed = line.trim_end();
+      let width = measure_text_width(trimmed);
+      assert!(width <= 45, "line exceeds 45 cols ({width}): {trimmed:?}");
+    }
+  }
+
+  #[test]
+  fn max_width_no_op_when_table_already_fits() {
+    let (graph, root) = sample_graph();
+
+    let mut unconstrained = String::new();
+    BranchTableRenderer::default()
+      .with_style(BranchTableStyle::new(BranchTableColorMode::Never))
+      .render(&mut unconstrained, &graph, &root)
+      .unwrap();
+
+    let mut wide = String::new();
+    BranchTableRenderer::default()
+      .with_style(BranchTableStyle::new(BranchTableColorMode::Never))
+      .with_max_width(200)
+      .render(&mut wide, &graph, &root)
+      .unwrap();
+
+    assert_eq!(unconstrained, wide);
+  }
+
+  #[test]
+  fn truncate_cell_preserves_short_text() {
+    assert_eq!(truncate_cell("hello", 10), "hello");
+    assert_eq!(truncate_cell("hello", 5), "hello");
+  }
+
+  #[test]
+  fn truncate_cell_adds_ellipsis() {
+    let result = truncate_cell("feature/very-long-branch-name", 15);
+    assert_eq!(visible_width(&result), 15);
+    assert!(result.ends_with('…'));
   }
 
   fn sample_graph() -> (BranchGraph, BranchName) {

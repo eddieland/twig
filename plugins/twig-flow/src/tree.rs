@@ -276,13 +276,29 @@ fn current_branch_name(repo: &Repository) -> Option<String> {
 fn render_table(graph: &BranchGraph, root: &BranchName, highlighted: &BTreeSet<BranchName>) -> Result<()> {
   let schema = BranchTableSchema::default().with_placeholder("—");
   let style = BranchTableStyle::new(resolve_color_mode());
-  let mut buffer = String::new();
-  BranchTableRenderer::new(schema)
+  let mut renderer = BranchTableRenderer::new(schema)
     .with_style(style)
-    .with_highlighted_branches(highlighted.iter().cloned())
-    .render(&mut buffer, graph, root)?;
+    .with_highlighted_branches(highlighted.iter().cloned());
+
+  if let Some(width) = terminal_width() {
+    renderer = renderer.with_max_width(width);
+  }
+
+  let mut buffer = String::new();
+  renderer.render(&mut buffer, graph, root)?;
   print!("{buffer}");
   Ok(())
+}
+
+/// Returns the terminal width in columns, or `None` if it cannot be detected
+/// (e.g. when stdout is piped).
+fn terminal_width() -> Option<usize> {
+  let term = console::Term::stdout();
+  if term.is_term() {
+    Some(term.size().1 as usize)
+  } else {
+    None
+  }
 }
 
 /// Maps the `TWIG_COLORS` environment variable to a [`BranchTableColorMode`].

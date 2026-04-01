@@ -34,6 +34,7 @@ toml.workspace = true
 
 # Output formatting
 owo-colors.workspace = true
+unicode-width.workspace = true
 emojis.workspace = true
 
 [dev-dependencies]
