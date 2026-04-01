@@ -418,5 +418,9 @@ fn determine_rebase_order(repo_state: &RepoState, start_branch: &str, branches: 
     }
   }
 
+  // The DFS post-order produces a reverse topological order (deepest
+  // children first). We need parents rebased before their children so
+  // that each child rebases onto an already-updated parent.
+  result.reverse();
   result
 }
