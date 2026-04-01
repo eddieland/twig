@@ -427,17 +427,16 @@ fn determine_rebase_order(repo_state: &RepoState, start_branch: &str, branches: 
 
 #[cfg(test)]
 mod tests {
-  use super::*;
   use twig_core::state::RepoState;
+
+  use super::*;
 
   /// Verify that determine_rebase_order returns parents before children
   /// so that cascading rebases propagate changes top-down.
   #[test]
   fn rebase_order_parents_before_children() {
     let mut state = RepoState::default();
-    state
-      .add_root("main".to_string(), true)
-      .expect("add root");
+    state.add_root("main".to_string(), true).expect("add root");
     state
       .add_dependency("feature".to_string(), "main".to_string())
       .expect("add dep");
@@ -466,20 +465,18 @@ mod tests {
   fn rebase_order_deep_chain() {
     let mut state = RepoState::default();
     state.add_root("a".to_string(), true).expect("add root");
-    state
-      .add_dependency("b".to_string(), "a".to_string())
-      .expect("add dep");
-    state
-      .add_dependency("c".to_string(), "b".to_string())
-      .expect("add dep");
-    state
-      .add_dependency("d".to_string(), "c".to_string())
-      .expect("add dep");
+    state.add_dependency("b".to_string(), "a".to_string()).expect("add dep");
+    state.add_dependency("c".to_string(), "b".to_string()).expect("add dep");
+    state.add_dependency("d".to_string(), "c".to_string()).expect("add dep");
 
     let descendants = get_all_descendants(&state, "a", None);
     let order = determine_rebase_order(&state, "a", &descendants);
 
-    assert_eq!(order, vec!["b", "c", "d"], "branches must be in topological parent-first order");
+    assert_eq!(
+      order,
+      vec!["b", "c", "d"],
+      "branches must be in topological parent-first order"
+    );
   }
 
   /// Fan-out: parent with multiple children — children can be in any order
@@ -501,7 +498,12 @@ mod tests {
     let descendants = get_all_descendants(&state, "main", None);
     let order = determine_rebase_order(&state, "main", &descendants);
 
-    let pos = |name: &str| order.iter().position(|b| b == name).unwrap_or_else(|| panic!("{name} not in order"));
+    let pos = |name: &str| {
+      order
+        .iter()
+        .position(|b| b == name)
+        .unwrap_or_else(|| panic!("{name} not in order"))
+    };
     assert!(pos("feat-a") < pos("sub-a"), "feat-a must come before sub-a");
     // feat-b has no children, so its position relative to feat-a doesn't matter
     // but both must be present
