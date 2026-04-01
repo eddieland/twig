@@ -13,10 +13,11 @@ use tracing_subscriber::{EnvFilter, fmt};
 use twig_cli::cli::{self, handle_cli};
 
 fn main() -> Result<()> {
-  setup_panic!(Metadata::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
-    .authors("Edward Jones <e@eddie.land>")
-    .homepage("https://github.com/eddieland/twig")
-    .support("- Open an issue at https://github.com/eddieland/twig/issues\n- Email: e@eddie.land")
+  setup_panic!(
+    Metadata::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
+      .authors("Edward Jones <e@eddie.land>")
+      .homepage("https://github.com/eddieland/twig")
+      .support("- Open an issue at https://github.com/eddieland/twig/issues\n- Email: e@eddie.land")
   );
 
   // Handle shell completion via CompleteEnv (activated by COMPLETE=<shell> env var)
