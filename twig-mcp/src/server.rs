@@ -887,11 +887,11 @@ fn build_tree_node(graph: &BranchGraph, state: &RepoState, name: &BranchName) ->
 
 #[cfg(test)]
 mod tests {
-  use super::*;
-
   use std::path::PathBuf;
 
   use twig_core::config::ConfigDirs;
+
+  use super::*;
 
   fn test_context() -> ServerContext {
     // Context with no repo — sufficient for testing router filtering.
@@ -904,11 +904,21 @@ mod tests {
   }
 
   fn tool_names(server: &TwigMcpServer) -> Vec<String> {
-    server.tool_router.list_all().into_iter().map(|t| t.name.to_string()).collect()
+    server
+      .tool_router
+      .list_all()
+      .into_iter()
+      .map(|t| t.name.to_string())
+      .collect()
   }
 
   fn prompt_names(server: &TwigMcpServer) -> Vec<String> {
-    server.prompt_router.list_all().into_iter().map(|p| p.name.to_string()).collect()
+    server
+      .prompt_router
+      .list_all()
+      .into_iter()
+      .map(|p| p.name.to_string())
+      .collect()
   }
 
   #[test]
@@ -965,7 +975,10 @@ mod tests {
 
   #[test]
   fn disable_multiple_groups() {
-    let server = TwigMcpServer::new(test_context(), &[ToolGroup::Github, ToolGroup::Jira, ToolGroup::Prompts]);
+    let server = TwigMcpServer::new(
+      test_context(),
+      &[ToolGroup::Github, ToolGroup::Jira, ToolGroup::Prompts],
+    );
     let tools = tool_names(&server);
     for name in GITHUB_TOOLS.iter().chain(JIRA_TOOLS.iter()) {
       assert!(!tools.contains(&name.to_string()), "tool {name} should be removed");
