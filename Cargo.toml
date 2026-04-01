@@ -9,6 +9,7 @@ members = [
     "twig-test-utils",
     "plugins/twig-flow",
     "plugins/twig-prune",
+    "plugins/twig-update",
 ]
 exclude = [
     "/.github",
