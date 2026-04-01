@@ -320,15 +320,11 @@ fn select_tree_neighbor(repo: &Repository, state: &RepoState, up: bool) -> Resul
   };
 
   let target = &order[target_pos];
-  checkout_branch(repo, target.as_str())
-    .with_context(|| format!("Failed to checkout {}", target.as_str()))?;
+  checkout_branch(repo, target.as_str()).with_context(|| format!("Failed to checkout {}", target.as_str()))?;
 
   Ok(Selection {
     render_root: None,
-    message: Some(format!(
-      "Switched {direction} to branch \"{}\"",
-      target.as_str()
-    )),
+    message: Some(format!("Switched {direction} to branch \"{}\"", target.as_str())),
   })
 }
 
