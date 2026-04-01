@@ -36,6 +36,25 @@ const GITHUB_TOOLS: &[&str] = &["get_pull_request", "get_pr_status", "list_pull_
 const JIRA_TOOLS: &[&str] = &["get_jira_issue", "list_jira_issues"];
 const PROMPT_NAMES: &[&str] = &["stack-status", "branch-context"];
 
+impl ToolGroup {
+  /// MCP tool names that belong to this group.
+  pub fn tool_names(&self) -> &'static [&'static str] {
+    match self {
+      Self::Github => GITHUB_TOOLS,
+      Self::Jira => JIRA_TOOLS,
+      Self::Prompts => &[],
+    }
+  }
+
+  /// MCP prompt names that belong to this group.
+  pub fn prompt_names(&self) -> &'static [&'static str] {
+    match self {
+      Self::Github | Self::Jira => &[],
+      Self::Prompts => PROMPT_NAMES,
+    }
+  }
+}
+
 /// Arguments for the `branch-context` prompt.
 #[derive(Debug, schemars::JsonSchema, serde::Deserialize)]
 pub struct BranchContextArgs {
@@ -62,22 +81,11 @@ impl TwigMcpServer {
     let mut prompt_router = Self::prompt_router();
 
     for group in disabled {
-      match group {
-        ToolGroup::Github => {
-          for name in GITHUB_TOOLS {
-            tool_router.remove_route(name);
-          }
-        }
-        ToolGroup::Jira => {
-          for name in JIRA_TOOLS {
-            tool_router.remove_route(name);
-          }
-        }
-        ToolGroup::Prompts => {
-          for name in PROMPT_NAMES {
-            prompt_router.remove_route(name);
-          }
-        }
+      for name in group.tool_names() {
+        tool_router.remove_route(name);
+      }
+      for name in group.prompt_names() {
+        prompt_router.remove_route(name);
       }
     }
 

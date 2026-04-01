@@ -38,8 +38,6 @@ struct Cli {
   repo: Option<PathBuf>,
 
   /// Disable a group of tools. Can be specified multiple times.
-  ///
-  /// Available groups: github, jira, prompts
   #[arg(long = "disable", value_name = "GROUP")]
   disable: Vec<ToolGroup>,
 }
