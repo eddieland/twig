@@ -418,5 +418,95 @@ fn determine_rebase_order(repo_state: &RepoState, start_branch: &str, branches: 
     }
   }
 
+  // The DFS post-order produces a reverse topological order (deepest
+  // children first). We need parents rebased before their children so
+  // that each child rebases onto an already-updated parent.
+  result.reverse();
   result
+}
+
+#[cfg(test)]
+mod tests {
+  use twig_core::state::RepoState;
+
+  use super::*;
+
+  /// Verify that determine_rebase_order returns parents before children
+  /// so that cascading rebases propagate changes top-down.
+  #[test]
+  fn rebase_order_parents_before_children() {
+    let mut state = RepoState::default();
+    state.add_root("main".to_string(), true).expect("add root");
+    state
+      .add_dependency("feature".to_string(), "main".to_string())
+      .expect("add dep");
+    state
+      .add_dependency("sub-feature".to_string(), "feature".to_string())
+      .expect("add dep");
+
+    let descendants = get_all_descendants(&state, "main", None);
+    let order = determine_rebase_order(&state, "main", &descendants);
+
+    // feature must come before sub-feature
+    let feature_pos = order.iter().position(|b| b == "feature").expect("feature in order");
+    let sub_feature_pos = order
+      .iter()
+      .position(|b| b == "sub-feature")
+      .expect("sub-feature in order");
+
+    assert!(
+      feature_pos < sub_feature_pos,
+      "feature (pos {feature_pos}) must be rebased before sub-feature (pos {sub_feature_pos}), got order: {order:?}"
+    );
+  }
+
+  /// Same check with a deeper chain: a → b → c → d
+  #[test]
+  fn rebase_order_deep_chain() {
+    let mut state = RepoState::default();
+    state.add_root("a".to_string(), true).expect("add root");
+    state.add_dependency("b".to_string(), "a".to_string()).expect("add dep");
+    state.add_dependency("c".to_string(), "b".to_string()).expect("add dep");
+    state.add_dependency("d".to_string(), "c".to_string()).expect("add dep");
+
+    let descendants = get_all_descendants(&state, "a", None);
+    let order = determine_rebase_order(&state, "a", &descendants);
+
+    assert_eq!(
+      order,
+      vec!["b", "c", "d"],
+      "branches must be in topological parent-first order"
+    );
+  }
+
+  /// Fan-out: parent with multiple children — children can be in any order
+  /// but all must appear after their shared parent.
+  #[test]
+  fn rebase_order_fan_out() {
+    let mut state = RepoState::default();
+    state.add_root("main".to_string(), true).expect("add root");
+    state
+      .add_dependency("feat-a".to_string(), "main".to_string())
+      .expect("add dep");
+    state
+      .add_dependency("feat-b".to_string(), "main".to_string())
+      .expect("add dep");
+    state
+      .add_dependency("sub-a".to_string(), "feat-a".to_string())
+      .expect("add dep");
+
+    let descendants = get_all_descendants(&state, "main", None);
+    let order = determine_rebase_order(&state, "main", &descendants);
+
+    let pos = |name: &str| {
+      order
+        .iter()
+        .position(|b| b == name)
+        .unwrap_or_else(|| panic!("{name} not in order"))
+    };
+    assert!(pos("feat-a") < pos("sub-a"), "feat-a must come before sub-a");
+    // feat-b has no children, so its position relative to feat-a doesn't matter
+    // but both must be present
+    assert!(order.contains(&"feat-b".to_string()), "feat-b must be in order");
+  }
 }
