@@ -165,6 +165,38 @@ pub fn annotate_orphaned_branches(graph: BranchGraph, orphaned: &BTreeSet<Branch
   BranchGraph::from_parts(nodes.into_values(), edges, root_candidates, current_branch)
 }
 
+/// Returns the branches in depth-first tree order starting from the given root.
+///
+/// This matches the visual order produced by [`BranchTableRenderer`], so
+/// navigating "up" means the previous entry and "down" means the next entry.
+pub fn collect_tree_order(graph: &BranchGraph, root: &BranchName) -> Vec<BranchName> {
+  let mut order = Vec::new();
+  let mut visited = BTreeSet::new();
+  collect_tree_order_recursive(graph, root, &mut visited, &mut order);
+  order
+}
+
+fn collect_tree_order_recursive(
+  graph: &BranchGraph,
+  branch: &BranchName,
+  visited: &mut BTreeSet<BranchName>,
+  order: &mut Vec<BranchName>,
+) {
+  let Some(node) = graph.get(branch) else {
+    return;
+  };
+
+  if !visited.insert(branch.clone()) {
+    return;
+  }
+
+  order.push(branch.clone());
+
+  for child in &node.topology.children {
+    collect_tree_order_recursive(graph, child, visited, order);
+  }
+}
+
 /// Filters a branch graph to include only branches matching a pattern and their
 /// ancestors.
 ///

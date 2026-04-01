@@ -12,7 +12,7 @@ use crate::complete::flow_target_completer;
 #[command(styles = cli_styles())]
 #[command(group(
   ArgGroup::new("tree_selection")
-    .args(["root", "parent"])
+    .args(["root", "parent", "up", "down"])
     .multiple(false)
 ))]
 pub struct Cli {
@@ -23,6 +23,14 @@ pub struct Cli {
   /// Switch to the current branch's parent before rendering.
   #[arg(long)]
   pub parent: bool,
+
+  /// Switch to the previous branch in the tree (visually upward).
+  #[arg(long)]
+  pub up: bool,
+
+  /// Switch to the next branch in the tree (visually downward).
+  #[arg(long)]
+  pub down: bool,
 
   /// Include branches whose names contain this pattern (case-insensitive;
   /// glob/regex may be added later).

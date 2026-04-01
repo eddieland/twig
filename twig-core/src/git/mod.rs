@@ -35,8 +35,8 @@ pub use switch::{
   switch_or_create_local_branch, try_checkout_remote_branch,
 };
 pub use tree::{
-  annotate_orphaned_branches, attach_orphans_to_default_root, default_root_branch, determine_render_root,
-  filter_branch_graph, find_orphaned_branches,
+  annotate_orphaned_branches, attach_orphans_to_default_root, collect_tree_order, default_root_branch,
+  determine_render_root, filter_branch_graph, find_orphaned_branches,
 };
 
 pub use crate::github::{GitHubPr, GitHubRepo, GitRemoteScheme};
