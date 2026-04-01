@@ -64,7 +64,7 @@ thiserror = "2"
 # CLI and UI dependencies
 clap = { version = "4.6.0", features = ["derive"] }
 clap_complete = "4.6.0"
-console = "0.16.2"
+console = "0.16.3"
 dialoguer = "0.12.0"
 emojis = "0.8.0"
 indicatif = "0.18.4"
