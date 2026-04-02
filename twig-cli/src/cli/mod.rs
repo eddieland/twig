@@ -277,7 +277,7 @@ pub fn handle_cli(cli: Cli) -> Result<()> {
       Commands::Init => config::handle_init_command(),
       Commands::Jira(jira) => jira::handle_jira_command(jira),
       Commands::Panic => {
-        panic!("This is an intentional test panic to verify no-worries integration");
+        panic!("This is an intentional test panic to verify panic handler integration");
       }
       Commands::Rebase(rebase) => rebase::handle_rebase_command(rebase),
       Commands::SelfCmd(self_args) => self_cmd::handle_self_command(self_args),

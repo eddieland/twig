@@ -6,24 +6,19 @@
 use anyhow::Result;
 use clap::{CommandFactory, Parser};
 use clap_complete::CompleteEnv;
-use no_worries::{Config as NoWorriesConfig, Metadata as NoWorriesMetadata, no_worries};
+use human_panic::{Metadata, setup_panic};
 use tracing::debug;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 use twig_cli::cli::{self, handle_cli};
 
 fn main() -> Result<()> {
-  // Set up the no-worries panic handler with custom configuration
-  let config: NoWorriesConfig = NoWorriesConfig {
-    metadata: NoWorriesMetadata {
-      name: "twig".to_string(),
-      support_email: Some("e@eddie.land".to_string()),
-      // Other metadata fields use defaults from Cargo.toml
-      ..Default::default()
-    },
-    ..Default::default()
-  };
-  no_worries!(config).expect("Failed to set up panic handler");
+  setup_panic!(
+    Metadata::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
+      .authors("Edward Jones <e@eddie.land>")
+      .homepage("https://github.com/eddieland/twig")
+      .support("- Open an issue at https://github.com/eddieland/twig/issues\n- Email: e@eddie.land")
+  );
 
   // Handle shell completion via CompleteEnv (activated by COMPLETE=<shell> env var)
   CompleteEnv::with_factory(cli::Cli::command).complete();

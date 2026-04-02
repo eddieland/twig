@@ -14,7 +14,6 @@ twig/
 ├── twig-gh/           # GitHub API client + endpoints
 ├── twig-jira/         # Jira API client + endpoints
 ├── twig-mcp/          # MCP server exposing twig tools
-├── no-worries/        # Utility library
 ├── twig-test-utils/   # Test fixtures: temp repos, config dirs, netrc
 └── plugins/twig-flow/ # Example Rust plugin
 ```
