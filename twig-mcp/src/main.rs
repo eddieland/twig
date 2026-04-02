@@ -16,7 +16,7 @@ use twig_core::config::ConfigDirs;
 use twig_core::git::detection::detect_repository;
 
 use crate::context::ServerContext;
-use crate::server::TwigMcpServer;
+use crate::server::{ToolGroup, TwigMcpServer};
 
 #[derive(Parser)]
 #[command(version, about = "MCP server for twig branch metadata, Jira issues, and GitHub PRs")]
@@ -36,6 +36,10 @@ struct Cli {
   /// Override repository path (defaults to auto-detection)
   #[arg(long = "repo", value_name = "PATH")]
   repo: Option<PathBuf>,
+
+  /// Disable a group of tools. Can be specified multiple times.
+  #[arg(long = "disable", value_name = "GROUP")]
+  disable: Vec<ToolGroup>,
 }
 
 #[tokio::main]
@@ -63,7 +67,7 @@ async fn main() -> Result<()> {
     .to_path_buf();
 
   let context = ServerContext::new(config_dirs, repo_path, home_dir);
-  let server = TwigMcpServer::new(context);
+  let server = TwigMcpServer::new(context, &cli.disable);
 
   // Start MCP server on stdio
   let service = server.serve(rmcp::transport::io::stdio()).await?;

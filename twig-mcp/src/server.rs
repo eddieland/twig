@@ -20,6 +20,41 @@ use crate::tools::jira::{GetJiraIssueParams, ListJiraIssuesParams};
 use crate::tools::local::{BranchMetadataParams, BranchStackParams, BranchTreeParams};
 use crate::types::*;
 
+/// A group of tools that can be disabled via `--disable`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, clap::ValueEnum)]
+pub enum ToolGroup {
+  /// GitHub PR tools (get_pull_request, get_pr_status, list_pull_requests)
+  Github,
+  /// Jira issue tools (get_jira_issue, list_jira_issues)
+  Jira,
+  /// MCP prompts (stack-status, branch-context)
+  Prompts,
+}
+
+/// Tool names belonging to each group.
+const GITHUB_TOOLS: &[&str] = &["get_pull_request", "get_pr_status", "list_pull_requests"];
+const JIRA_TOOLS: &[&str] = &["get_jira_issue", "list_jira_issues"];
+const PROMPT_NAMES: &[&str] = &["stack-status", "branch-context"];
+
+impl ToolGroup {
+  /// MCP tool names that belong to this group.
+  pub fn tool_names(&self) -> &'static [&'static str] {
+    match self {
+      Self::Github => GITHUB_TOOLS,
+      Self::Jira => JIRA_TOOLS,
+      Self::Prompts => &[],
+    }
+  }
+
+  /// MCP prompt names that belong to this group.
+  pub fn prompt_names(&self) -> &'static [&'static str] {
+    match self {
+      Self::Github | Self::Jira => &[],
+      Self::Prompts => PROMPT_NAMES,
+    }
+  }
+}
+
 /// Arguments for the `branch-context` prompt.
 #[derive(Debug, schemars::JsonSchema, serde::Deserialize)]
 pub struct BranchContextArgs {
@@ -32,16 +67,37 @@ pub struct TwigMcpServer {
   context: Arc<ServerContext>,
   tool_router: ToolRouter<Self>,
   prompt_router: PromptRouter<Self>,
+  tools_enabled: bool,
+  prompts_enabled: bool,
 }
 
 #[tool_router]
 impl TwigMcpServer {
-  pub fn new(context: ServerContext) -> Self {
+  /// Create a new server, removing tools/prompts for any disabled groups.
+  pub fn new(context: ServerContext, disabled: &[ToolGroup]) -> Self {
     let context = Arc::new(context);
+
+    let mut tool_router = Self::tool_router();
+    let mut prompt_router = Self::prompt_router();
+
+    for group in disabled {
+      for name in group.tool_names() {
+        tool_router.remove_route(name);
+      }
+      for name in group.prompt_names() {
+        prompt_router.remove_route(name);
+      }
+    }
+
+    let tools_enabled = !tool_router.list_all().is_empty();
+    let prompts_enabled = !prompt_router.list_all().is_empty();
+
     Self {
       context,
-      tool_router: Self::tool_router(),
-      prompt_router: Self::prompt_router(),
+      tool_router,
+      prompt_router,
+      tools_enabled,
+      prompts_enabled,
     }
   }
 
@@ -685,7 +741,7 @@ impl ServerHandler for TwigMcpServer {
          Jira issues, and GitHub PRs for the current repository."
           .into(),
       ),
-      capabilities: ServerCapabilities::builder().enable_tools().enable_prompts().build(),
+      capabilities: build_capabilities(self.tools_enabled, self.prompts_enabled),
       ..Default::default()
     }
   }
@@ -694,6 +750,20 @@ impl ServerHandler for TwigMcpServer {
 // ===========================================================================
 // Helper functions
 // ===========================================================================
+
+/// Build `ServerCapabilities` with the appropriate flags.
+///
+/// The builder uses a typestate pattern, so we can't conditionally call
+/// `enable_tools()` / `enable_prompts()` on the same binding. Match all
+/// four combinations instead.
+fn build_capabilities(tools: bool, prompts: bool) -> ServerCapabilities {
+  match (tools, prompts) {
+    (true, true) => ServerCapabilities::builder().enable_tools().enable_prompts().build(),
+    (true, false) => ServerCapabilities::builder().enable_tools().build(),
+    (false, true) => ServerCapabilities::builder().enable_prompts().build(),
+    (false, false) => ServerCapabilities::builder().build(),
+  }
+}
 
 /// Get the current branch name from a repository path.
 fn get_current_branch_name(repo_path: &std::path::Path) -> anyhow::Result<Option<String>> {
@@ -820,6 +890,112 @@ fn build_tree_node(graph: &BranchGraph, state: &RepoState, name: &BranchName) ->
     children,
     jira_issue: meta.and_then(|m| m.jira_issue.clone()),
     pr_number: meta.and_then(|m| m.github_pr),
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use std::path::PathBuf;
+
+  use twig_core::config::ConfigDirs;
+
+  use super::*;
+
+  fn test_context() -> ServerContext {
+    // Context with no repo — sufficient for testing router filtering.
+    let config_dirs = ConfigDirs {
+      config_dir: PathBuf::from("/tmp/twig-mcp-test/config"),
+      data_dir: PathBuf::from("/tmp/twig-mcp-test/data"),
+      cache_dir: None,
+    };
+    ServerContext::new(config_dirs, None, PathBuf::from("/tmp"))
+  }
+
+  fn tool_names(server: &TwigMcpServer) -> Vec<String> {
+    server
+      .tool_router
+      .list_all()
+      .into_iter()
+      .map(|t| t.name.to_string())
+      .collect()
+  }
+
+  fn prompt_names(server: &TwigMcpServer) -> Vec<String> {
+    server
+      .prompt_router
+      .list_all()
+      .into_iter()
+      .map(|p| p.name.to_string())
+      .collect()
+  }
+
+  #[test]
+  fn no_groups_disabled_exposes_all_tools() {
+    let server = TwigMcpServer::new(test_context(), &[]);
+    let tools = tool_names(&server);
+    for name in GITHUB_TOOLS.iter().chain(JIRA_TOOLS.iter()) {
+      assert!(tools.contains(&name.to_string()), "expected tool {name}");
+    }
+    let prompts = prompt_names(&server);
+    for name in PROMPT_NAMES {
+      assert!(prompts.contains(&name.to_string()), "expected prompt {name}");
+    }
+    assert!(server.tools_enabled);
+    assert!(server.prompts_enabled);
+  }
+
+  #[test]
+  fn disable_github_removes_github_tools_only() {
+    let server = TwigMcpServer::new(test_context(), &[ToolGroup::Github]);
+    let tools = tool_names(&server);
+    for name in GITHUB_TOOLS {
+      assert!(!tools.contains(&name.to_string()), "tool {name} should be removed");
+    }
+    for name in JIRA_TOOLS {
+      assert!(tools.contains(&name.to_string()), "jira tool {name} should remain");
+    }
+    assert!(tools.contains(&"get_current_branch".to_string()));
+    assert!(server.tools_enabled);
+  }
+
+  #[test]
+  fn disable_jira_removes_jira_tools_only() {
+    let server = TwigMcpServer::new(test_context(), &[ToolGroup::Jira]);
+    let tools = tool_names(&server);
+    for name in JIRA_TOOLS {
+      assert!(!tools.contains(&name.to_string()), "tool {name} should be removed");
+    }
+    for name in GITHUB_TOOLS {
+      assert!(tools.contains(&name.to_string()), "github tool {name} should remain");
+    }
+    assert!(server.tools_enabled);
+  }
+
+  #[test]
+  fn disable_prompts_removes_all_prompts() {
+    let server = TwigMcpServer::new(test_context(), &[ToolGroup::Prompts]);
+    let prompts = prompt_names(&server);
+    assert!(prompts.is_empty(), "all prompts should be removed");
+    assert!(!server.prompts_enabled);
+    // Tools should be unaffected
+    assert!(server.tools_enabled);
+  }
+
+  #[test]
+  fn disable_multiple_groups() {
+    let server = TwigMcpServer::new(
+      test_context(),
+      &[ToolGroup::Github, ToolGroup::Jira, ToolGroup::Prompts],
+    );
+    let tools = tool_names(&server);
+    for name in GITHUB_TOOLS.iter().chain(JIRA_TOOLS.iter()) {
+      assert!(!tools.contains(&name.to_string()), "tool {name} should be removed");
+    }
+    // Local tools remain
+    assert!(tools.contains(&"get_current_branch".to_string()));
+    assert!(tools.contains(&"list_branches".to_string()));
+    assert!(server.tools_enabled);
+    assert!(!server.prompts_enabled);
   }
 }
 
