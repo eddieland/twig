@@ -104,6 +104,11 @@ pub fn run(cli: &Cli) -> Result<()> {
     return handle_jira_branch_creation(&repo, repo_path, &repo_state, jira_parser.as_ref(), &issue_key);
   }
 
+  // Check if this is a Jira issue key whose associated branch was deleted.
+  if let Some(stale) = detect_stale_jira_association(&repo, &target, jira_parser.as_ref(), &repo_state) {
+    return handle_stale_jira_association(&repo, repo_path, jira_parser.as_ref(), &stale);
+  }
+
   // Check if this is a branch name (not Jira/PR) for potential branch creation prompt
   let switch_input = detect_switch_input(jira_parser.as_ref(), &target);
   let is_branch_name_input = matches!(switch_input, SwitchInput::BranchName(_));
@@ -181,6 +186,144 @@ fn detect_jira_without_association(
     }
     _ => None, // Not a Jira issue
   }
+}
+
+/// Context describing a Jira association whose branch has been deleted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct StaleJiraAssociation {
+  issue_key: String,
+  stale_branch: String,
+}
+
+/// Detect a Jira association whose branch no longer exists locally or in the
+/// cached origin refs.
+///
+/// A stale association typically occurs when the user deletes a branch
+/// (locally and on the remote) but the `.twig/state.json` entry for the
+/// Jira key still points at it. Without recovery, `twig flow <KEY>` will
+/// try to check out the missing branch and fail with a fetch error.
+fn detect_stale_jira_association(
+  repo: &Repository,
+  input: &str,
+  jira_parser: Option<&JiraTicketParser>,
+  repo_state: &RepoState,
+) -> Option<StaleJiraAssociation> {
+  let issue_key = match detect_switch_input(jira_parser, input) {
+    SwitchInput::JiraIssueKey(key) | SwitchInput::JiraIssueUrl(key) => key,
+    _ => return None,
+  };
+
+  let branch_issue = repo_state.get_branch_issue_by_jira(&issue_key)?;
+  let stale_branch = branch_issue.branch.clone();
+
+  // If the branch is still present locally, the association is fine.
+  if repo.find_branch(&stale_branch, git2::BranchType::Local).is_ok() {
+    return None;
+  }
+
+  // If we still have a cached remote ref, the normal switch flow can recover
+  // from it without user intervention.
+  let remote_ref = format!("origin/{stale_branch}");
+  if repo.find_branch(&remote_ref, git2::BranchType::Remote).is_ok() {
+    return None;
+  }
+
+  Some(StaleJiraAssociation {
+    issue_key,
+    stale_branch,
+  })
+}
+
+/// Handle the case where a Jira issue's associated branch has been deleted.
+///
+/// Warns the user, prompts for how to recreate the branch, and clears the
+/// stale metadata before creating a replacement so a fresh association is
+/// recorded cleanly.
+fn handle_stale_jira_association(
+  repo: &Repository,
+  repo_path: &Path,
+  jira_parser: Option<&JiraTicketParser>,
+  stale: &StaleJiraAssociation,
+) -> Result<()> {
+  let StaleJiraAssociation {
+    issue_key,
+    stale_branch,
+  } = stale;
+
+  print_warning(&format!(
+    "Branch '{stale_branch}' previously associated with Jira issue {issue_key} \
+     was not found locally or on origin."
+  ));
+
+  if !std::io::stdin().is_terminal() {
+    print_error(&format!(
+      "Stale Jira association for {issue_key}. Cannot prompt for input in non-interactive mode."
+    ));
+    print_info(
+      "Hint: re-run in an interactive terminal to recover, or edit .twig/state.json to remove the stale association.",
+    );
+    return Ok(());
+  }
+
+  let simple_name = issue_key.to_lowercase();
+
+  // Try to fetch the Jira issue to show a suggested branch name.
+  let jira_branch_name = match try_fetch_jira_branch_name(issue_key) {
+    JiraFetchOutcome::Success(name) => Some(name),
+    JiraFetchOutcome::IssueNotFound => {
+      print_warning(&format!(
+        "Jira issue {issue_key} was not found. This may indicate a typo or Jira configuration issue."
+      ));
+      None
+    }
+    JiraFetchOutcome::Unavailable => None,
+  };
+
+  print_info("How would you like to recover?");
+  println!();
+
+  let choice = prompt_jira_branch_choice(jira_branch_name.as_deref(), &simple_name)?;
+
+  match choice {
+    JiraBranchChoice::CreateFromJira => {
+      clear_stale_branch_metadata(repo_path, stale_branch)?;
+      if let Some(branch_name) = jira_branch_name {
+        create_branch_with_name(repo, repo_path, jira_parser, issue_key, &branch_name)
+      } else {
+        create_branch_from_jira(repo, repo_path, jira_parser, issue_key)
+      }
+    }
+    JiraBranchChoice::CreateSimple => {
+      clear_stale_branch_metadata(repo_path, stale_branch)?;
+      let refreshed_state = RepoState::load(repo_path).unwrap_or_else(|_| RepoState::default());
+      create_simple_branch(repo, repo_path, &refreshed_state, jira_parser, issue_key, &simple_name)
+    }
+    JiraBranchChoice::CustomName => {
+      let custom_name = prompt_custom_branch_name()?;
+      if let Some(name) = custom_name {
+        clear_stale_branch_metadata(repo_path, stale_branch)?;
+        let refreshed_state = RepoState::load(repo_path).unwrap_or_else(|_| RepoState::default());
+        create_simple_branch(repo, repo_path, &refreshed_state, jira_parser, issue_key, &name)
+      } else {
+        print_info("Aborted.");
+        Ok(())
+      }
+    }
+    JiraBranchChoice::Abort => {
+      print_info("Aborted.");
+      Ok(())
+    }
+  }
+}
+
+/// Remove stale branch metadata from repository state before recording a new
+/// association. Logs a warning on failure so recovery can still proceed.
+fn clear_stale_branch_metadata(repo_path: &Path, branch_name: &str) -> Result<()> {
+  let mut state = RepoState::load(repo_path)?;
+  if state.remove_branch_metadata(branch_name) {
+    state.save(repo_path)?;
+  }
+  Ok(())
 }
 
 /// Handle branch creation for a Jira issue that has no existing association.
@@ -800,6 +943,98 @@ mod tests {
     let result = detect_jira_without_association("PROJ-123", Some(&parser), &state);
     assert_eq!(result, None);
 
+    Ok(())
+  }
+
+  #[test]
+  fn detects_stale_jira_association_when_branch_is_missing() -> Result<()> {
+    let guard = GitRepoTestGuard::new_and_change_dir();
+    create_commit(&guard.repo, "file.txt", "content", "initial")?;
+
+    // Record an association that points at a branch that was never created
+    // (or was deleted before the fixture ran).
+    let repo_path = guard.repo.workdir().expect("workdir");
+    let mut state = RepoState::load(repo_path)?;
+    state.add_branch_issue(BranchMetadata {
+      branch: "ME-19008/publish-queue-uses-an-improper-selectinload".into(),
+      jira_issue: Some("ME-19008".into()),
+      github_pr: None,
+      created_at: "now".into(),
+    });
+    state.save(repo_path)?;
+
+    let parser = JiraTicketParser::new_default();
+    let state = RepoState::load(repo_path)?;
+    let stale = detect_stale_jira_association(&guard.repo, "ME-19008", Some(&parser), &state);
+
+    assert_eq!(
+      stale,
+      Some(StaleJiraAssociation {
+        issue_key: "ME-19008".into(),
+        stale_branch: "ME-19008/publish-queue-uses-an-improper-selectinload".into(),
+      })
+    );
+
+    Ok(())
+  }
+
+  #[test]
+  fn does_not_flag_stale_when_local_branch_exists() -> Result<()> {
+    let guard = GitRepoTestGuard::new_and_change_dir();
+    create_commit(&guard.repo, "file.txt", "content", "initial")?;
+    create_branch(&guard.repo, "feature/work", None)?;
+
+    let repo_path = guard.repo.workdir().expect("workdir");
+    let mut state = RepoState::load(repo_path)?;
+    state.add_branch_issue(BranchMetadata {
+      branch: "feature/work".into(),
+      jira_issue: Some("PROJ-123".into()),
+      github_pr: None,
+      created_at: "now".into(),
+    });
+    state.save(repo_path)?;
+
+    let parser = JiraTicketParser::new_default();
+    let state = RepoState::load(repo_path)?;
+    let stale = detect_stale_jira_association(&guard.repo, "PROJ-123", Some(&parser), &state);
+
+    assert_eq!(stale, None);
+    Ok(())
+  }
+
+  #[test]
+  fn does_not_flag_stale_when_no_association_exists() -> Result<()> {
+    let guard = GitRepoTestGuard::new_and_change_dir();
+    create_commit(&guard.repo, "file.txt", "content", "initial")?;
+
+    let parser = JiraTicketParser::new_default();
+    let state = RepoState::default();
+    let stale = detect_stale_jira_association(&guard.repo, "PROJ-123", Some(&parser), &state);
+
+    assert_eq!(stale, None);
+    Ok(())
+  }
+
+  #[test]
+  fn clear_stale_branch_metadata_removes_entry() -> Result<()> {
+    let guard = GitRepoTestGuard::new_and_change_dir();
+    create_commit(&guard.repo, "file.txt", "content", "initial")?;
+
+    let repo_path = guard.repo.workdir().expect("workdir");
+    let mut state = RepoState::load(repo_path)?;
+    state.add_branch_issue(BranchMetadata {
+      branch: "stale-branch".into(),
+      jira_issue: Some("PROJ-999".into()),
+      github_pr: None,
+      created_at: "now".into(),
+    });
+    state.save(repo_path)?;
+
+    clear_stale_branch_metadata(repo_path, "stale-branch")?;
+
+    let reloaded = RepoState::load(repo_path)?;
+    assert!(reloaded.get_branch_issue_by_jira("PROJ-999").is_none());
+    assert!(reloaded.get_branch_metadata("stale-branch").is_none());
     Ok(())
   }
 }
