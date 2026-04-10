@@ -195,8 +195,8 @@ struct StaleJiraAssociation {
   stale_branch: String,
 }
 
-/// Detect a Jira association whose branch no longer exists locally or in the
-/// cached origin refs.
+/// Detect a Jira association whose branch no longer exists locally or in any
+/// cached remote ref.
 ///
 /// A stale association typically occurs when the user deletes a branch
 /// (locally and on the remote) but the `.twig/state.json` entry for the
@@ -221,11 +221,17 @@ fn detect_stale_jira_association(
     return None;
   }
 
-  // If we still have a cached remote ref, the normal switch flow can recover
-  // from it without user intervention.
-  let remote_ref = format!("origin/{stale_branch}");
-  if repo.find_branch(&remote_ref, git2::BranchType::Remote).is_ok() {
-    return None;
+  // If we still have a cached remote ref on any configured remote, the
+  // normal switch flow can recover from it without user intervention. This
+  // must walk every remote rather than assume `origin`, since repositories
+  // can use `upstream`, `fork`, or any other remote name.
+  if let Ok(remotes) = repo.remotes() {
+    for remote in remotes.iter().flatten() {
+      let remote_ref = format!("{remote}/{stale_branch}");
+      if repo.find_branch(&remote_ref, git2::BranchType::Remote).is_ok() {
+        return None;
+      }
+    }
   }
 
   Some(StaleJiraAssociation {
@@ -252,7 +258,7 @@ fn handle_stale_jira_association(
 
   print_warning(&format!(
     "Branch '{stale_branch}' previously associated with Jira issue {issue_key} \
-     was not found locally or on origin."
+     was not found locally or on any known remote."
   ));
 
   if !std::io::stdin().is_terminal() {
@@ -294,15 +300,13 @@ fn handle_stale_jira_association(
       }
     }
     JiraBranchChoice::CreateSimple => {
-      clear_stale_branch_metadata(repo_path, stale_branch)?;
-      let refreshed_state = RepoState::load(repo_path).unwrap_or_else(|_| RepoState::default());
+      let refreshed_state = clear_and_reload_state(repo_path, stale_branch)?;
       create_simple_branch(repo, repo_path, &refreshed_state, jira_parser, issue_key, &simple_name)
     }
     JiraBranchChoice::CustomName => {
       let custom_name = prompt_custom_branch_name()?;
       if let Some(name) = custom_name {
-        clear_stale_branch_metadata(repo_path, stale_branch)?;
-        let refreshed_state = RepoState::load(repo_path).unwrap_or_else(|_| RepoState::default());
+        let refreshed_state = clear_and_reload_state(repo_path, stale_branch)?;
         create_simple_branch(repo, repo_path, &refreshed_state, jira_parser, issue_key, &name)
       } else {
         print_info("Aborted.");
@@ -317,13 +321,27 @@ fn handle_stale_jira_association(
 }
 
 /// Remove stale branch metadata from repository state before recording a new
-/// association. Logs a warning on failure so recovery can still proceed.
+/// association.
+///
+/// Errors from `RepoState::load` or `save` are propagated: if state cannot
+/// be read or written, recovery would fail later anyway (every downstream
+/// creation path re-reads and re-writes `.twig/state.json`), so aborting
+/// here produces a cleaner failure than continuing with stale data.
 fn clear_stale_branch_metadata(repo_path: &Path, branch_name: &str) -> Result<()> {
   let mut state = RepoState::load(repo_path)?;
   if state.remove_branch_metadata(branch_name) {
     state.save(repo_path)?;
   }
   Ok(())
+}
+
+/// Clear the stale association and return a freshly loaded [`RepoState`]
+/// suitable for paths that need to inspect the updated state (e.g., when
+/// calling [`create_simple_branch`], which expects a snapshot to read parent
+/// dependencies from).
+fn clear_and_reload_state(repo_path: &Path, stale_branch: &str) -> Result<RepoState> {
+  clear_stale_branch_metadata(repo_path, stale_branch)?;
+  Ok(RepoState::load(repo_path).unwrap_or_else(|_| RepoState::default()))
 }
 
 /// Handle branch creation for a Jira issue that has no existing association.
@@ -1012,6 +1030,58 @@ mod tests {
     let stale = detect_stale_jira_association(&guard.repo, "PROJ-123", Some(&parser), &state);
 
     assert_eq!(stale, None);
+    Ok(())
+  }
+
+  #[test]
+  fn does_not_flag_stale_when_branch_cached_on_non_origin_remote() -> Result<()> {
+    // Stand up a source repo that we can treat as a non-`origin` remote.
+    // It holds the branch that will show up as a cached remote ref once we
+    // fetch. Using a separate guard keeps the upstream directory alive for
+    // the duration of the test without touching cwd.
+    let upstream_guard = GitRepoTestGuard::new();
+    create_commit(&upstream_guard.repo, "base.txt", "base", "base commit")?;
+    let base = upstream_guard.repo.head()?.peel_to_commit()?;
+    upstream_guard.repo.branch("feature/work", &base, true)?;
+    let upstream_path = upstream_guard
+      .temp_dir
+      .path()
+      .to_str()
+      .expect("upstream path")
+      .to_string();
+
+    // Build the local repo, wire the upstream remote under a non-`origin`
+    // name, and pull its refs into the cache.
+    let guard = GitRepoTestGuard::new_and_change_dir();
+    create_commit(&guard.repo, "init.txt", "init", "init")?;
+    let mut upstream = guard.repo.remote("upstream", &upstream_path)?;
+    upstream.fetch(&["feature/work"], None, None)?;
+
+    // Sanity check: the cached ref is present under `upstream/`.
+    assert!(
+      guard
+        .repo
+        .find_branch("upstream/feature/work", git2::BranchType::Remote)
+        .is_ok()
+    );
+
+    // Record a Jira association pointing at that branch. The local branch
+    // does not exist, so without walking all remotes this would look stale.
+    let repo_path = guard.repo.workdir().expect("workdir");
+    let mut state = RepoState::load(repo_path)?;
+    state.add_branch_issue(BranchMetadata {
+      branch: "feature/work".into(),
+      jira_issue: Some("PROJ-500".into()),
+      github_pr: None,
+      created_at: "now".into(),
+    });
+    state.save(repo_path)?;
+
+    let parser = JiraTicketParser::new_default();
+    let state = RepoState::load(repo_path)?;
+    let stale = detect_stale_jira_association(&guard.repo, "PROJ-500", Some(&parser), &state);
+
+    assert_eq!(stale, None, "upstream-cached branch should not be flagged stale");
     Ok(())
   }
 
