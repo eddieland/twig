@@ -366,6 +366,18 @@ impl RepoState {
     self.rebuild_indices();
   }
 
+  /// Remove the branch metadata entry (Jira and/or PR association) for a branch.
+  ///
+  /// Returns `true` when an entry was removed. Use this to clean up stale
+  /// associations after the underlying branch has been deleted.
+  pub fn remove_branch_metadata(&mut self, branch: &str) -> bool {
+    let removed = self.branches.remove(branch).is_some();
+    if removed {
+      self.rebuild_indices();
+    }
+    removed
+  }
+
   /// Get a branch-issue association by branch name
   pub fn get_branch_metadata(&self, branch: &str) -> Option<&BranchMetadata> {
     self.branches.get(branch)
@@ -1205,6 +1217,32 @@ mod tests {
     let removed = state.remove_root("main");
     assert!(removed);
     assert_eq!(state.root_branches.len(), 0);
+  }
+
+  #[test]
+  fn test_remove_branch_metadata_clears_indices() {
+    let mut state = RepoState::default();
+    state.add_branch_issue(BranchMetadata {
+      branch: "feature/alpha".to_string(),
+      jira_issue: Some("PROJ-100".to_string()),
+      github_pr: Some(42),
+      created_at: chrono::Utc::now().to_rfc3339(),
+    });
+
+    // Sanity check: indices include the entry.
+    assert!(state.get_branch_issue_by_jira("PROJ-100").is_some());
+    assert!(state.get_branch_issue_by_pr(42).is_some());
+
+    let removed = state.remove_branch_metadata("feature/alpha");
+    assert!(removed);
+
+    // Indices must be rebuilt so stale lookups return None.
+    assert!(state.get_branch_issue_by_jira("PROJ-100").is_none());
+    assert!(state.get_branch_issue_by_pr(42).is_none());
+    assert!(state.get_branch_metadata("feature/alpha").is_none());
+
+    // Removing an unknown branch is a no-op.
+    assert!(!state.remove_branch_metadata("feature/alpha"));
   }
 
   #[test]
