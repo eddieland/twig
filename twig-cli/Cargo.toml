@@ -55,7 +55,7 @@ serde_json.workspace = true
 url.workspace = true
 
 # Local crate dependencies
-human-panic = "2.0.2"
+human-panic = "2.0.8"
 twig-core = { path = "../twig-core" }
 twig-gh = { path = "../twig-gh" }
 twig-jira = { path = "../twig-jira" }
