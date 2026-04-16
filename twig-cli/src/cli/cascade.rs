@@ -143,6 +143,9 @@ fn rebase_downstream(
   // Perform the cascading rebase
   // Track branches that could not be rebased so that their descendants are also skipped.
   let mut failed_branches: HashSet<String> = HashSet::new();
+  // When the user selects "Abort stay here", we stop the cascade without returning
+  // to the original branch, leaving them on the branch where the conflict occurred.
+  let mut stopped_branch: Option<String> = None;
   'branches: for branch in rebase_order {
     // Skip this branch if any of its parents failed to rebase — rebasing onto an
     // un-rebased parent would produce incorrect results.
@@ -249,9 +252,11 @@ fn rebase_downstream(
               }
               ConflictResolution::AbortStayHere => {
                 abort_rebase(repo_path)?;
-                print_info(&format!("Rebase of {branch} onto {parent} aborted",));
-                failed_branches.insert(branch.clone());
-                continue 'branches;
+                print_info(&format!(
+                  "Rebase of {branch} onto {parent} aborted; staying on {branch} and stopping cascade",
+                ));
+                stopped_branch = Some(branch.clone());
+                break 'branches;
               }
               ConflictResolution::Skip => match attempt_rebase_skip(repo_path)? {
                 RebaseContinueOutcome::Completed => {
@@ -282,13 +287,18 @@ fn rebase_downstream(
     }
   }
 
-  // Return to the original branch
-  let checkout_result = execute_git_command(repo_path, &["checkout", &current_branch_name])?;
-  if !checkout_result.output.is_empty() {
-    print_info(&checkout_result.output);
+  // Return to the original branch — unless the user chose "Abort stay here",
+  // in which case we leave them on the branch where the conflict occurred.
+  if stopped_branch.is_none() {
+    let checkout_result = execute_git_command(repo_path, &["checkout", &current_branch_name])?;
+    if !checkout_result.output.is_empty() {
+      print_info(&checkout_result.output);
+    }
   }
 
-  if !failed_branches.is_empty() {
+  if let Some(branch) = stopped_branch {
+    print_warning(&format!("Cascading rebase stopped at {branch}"));
+  } else if !failed_branches.is_empty() {
     print_warning(&format!(
       "{} branch{} could not be rebased and {} skipped (along with any dependents):",
       failed_branches.len(),
