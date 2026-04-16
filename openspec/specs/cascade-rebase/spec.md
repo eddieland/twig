@@ -155,10 +155,11 @@ WHEN the user selects "Abort to original" during a cascade conflict THEN `git re
 original branch (the branch the user was on when the cascade started) is checked out AND the cascade terminates
 immediately — no further branches are rebased
 
-#### Scenario: "Abort stay here" skips only the current branch
+#### Scenario: "Abort stay here" stops the cascade and keeps the user on the conflict branch
 
 WHEN the user selects "Abort stay here" during a cascade conflict THEN `git rebase --abort` is executed AND the cascade
-continues to the next branch (in standalone rebase, the command returns immediately)
+terminates immediately — no further branches are rebased AND the original branch is NOT checked out at the end, leaving
+the user on the branch where the conflict occurred
 
 #### Scenario: "Skip" continues the cascade
 
@@ -184,6 +185,12 @@ rebase completed
 
 WHEN the user selects "Abort to original" during conflict resolution THEN the original branch is checked out AND the
 cascade terminates AND the command returns successfully (no error)
+
+#### Scenario: Original branch is NOT restored on abort-stay-here
+
+WHEN the user selects "Abort stay here" during conflict resolution THEN the original branch is NOT checked out AND the
+user remains on the branch where the conflict occurred AND the cascade terminates AND the command returns successfully
+(no error)
 
 ### Requirement: Graph display in preview and show-graph
 
