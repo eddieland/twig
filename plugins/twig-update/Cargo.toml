@@ -1,0 +1,21 @@
+[package]
+name = "twig-update"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Twig plugin to switch to root branch, fetch/pull from origin, and cascade-rebase all descendants"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+git2 = { workspace = true }
+tracing = { workspace = true }
+twig-core = { path = "../../twig-core" }
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
+twig-test-utils = { path = "../../twig-test-utils" }
