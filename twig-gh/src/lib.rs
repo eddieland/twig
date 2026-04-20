@@ -16,9 +16,12 @@ pub use auth::{
   check_github_credentials, create_github_client_from_netrc, create_github_runtime_and_client, get_github_credentials,
 };
 pub use client::{GitHubClient, create_github_client};
+// Re-export endpoints structs
+pub use endpoints::pulls::CreatePullRequestParams;
 // Re-export models
 pub use models::{
-  CheckRun, CheckSuite, GitHubAuth, GitHubPullRequest, GitHubUser, PullRequestRef, PullRequestReview, PullRequestStatus,
+  CheckRun, CheckSuite, GitHubAuth, GitHubIssue, GitHubLabel, GitHubPullRequest, GitHubUser, PullRequestRef,
+  PullRequestReview, PullRequestStatus,
 };
 // Re-export utilities
 pub use utils::{GitHubPr, GitHubRepo, GitRemoteScheme};
