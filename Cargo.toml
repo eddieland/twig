@@ -19,7 +19,7 @@ default-members = ["twig-cli"]
 resolver = "2"
 
 [workspace.package]
-version = "0.7.0"
+version = "0.7.1"
 edition = "2024"
 rust-version = "1.91.0"
 authors = ["Edward Jones <e@eddie.land>"]
@@ -71,7 +71,7 @@ owo-colors = { version = "4.3", features = ["supports-colors"] }
 tabled = "0.20"
 
 # Interactive UI
-skim = "3.4.0"
+skim = "4.6.0"
 ratatui = "0.30"
 crossterm = "0.29"
 nucleo = "0.5"
