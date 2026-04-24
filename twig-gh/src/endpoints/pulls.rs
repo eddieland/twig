@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use reqwest::header;
 use tracing::{debug, info, instrument, trace, warn};
+use url::Url;
 
 use crate::client::GitHubClient;
 use crate::consts::{ACCEPT, USER_AGENT};
@@ -45,20 +46,25 @@ impl GitHubClient {
       owner, repo, state_param
     );
 
-    let mut url = format!(
-      "{}/repos/{}/{}/pulls?state={}&per_page={}&page={}",
-      self.base_url, owner, repo, state_param, pagination.per_page, pagination.page
-    );
-    if let Some(head_filter) = head {
-      url.push_str("&head=");
-      url.push_str(head_filter);
+    // Build the URL via the `url` crate so query values (notably `head`, which
+    // embeds a user-supplied branch name) are percent-encoded correctly.
+    let mut url = Url::parse(&format!("{}/repos/{}/{}/pulls", self.base_url, owner, repo))
+      .context("Failed to construct pull requests URL")?;
+    {
+      let mut pairs = url.query_pairs_mut();
+      pairs.append_pair("state", state_param);
+      pairs.append_pair("per_page", &pagination.per_page.to_string());
+      pairs.append_pair("page", &pagination.page.to_string());
+      if let Some(head_filter) = head {
+        pairs.append_pair("head", head_filter);
+      }
     }
 
     trace!("GitHub API URL: {}", url);
 
     let response = self
       .client
-      .get(&url)
+      .get(url.clone())
       .header(header::ACCEPT, ACCEPT)
       .header(header::USER_AGENT, USER_AGENT)
       .basic_auth(&self.auth.username, Some(&self.auth.token))

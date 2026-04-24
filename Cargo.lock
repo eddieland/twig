@@ -3691,6 +3691,7 @@ dependencies = [
  "tracing",
  "twig-core",
  "twig-test-utils",
+ "url",
  "wiremock",
 ]
 
