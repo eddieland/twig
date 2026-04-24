@@ -516,7 +516,10 @@ impl TwigMcpServer {
     };
 
     let state = params.0.state.as_deref();
-    match gh.list_pull_requests(&gh_repo.owner, &gh_repo.repo, state, None, None).await {
+    match gh
+      .list_pull_requests(&gh_repo.owner, &gh_repo.repo, state, None, None)
+      .await
+    {
       Ok(prs) => {
         let pull_requests: Vec<PullRequestResponse> = prs.iter().map(map_pull_request).collect();
         Ok(ToolResponse::ok(ListPullRequestsResponse { pull_requests }).to_call_tool_result())
