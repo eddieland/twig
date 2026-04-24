@@ -22,13 +22,18 @@ impl Default for PaginationOptions {
 }
 
 impl GitHubClient {
-  /// List pull requests for a repository with pagination support
+  /// List pull requests for a repository with pagination support.
+  ///
+  /// If `head` is provided, GitHub will return only PRs whose head matches the
+  /// given filter. The expected format is `user:ref-name` or
+  /// `organization:ref-name`.
   #[instrument(skip(self), level = "debug")]
   pub async fn list_pull_requests(
     &self,
     owner: &str,
     repo: &str,
     state: Option<&str>,
+    head: Option<&str>,
     pagination_options: Option<PaginationOptions>,
   ) -> Result<Vec<GitHubPullRequest>> {
     // Set default state to "open" if not provided
@@ -40,10 +45,14 @@ impl GitHubClient {
       owner, repo, state_param
     );
 
-    let url = format!(
+    let mut url = format!(
       "{}/repos/{}/{}/pulls?state={}&per_page={}&page={}",
       self.base_url, owner, repo, state_param, pagination.per_page, pagination.page
     );
+    if let Some(head_filter) = head {
+      url.push_str("&head=");
+      url.push_str(head_filter);
+    }
 
     trace!("GitHub API URL: {}", url);
 
@@ -208,7 +217,13 @@ impl GitHubClient {
     Ok(status)
   }
 
-  /// Find pull requests by head branch name
+  /// Find pull requests by head branch name.
+  ///
+  /// Uses GitHub's server-side `head` filter (`owner:ref-name`) so the API
+  /// returns only matching PRs rather than the full repository PR list. PRs
+  /// opened from forks of other owners will not be discovered — the GitHub
+  /// API requires the head owner in the filter and we only know the base
+  /// repository's owner here.
   #[instrument(skip(self), level = "debug")]
   pub async fn find_pull_requests_by_head_branch(
     &self,
@@ -222,22 +237,10 @@ impl GitHubClient {
       owner, repo, branch_name
     );
 
-    // Get all pull requests for the repository
-    let pull_requests = self.list_pull_requests(owner, repo, state, None).await?;
-
-    // Filter pull requests by head branch name
-    let matching_prs: Vec<GitHubPullRequest> = pull_requests
-      .into_iter()
-      .filter(|pr| {
-        if let Some(ref_name) = &pr.head.ref_name {
-          ref_name == branch_name
-        } else {
-          // If ref_name is None, check if the branch name is in the label
-          // Label format is typically "username:branch-name"
-          pr.head.label.split(':').nth(1) == Some(branch_name)
-        }
-      })
-      .collect();
+    let head_filter = format!("{owner}:{branch_name}");
+    let matching_prs = self
+      .list_pull_requests(owner, repo, state, Some(&head_filter), None)
+      .await?;
 
     info!(
       "Found {} pull requests with head branch: {}",
@@ -307,7 +310,7 @@ mod tests {
       .await;
 
     let prs = client
-      .list_pull_requests("octocat", "Hello-World", Some("open"), None)
+      .list_pull_requests("octocat", "Hello-World", Some("open"), None, None)
       .await?;
 
     assert_eq!(prs.len(), 1);
@@ -371,7 +374,7 @@ mod tests {
 
     let pagination = PaginationOptions { per_page: 5, page: 2 };
     let prs = client
-      .list_pull_requests("octocat", "Hello-World", Some("closed"), Some(pagination))
+      .list_pull_requests("octocat", "Hello-World", Some("closed"), None, Some(pagination))
       .await?;
 
     assert_eq!(prs.len(), 1);
@@ -452,56 +455,30 @@ mod tests {
     let mut client = GitHubClient::new(auth);
     client.base_url = mock_server.uri();
 
-    // Mock response for pull requests
+    // The request must include head=owner:branch so GitHub filters server-side
+    // rather than returning the full repository PR list. Before this change the
+    // caller fetched the first page of PRs and filtered client-side, which
+    // silently missed branches whose PR was not among the 30 most-recent PRs.
     Mock::given(method("GET"))
       .and(path("/repos/octocat/Hello-World/pulls"))
-      .and(query_param("state", "open"))
-      .and(query_param("per_page", "30"))
-      .and(query_param("page", "1"))
+      .and(query_param("state", "all"))
+      .and(query_param("head", "octocat:older-branch"))
       .and(header(header::ACCEPT, ACCEPT))
       .and(header(header::USER_AGENT, USER_AGENT))
       .and(header(header::AUTHORIZATION, "Basic dGVzdF91c2VyOnRlc3RfdG9rZW4="))
       .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
         {
-          "id": 1,
-          "number": 1347,
+          "id": 2001,
+          "number": 2001,
           "state": "open",
-          "title": "Feature from target-branch",
-          "html_url": "https://github.com/octocat/Hello-World/pull/1347",
-          "user": {
-            "login": "octocat",
-            "id": 1,
-            "type": "User"
-          },
-          "created_at": "2011-01-26T19:01:12Z",
-          "updated_at": "2011-01-26T19:01:12Z",
+          "title": "Feature from older-branch",
+          "html_url": "https://github.com/octocat/Hello-World/pull/2001",
+          "user": { "login": "octocat", "id": 1, "type": "User" },
+          "created_at": "2010-01-01T00:00:00Z",
+          "updated_at": "2010-01-01T00:00:00Z",
           "head": {
-            "label": "octocat:target-branch",
-            "ref": "target-branch",
-            "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
-          },
-          "base": {
-            "label": "octocat:master",
-            "ref": "master",
-            "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
-          }
-        },
-        {
-          "id": 2,
-          "number": 1348,
-          "state": "open",
-          "title": "Another feature",
-          "html_url": "https://github.com/octocat/Hello-World/pull/1348",
-          "user": {
-            "login": "octocat",
-            "id": 1,
-            "type": "User"
-          },
-          "created_at": "2011-01-26T19:01:12Z",
-          "updated_at": "2011-01-26T19:01:12Z",
-          "head": {
-            "label": "octocat:different-branch",
-            "ref": "different-branch",
+            "label": "octocat:older-branch",
+            "ref": "older-branch",
             "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
           },
           "base": {
@@ -514,16 +491,13 @@ mod tests {
       .mount(&mock_server)
       .await;
 
-    // Test finding pull requests by head branch
     let prs = client
-      .find_pull_requests_by_head_branch("octocat", "Hello-World", "target-branch", Some("open"))
+      .find_pull_requests_by_head_branch("octocat", "Hello-World", "older-branch", Some("all"))
       .await?;
 
-    // Verify we only got the PR with the matching head branch
     assert_eq!(prs.len(), 1);
-    assert_eq!(prs[0].number, 1347);
-    assert_eq!(prs[0].title, "Feature from target-branch");
-    assert_eq!(prs[0].head.ref_name, Some("target-branch".to_string()));
+    assert_eq!(prs[0].number, 2001);
+    assert_eq!(prs[0].head.ref_name, Some("older-branch".to_string()));
 
     Ok(())
   }

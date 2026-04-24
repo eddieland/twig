@@ -675,7 +675,7 @@ fn handle_pr_list_command(cmd: &ListCommand) -> Result<()> {
   };
 
   println!("Fetching {} pull requests for {owner}/{repo_name}...", cmd.state);
-  match rt.block_on(github_client.list_pull_requests(&owner, &repo_name, Some(&cmd.state), Some(pagination))) {
+  match rt.block_on(github_client.list_pull_requests(&owner, &repo_name, Some(&cmd.state), None, Some(pagination))) {
     Ok(prs) => {
       if prs.is_empty() {
         println!("No {} pull requests found for {owner}/{repo_name}", cmd.state);
