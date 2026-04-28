@@ -10,6 +10,7 @@ authors.workspace = true
 # Core dependencies
 anyhow.workspace = true
 regex.workspace = true
+url.workspace = true
 
 # Async and networking
 reqwest.workspace = true
