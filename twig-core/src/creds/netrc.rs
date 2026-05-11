@@ -16,20 +16,16 @@ pub fn get_netrc_path(home: &Path) -> PathBuf {
 /// The parser follows the conventions used by curl and other common netrc
 /// consumers:
 ///
-/// * `#` introduces a comment that runs to end-of-line. A `#` is only treated
-///   as the start of a comment when it appears at a token boundary (start of
-///   line or directly after whitespace), so passwords containing `#` are not
-///   silently truncated.
-/// * `macdef <name>` introduces a macro definition whose body extends until
-///   the next blank line. Macro bodies are skipped wholesale to prevent stray
-///   words like `machine` or `login` inside a macro from being interpreted as
+/// * `#` introduces a comment that runs to end-of-line. A `#` is only treated as the start of a comment when it appears
+///   at a token boundary (start of line or directly after whitespace), so passwords containing `#` are not silently
+///   truncated.
+/// * `macdef <name>` introduces a macro definition whose body extends until the next blank line. Macro bodies are
+///   skipped wholesale to prevent stray words like `machine` or `login` inside a macro from being interpreted as
 ///   credential tokens.
-/// * `default` starts a fallback entry. It is recognized as a section
-///   boundary so its `login`/`password` cannot accidentally attach to the
-///   preceding `machine` block, and its credentials are returned when no
-///   explicit match for `target_machine` is found.
-/// * `passwd` is accepted as a synonym for `password`, and `account` values
-///   are skipped.
+/// * `default` starts a fallback entry. It is recognized as a section boundary so its `login`/`password` cannot
+///   accidentally attach to the preceding `machine` block, and its credentials are returned when no explicit match for
+///   `target_machine` is found.
+/// * `passwd` is accepted as a synonym for `password`, and `account` values are skipped.
 pub fn parse_netrc_file(path: &Path, target_machine: &str) -> Result<Option<Credentials>> {
   let content = std::fs::read_to_string(path).context("Failed to read .netrc file")?;
   let tokens = tokenize_netrc(&content);
