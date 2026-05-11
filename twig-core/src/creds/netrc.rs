@@ -1,5 +1,4 @@
-use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -12,50 +11,136 @@ pub fn get_netrc_path(home: &Path) -> PathBuf {
   home.join(".netrc")
 }
 
-/// Parse a .netrc file for credentials for a specific machine
+/// Parse a .netrc file for credentials for a specific machine.
+///
+/// The parser follows the conventions used by curl and other common netrc
+/// consumers:
+///
+/// * `#` introduces a comment that runs to end-of-line. A `#` is only treated as the start of a comment when it appears
+///   at a token boundary (start of line or directly after whitespace), so passwords containing `#` are not silently
+///   truncated.
+/// * `macdef <name>` introduces a macro definition whose body extends until the next blank line. Macro bodies are
+///   skipped wholesale to prevent stray words like `machine` or `login` inside a macro from being interpreted as
+///   credential tokens.
+/// * `default` starts a fallback entry. It is recognized as a section boundary so its `login`/`password` cannot
+///   accidentally attach to the preceding `machine` block, and its credentials are returned when no explicit match for
+///   `target_machine` is found.
+/// * `passwd` is accepted as a synonym for `password`, and `account` values are skipped.
 pub fn parse_netrc_file(path: &Path, target_machine: &str) -> Result<Option<Credentials>> {
-  let file = File::open(path).context("Failed to open .netrc file")?;
-  let reader = BufReader::new(file);
+  let content = std::fs::read_to_string(path).context("Failed to read .netrc file")?;
+  let tokens = tokenize_netrc(&content);
 
-  let mut current_machine = String::new();
-  let mut username = String::new();
-  let mut password = String::new();
+  let mut iter = tokens.into_iter().peekable();
+  let mut default_creds: Option<Credentials> = None;
+  let mut target_seen = false;
 
-  for line in reader.lines() {
-    let line = line.context("Failed to read line from .netrc")?;
-    let parts: Vec<&str> = line.split_whitespace().collect();
-
-    for i in 0..parts.len() {
-      match parts[i] {
-        "machine" if i + 1 < parts.len() => {
-          // If we found credentials for the previous machine, check if it's our target
-          if !current_machine.is_empty() && !username.is_empty() && !password.is_empty() {
-            if current_machine == target_machine {
-              return Ok(Some(Credentials { username, password }));
-            }
-            // Reset for the new machine
-            username = String::new();
-            password = String::new();
+  while let Some(token) = iter.next() {
+    match token.as_str() {
+      "machine" => {
+        let Some(name) = iter.next() else { break };
+        let entry = parse_entry(&mut iter);
+        if name == target_machine {
+          target_seen = true;
+          if let (Some(username), Some(password)) = (entry.login, entry.password) {
+            return Ok(Some(Credentials { username, password }));
           }
-          current_machine = parts[i + 1].to_string();
         }
-        "login" if i + 1 < parts.len() => {
-          username = parts[i + 1].to_string();
+      }
+      "default" => {
+        let entry = parse_entry(&mut iter);
+        if default_creds.is_none()
+          && let (Some(username), Some(password)) = (entry.login, entry.password)
+        {
+          default_creds = Some(Credentials { username, password });
         }
-        "password" if i + 1 < parts.len() => {
-          password = parts[i + 1].to_string();
-        }
-        _ => {}
+      }
+      _ => {
+        // Unknown leading token (e.g. stray keyword without a `machine`
+        // context). Skip it so it doesn't drag a following token along.
       }
     }
   }
 
-  // Check the last machine in the file
-  if current_machine == target_machine && !username.is_empty() && !password.is_empty() {
-    return Ok(Some(Credentials { username, password }));
+  // Only fall through to `default` if the target machine was never named
+  // explicitly. An incomplete explicit entry is the user's intent, not a
+  // signal to use the fallback.
+  if target_seen { Ok(None) } else { Ok(default_creds) }
+}
+
+#[derive(Default)]
+struct Entry {
+  login: Option<String>,
+  password: Option<String>,
+}
+
+fn parse_entry<I: Iterator<Item = String>>(iter: &mut std::iter::Peekable<I>) -> Entry {
+  let mut entry = Entry::default();
+  while let Some(token) = iter.peek() {
+    match token.as_str() {
+      "machine" | "default" => break,
+      "login" => {
+        iter.next();
+        entry.login = iter.next();
+      }
+      "password" | "passwd" => {
+        iter.next();
+        entry.password = iter.next();
+      }
+      "account" => {
+        iter.next();
+        iter.next();
+      }
+      _ => {
+        iter.next();
+      }
+    }
+  }
+  entry
+}
+
+/// Split a netrc file into a flat token stream, dropping comments and macro
+/// bodies.
+fn tokenize_netrc(content: &str) -> Vec<String> {
+  let mut tokens = Vec::new();
+  let mut lines = content.lines();
+
+  while let Some(line) = lines.next() {
+    let stripped = strip_inline_comment(line);
+    let line_tokens: Vec<&str> = stripped.split_whitespace().collect();
+    if line_tokens.is_empty() {
+      continue;
+    }
+
+    // `macdef <name>` starts a macro whose body runs until a blank line.
+    // Skip the body so its contents cannot masquerade as netrc keywords.
+    if line_tokens.contains(&"macdef") {
+      for body_line in lines.by_ref() {
+        if body_line.trim().is_empty() {
+          break;
+        }
+      }
+      continue;
+    }
+
+    tokens.extend(line_tokens.into_iter().map(String::from));
   }
 
-  Ok(None)
+  tokens
+}
+
+/// Return the prefix of `line` up to a `#` that starts a comment.
+///
+/// `#` only begins a comment when preceded by whitespace (or at the start of
+/// the line), so values containing `#` are preserved.
+fn strip_inline_comment(line: &str) -> &str {
+  let mut prev_was_ws = true;
+  for (i, c) in line.char_indices() {
+    if c == '#' && prev_was_ws {
+      return &line[..i];
+    }
+    prev_was_ws = c.is_whitespace();
+  }
+  line
 }
 
 /// Write or update a .netrc entry for a specific machine
@@ -489,6 +574,181 @@ machine github.com
     let creds = result.unwrap();
     assert_eq!(creds.username, "testuser");
     assert_eq!(creds.password, "gh-token");
+  }
+
+  #[test]
+  fn test_parse_netrc_file_ignores_commented_out_machine() {
+    // A template-style .netrc where a sample block is commented out should not
+    // be parsed as a real entry.
+    let content = r#"# machine example.com
+#   login bad-user
+#   password bad-pass
+
+machine github.com
+  login realuser
+  password realpass
+"#;
+
+    let (_temp_dir, netrc_path) = create_test_netrc(content);
+
+    // The commented-out block must not produce credentials.
+    let result = parse_netrc_file(&netrc_path, "example.com").unwrap();
+    assert!(result.is_none());
+
+    // The real entry that follows must still parse correctly.
+    let result = parse_netrc_file(&netrc_path, "github.com").unwrap();
+    let creds = result.expect("github.com entry should parse");
+    assert_eq!(creds.username, "realuser");
+    assert_eq!(creds.password, "realpass");
+  }
+
+  #[test]
+  fn test_parse_netrc_file_inline_comment_after_value() {
+    let content = r#"machine github.com
+  login realuser   # personal token
+  password realpass # rotate quarterly
+"#;
+
+    let (_temp_dir, netrc_path) = create_test_netrc(content);
+
+    let creds = parse_netrc_file(&netrc_path, "github.com")
+      .unwrap()
+      .expect("entry should parse with inline comments");
+    assert_eq!(creds.username, "realuser");
+    assert_eq!(creds.password, "realpass");
+  }
+
+  #[test]
+  fn test_parse_netrc_file_inline_comment_before_keyword() {
+    // A comment introducing the next line shouldn't swallow the keyword that
+    // follows on its own line.
+    let content = r#"machine github.com  # source: 1Password
+  login realuser
+  password realpass
+"#;
+
+    let (_temp_dir, netrc_path) = create_test_netrc(content);
+
+    let creds = parse_netrc_file(&netrc_path, "github.com")
+      .unwrap()
+      .expect("entry should parse");
+    assert_eq!(creds.username, "realuser");
+    assert_eq!(creds.password, "realpass");
+  }
+
+  #[test]
+  fn test_parse_netrc_file_hash_in_password_preserved() {
+    // `#` mid-token (no preceding whitespace) is a literal character, not a
+    // comment marker — passwords containing `#` must round-trip.
+    let content = "machine github.com login realuser password p#ss#word\n";
+
+    let (_temp_dir, netrc_path) = create_test_netrc(content);
+
+    let creds = parse_netrc_file(&netrc_path, "github.com")
+      .unwrap()
+      .expect("entry should parse");
+    assert_eq!(creds.username, "realuser");
+    assert_eq!(creds.password, "p#ss#word");
+  }
+
+  #[test]
+  fn test_parse_netrc_file_skips_macdef_body() {
+    // A macdef body that happens to contain netrc-looking keywords must not
+    // be treated as credentials.
+    let content = r#"machine first.example.com
+  login alice
+  password alice-pw
+
+macdef init
+  machine sneaky.example.com
+  login evil
+  password evil-pw
+
+machine second.example.com
+  login bob
+  password bob-pw
+"#;
+
+    let (_temp_dir, netrc_path) = create_test_netrc(content);
+
+    // The macdef body must not produce a usable entry.
+    let result = parse_netrc_file(&netrc_path, "sneaky.example.com").unwrap();
+    assert!(result.is_none());
+
+    // Entries on either side of the macdef must still parse.
+    let creds = parse_netrc_file(&netrc_path, "first.example.com")
+      .unwrap()
+      .expect("first entry should parse");
+    assert_eq!(creds.username, "alice");
+    assert_eq!(creds.password, "alice-pw");
+
+    let creds = parse_netrc_file(&netrc_path, "second.example.com")
+      .unwrap()
+      .expect("second entry should parse");
+    assert_eq!(creds.username, "bob");
+    assert_eq!(creds.password, "bob-pw");
+  }
+
+  #[test]
+  fn test_parse_netrc_file_default_block_isolated_from_machine() {
+    // A `default` block following a `machine` must not bleed its login/password
+    // back into the preceding machine entry.
+    let content = r#"machine github.com
+  login realuser
+
+default
+  login fallback
+  password fallback-pw
+"#;
+
+    let (_temp_dir, netrc_path) = create_test_netrc(content);
+
+    // github.com has no password of its own, so it must not return the
+    // default block's password.
+    let result = parse_netrc_file(&netrc_path, "github.com").unwrap();
+    assert!(result.is_none());
+
+    // Unknown machines fall through to the `default` block.
+    let creds = parse_netrc_file(&netrc_path, "unknown.example.com")
+      .unwrap()
+      .expect("default entry should be returned for unknown machine");
+    assert_eq!(creds.username, "fallback");
+    assert_eq!(creds.password, "fallback-pw");
+  }
+
+  #[test]
+  fn test_parse_netrc_file_passwd_alias() {
+    // `passwd` is accepted as a synonym for `password`.
+    let content = r#"machine github.com
+  login realuser
+  passwd realpass
+"#;
+
+    let (_temp_dir, netrc_path) = create_test_netrc(content);
+
+    let creds = parse_netrc_file(&netrc_path, "github.com")
+      .unwrap()
+      .expect("entry should parse with passwd alias");
+    assert_eq!(creds.username, "realuser");
+    assert_eq!(creds.password, "realpass");
+  }
+
+  #[test]
+  fn test_parse_netrc_file_account_ignored() {
+    // `account` tokens consume their value and don't leak into login/password.
+    let content = r#"machine github.com
+  login realuser
+  account org-account
+  password realpass
+"#;
+
+    let (_temp_dir, netrc_path) = create_test_netrc(content);
+
+    let creds = parse_netrc_file(&netrc_path, "github.com")
+      .unwrap()
+      .expect("entry should parse with account field");
+    assert_eq!(creds.username, "realuser");
+    assert_eq!(creds.password, "realpass");
   }
 
   #[test]
