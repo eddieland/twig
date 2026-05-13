@@ -109,6 +109,14 @@ pub fn run(cli: &Cli) -> Result<()> {
     return handle_stale_jira_association(&repo, repo_path, jira_parser.as_ref(), &stale);
   }
 
+  // Check if this is a Jira issue key whose associated branch exists on a remote but not locally.
+  // Without this check, the standard switch flow silently creates a tracking branch.
+  if let Some((branch_name, remote_ref)) =
+    detect_jira_remote_only_branch(&repo, &target, jira_parser.as_ref(), &repo_state)
+  {
+    return handle_remote_branch(&repo, repo_path, jira_parser.as_ref(), &branch_name, &remote_ref);
+  }
+
   // Check if this is a branch name (not Jira/PR) for potential branch creation prompt
   let switch_input = detect_switch_input(jira_parser.as_ref(), &target);
   let is_branch_name_input = matches!(switch_input, SwitchInput::BranchName(_));
@@ -238,6 +246,34 @@ fn detect_stale_jira_association(
     issue_key,
     stale_branch,
   })
+}
+
+/// Detect a Jira-associated branch that exists on a remote but not locally.
+///
+/// Returns `(branch_name, remote_ref)` when the local branch is missing but a
+/// remote tracking ref is present. This lets the caller prompt the user instead
+/// of silently creating a tracking branch.
+fn detect_jira_remote_only_branch(
+  repo: &Repository,
+  input: &str,
+  jira_parser: Option<&JiraTicketParser>,
+  repo_state: &RepoState,
+) -> Option<(String, String)> {
+  let issue_key = match detect_switch_input(jira_parser, input) {
+    SwitchInput::JiraIssueKey(key) | SwitchInput::JiraIssueUrl(key) => key,
+    _ => return None,
+  };
+
+  let branch_name = repo_state.get_branch_issue_by_jira(&issue_key)?.branch.clone();
+
+  if repo.find_branch(&branch_name, git2::BranchType::Local).is_ok() {
+    return None;
+  }
+
+  find_remote_branch(repo, &branch_name)
+    .ok()
+    .flatten()
+    .map(|remote_ref| (branch_name, remote_ref.as_str().to_string()))
 }
 
 /// Handle the case where a Jira issue's associated branch has been deleted.
