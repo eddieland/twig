@@ -99,19 +99,22 @@ pub fn run(cli: &Cli) -> Result<()> {
   let repo_state = RepoState::load(repo_path).unwrap_or_else(|_| RepoState::default());
   let jira_parser = create_jira_parser().or_else(|| Some(JiraTicketParser::new_default()));
 
-  // Check if this is a Jira issue key without an existing association
-  if let Some(issue_key) = detect_jira_without_association(&target, jira_parser.as_ref(), &repo_state) {
-    return handle_jira_branch_creation(&repo, repo_path, &repo_state, jira_parser.as_ref(), &issue_key);
-  }
-
-  // Check if this is a Jira issue key whose associated branch was deleted.
-  if let Some(stale) = detect_stale_jira_association(&repo, &target, jira_parser.as_ref(), &repo_state) {
-    return handle_stale_jira_association(&repo, repo_path, jira_parser.as_ref(), &stale);
-  }
-
-  // Check if this is a branch name (not Jira/PR) for potential branch creation prompt
   let switch_input = detect_switch_input(jira_parser.as_ref(), &target);
   let is_branch_name_input = matches!(switch_input, SwitchInput::BranchName(_));
+
+  // Route all Jira inputs through specialized handlers before falling through
+  // to the generic switch flow.
+  if let SwitchInput::JiraIssueKey(ref issue_key) | SwitchInput::JiraIssueUrl(ref issue_key) = switch_input {
+    if repo_state.get_branch_issue_by_jira(issue_key).is_none() {
+      return handle_jira_branch_creation(&repo, repo_path, &repo_state, jira_parser.as_ref(), issue_key);
+    }
+    if let Some(stale) = detect_stale_jira_association(&repo, issue_key, &repo_state) {
+      return handle_stale_jira_association(&repo, repo_path, jira_parser.as_ref(), &stale);
+    }
+    if let Some((branch_name, remote_ref)) = detect_jira_remote_only_branch(&repo, issue_key, &repo_state) {
+      return handle_remote_branch(&repo, repo_path, jira_parser.as_ref(), &branch_name, &remote_ref);
+    }
+  }
 
   // For branch name inputs, check if the branch exists locally first.
   // If it doesn't exist locally but exists on remote, prompt the user.
@@ -168,26 +171,6 @@ pub fn run(cli: &Cli) -> Result<()> {
   Ok(())
 }
 
-/// Check if the input is a Jira issue key without an existing branch
-/// association.
-fn detect_jira_without_association(
-  input: &str,
-  jira_parser: Option<&JiraTicketParser>,
-  repo_state: &RepoState,
-) -> Option<String> {
-  match detect_switch_input(jira_parser, input) {
-    SwitchInput::JiraIssueKey(key) | SwitchInput::JiraIssueUrl(key) => {
-      // Check if there's already an associated branch
-      if repo_state.get_branch_issue_by_jira(&key).is_some() {
-        None // Has association, use normal flow
-      } else {
-        Some(key) // No association, needs user prompt
-      }
-    }
-    _ => None, // Not a Jira issue
-  }
-}
-
 /// Context describing a Jira association whose branch has been deleted.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct StaleJiraAssociation {
@@ -204,16 +187,10 @@ struct StaleJiraAssociation {
 /// try to check out the missing branch and fail with a fetch error.
 fn detect_stale_jira_association(
   repo: &Repository,
-  input: &str,
-  jira_parser: Option<&JiraTicketParser>,
+  issue_key: &str,
   repo_state: &RepoState,
 ) -> Option<StaleJiraAssociation> {
-  let issue_key = match detect_switch_input(jira_parser, input) {
-    SwitchInput::JiraIssueKey(key) | SwitchInput::JiraIssueUrl(key) => key,
-    _ => return None,
-  };
-
-  let branch_issue = repo_state.get_branch_issue_by_jira(&issue_key)?;
+  let branch_issue = repo_state.get_branch_issue_by_jira(issue_key)?;
   let stale_branch = branch_issue.branch.clone();
 
   // If the branch is still present locally, the association is fine.
@@ -235,9 +212,31 @@ fn detect_stale_jira_association(
   }
 
   Some(StaleJiraAssociation {
-    issue_key,
+    issue_key: issue_key.to_string(),
     stale_branch,
   })
+}
+
+/// Detect a Jira-associated branch that exists on a remote but not locally.
+///
+/// Returns `(branch_name, remote_ref)` when the local branch is missing but a
+/// remote tracking ref is present. This lets the caller prompt the user instead
+/// of silently creating a tracking branch.
+fn detect_jira_remote_only_branch(
+  repo: &Repository,
+  issue_key: &str,
+  repo_state: &RepoState,
+) -> Option<(String, String)> {
+  let branch_name = repo_state.get_branch_issue_by_jira(issue_key)?.branch.clone();
+
+  if repo.find_branch(&branch_name, git2::BranchType::Local).is_ok() {
+    return None;
+  }
+
+  find_remote_branch(repo, &branch_name)
+    .ok()
+    .flatten()
+    .map(|remote_ref| (branch_name, remote_ref.as_str().to_string()))
 }
 
 /// Handle the case where a Jira issue's associated branch has been deleted.
@@ -929,42 +928,6 @@ mod tests {
   }
 
   #[test]
-  fn detects_jira_without_association() {
-    let parser = JiraTicketParser::new_default();
-    let state = RepoState::default();
-
-    // Should detect Jira issue without association
-    let result = detect_jira_without_association("PROJ-123", Some(&parser), &state);
-    assert_eq!(result, Some("PROJ-123".to_string()));
-
-    // Should not detect branch names
-    let result = detect_jira_without_association("feature/branch", Some(&parser), &state);
-    assert_eq!(result, None);
-
-    // Should not detect numbers (GitHub PR)
-    let result = detect_jira_without_association("123", Some(&parser), &state);
-    assert_eq!(result, None);
-  }
-
-  #[test]
-  fn detects_jira_with_association() -> Result<()> {
-    let parser = JiraTicketParser::new_default();
-    let mut state = RepoState::default();
-    state.add_branch_issue(BranchMetadata {
-      branch: "existing-branch".into(),
-      jira_issue: Some("PROJ-123".into()),
-      github_pr: None,
-      created_at: "now".into(),
-    });
-
-    // Should not detect because association exists
-    let result = detect_jira_without_association("PROJ-123", Some(&parser), &state);
-    assert_eq!(result, None);
-
-    Ok(())
-  }
-
-  #[test]
   fn detects_stale_jira_association_when_branch_is_missing() -> Result<()> {
     let guard = GitRepoTestGuard::new_and_change_dir();
     create_commit(&guard.repo, "file.txt", "content", "initial")?;
@@ -981,9 +944,8 @@ mod tests {
     });
     state.save(repo_path)?;
 
-    let parser = JiraTicketParser::new_default();
     let state = RepoState::load(repo_path)?;
-    let stale = detect_stale_jira_association(&guard.repo, "ME-19008", Some(&parser), &state);
+    let stale = detect_stale_jira_association(&guard.repo, "ME-19008", &state);
 
     assert_eq!(
       stale,
@@ -1012,9 +974,8 @@ mod tests {
     });
     state.save(repo_path)?;
 
-    let parser = JiraTicketParser::new_default();
     let state = RepoState::load(repo_path)?;
-    let stale = detect_stale_jira_association(&guard.repo, "PROJ-123", Some(&parser), &state);
+    let stale = detect_stale_jira_association(&guard.repo, "PROJ-123", &state);
 
     assert_eq!(stale, None);
     Ok(())
@@ -1025,9 +986,8 @@ mod tests {
     let guard = GitRepoTestGuard::new_and_change_dir();
     create_commit(&guard.repo, "file.txt", "content", "initial")?;
 
-    let parser = JiraTicketParser::new_default();
     let state = RepoState::default();
-    let stale = detect_stale_jira_association(&guard.repo, "PROJ-123", Some(&parser), &state);
+    let stale = detect_stale_jira_association(&guard.repo, "PROJ-123", &state);
 
     assert_eq!(stale, None);
     Ok(())
@@ -1077,9 +1037,8 @@ mod tests {
     });
     state.save(repo_path)?;
 
-    let parser = JiraTicketParser::new_default();
     let state = RepoState::load(repo_path)?;
-    let stale = detect_stale_jira_association(&guard.repo, "PROJ-500", Some(&parser), &state);
+    let stale = detect_stale_jira_association(&guard.repo, "PROJ-500", &state);
 
     assert_eq!(stale, None, "upstream-cached branch should not be flagged stale");
     Ok(())
