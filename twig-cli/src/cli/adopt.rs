@@ -11,7 +11,7 @@
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::io::{self, Write};
+use std::io;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow};
@@ -135,7 +135,7 @@ pub(crate) fn handle_adopt_command(args: AdoptArgs) -> Result<()> {
 
   render_preview_tree(&repo, &preview_state, &args)?;
 
-  if !args.yes && !prompt_for_confirmation("Apply this adoption plan?")? {
+  if !args.yes && !crate::utils::prompt_for_confirmation("Apply this adoption plan?")? {
     print_info("Aborted without making changes.");
     return Ok(());
   }
@@ -314,15 +314,4 @@ fn display_plan(plan: &[AdoptionPlan]) {
   for adoption in plan {
     println!("  • {} -> {} ({})", adoption.child, adoption.parent, adoption.reason);
   }
-}
-
-fn prompt_for_confirmation(prompt: &str) -> Result<bool> {
-  print!("{prompt} [y/N]: ");
-  io::stdout().flush()?;
-
-  let mut input = String::new();
-  io::stdin().read_line(&mut input)?;
-
-  let input = input.trim().to_lowercase();
-  Ok(input == "y" || input == "yes")
 }

@@ -3,6 +3,7 @@
 //! Common utility functions and helpers for file operations, Git repository
 //! validation, and shared functionality across the twig application.
 
+use std::io::{self, Write};
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -23,6 +24,22 @@ pub fn resolve_repository_path(repo_arg: Option<&str>) -> Result<PathBuf> {
       detect_repository().context("No repository specified and not in a git repository")
     }
   }
+}
+
+/// Prompt the user for confirmation with the given message.
+///
+/// Prints `{prompt} [y/N]: ` and reads a line from stdin. Returns `true` if
+/// the user typed `y` or `yes` (case-insensitive), `false` otherwise.
+#[allow(clippy::print_stdout)]
+pub fn prompt_for_confirmation(prompt: &str) -> Result<bool> {
+  print!("{prompt} [y/N]: ");
+  io::stdout().flush()?;
+
+  let mut input = String::new();
+  io::stdin().read_line(&mut input)?;
+
+  let input = input.trim().to_lowercase();
+  Ok(input == "y" || input == "yes")
 }
 
 #[cfg(test)]
