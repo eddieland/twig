@@ -63,6 +63,10 @@ pub struct DependCommand {
   #[arg(required = true, index = 2, add = branch_completer())]
   pub parent: String,
 
+  /// Remove all other parent dependencies for the child before adding this one
+  #[arg(long)]
+  pub exclusive: bool,
+
   /// Path to a specific repository
   #[arg(long, short = 'r', value_name = "PATH")]
   pub repo: Option<String>,
@@ -239,11 +243,28 @@ pub(crate) fn handle_branch_command(branch: BranchArgs) -> Result<()> {
       let child = resolve_branch_alias(&repo_path, &cmd.child)?;
       let parent = resolve_branch_alias(&repo_path, &cmd.parent)?;
 
+      let removed_parents = if cmd.exclusive {
+        tracing::debug!(child = %child, "Removing all parent dependencies (--exclusive)");
+        let removed = repo_state.remove_child_dependencies(&child);
+        tracing::debug!(?removed, "Exclusive removal complete");
+        removed
+      } else {
+        Vec::new()
+      };
+
       // Add the dependency
       match repo_state.add_dependency(child.clone(), parent.clone()) {
         Ok(()) => {
           // Save the state
           repo_state.save(&repo_path)?;
+          if !removed_parents.is_empty() {
+            print_info(&format!(
+              "Removed {} parent dependency(ies) for '{}': {}",
+              removed_parents.len(),
+              child,
+              removed_parents.join(", ")
+            ));
+          }
           print_success(&format!("Added dependency: {child} -> {parent}"));
           Ok(())
         }
