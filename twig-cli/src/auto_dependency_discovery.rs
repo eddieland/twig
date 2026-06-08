@@ -60,6 +60,7 @@ impl AutoDependencyDiscovery {
           metadata,
           parents: Vec::new(),
           children: Vec::new(),
+          commit_info: None,
         };
 
         branch_nodes.insert(name.to_string(), node);
@@ -249,6 +250,7 @@ impl AutoDependencyDiscovery {
           metadata: None,
           parents: Vec::new(),
           children: Vec::new(),
+          commit_info: None,
         },
       );
     }
@@ -587,6 +589,7 @@ mod tests {
         metadata: None,
         parents: Vec::new(),
         children: Vec::new(),
+        commit_info: None,
       },
     );
 
@@ -598,6 +601,7 @@ mod tests {
         metadata: None,
         parents: Vec::new(),
         children: Vec::new(),
+        commit_info: None,
       },
     );
 
@@ -609,6 +613,7 @@ mod tests {
         metadata: None,
         parents: Vec::new(),
         children: Vec::new(),
+        commit_info: None,
       },
     );
 

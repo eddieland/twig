@@ -8,6 +8,7 @@
 pub mod complete;
 pub mod config;
 pub mod creds;
+pub mod diamond_detector;
 pub mod git;
 pub mod github;
 pub mod jira_parser;
